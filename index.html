@@ -103,10 +103,6 @@
  
             </div><!-- /panel derecho -->
         </div><!-- /grid -->
-    </div>
- 
-    <div id="tooltip" class="tooltip"></div>
- 
  
     <!-- Tooltip mapa nacional -->
     <div id="tooltip" class="tooltip"></div>
@@ -118,9 +114,70 @@
         <style>@keyframes spin2{to{transform:rotate(360deg)}}</style>
     </div>
  
+    <!-- ================================================================
+         MODAL — Vista de Provincia con Mapa Interactivo (Responsivo)
+    ================================================================ -->
+    <div id="prov-modal">
+        <div id="prov-modal-inner">
+ 
+            <!-- Header -->
+            <div class="flex items-center justify-between px-4 py-2.5 bg-slate-900 flex-shrink-0">
+                <div class="flex items-center gap-2 min-w-0">
+                    <button onclick="cerrarVistaProvincia()"
+                            class="text-slate-400 hover:text-white transition-colors p-1.5 rounded-lg hover:bg-white/10 flex-shrink-0 text-xs font-bold">
+                        ← Volver
+                    </button>
+                    <div class="w-px h-4 bg-white/20 flex-shrink-0"></div>
+                    <div class="min-w-0">
+                        <h2 class="text-white font-black text-sm tracking-tight truncate" id="prov-nombre"></h2>
+                        <p class="text-slate-400 text-[8px] font-bold uppercase tracking-widest hidden sm:block">Vista de Provincia · Puestos Operativos</p>
+                    </div>
+                </div>
+                <button onclick="cerrarVistaProvincia()"
+                        class="text-slate-400 hover:text-white text-xl leading-none p-1 rounded-lg hover:bg-white/10 transition-colors ml-2">✕</button>
+            </div>
+ 
+            <!-- Barra de filtros + botón PDF -->
+            <div id="filtros-bar">
+                <span class="text-[9px] font-bold text-slate-500 uppercase tracking-wider mr-1 hidden sm:inline">Filtrar:</span>
+                <button class="filtro-btn on-todos" id="f-todos"     onclick="aplicarFiltro('todos')">
+                    ◉ Todos
+                </button>
+                <button class="filtro-btn" id="f-armado"    onclick="aplicarFiltro('armado')">
+                    🔫 Armados
+                </button>
+                <button class="filtro-btn" id="f-desarmado" onclick="aplicarFiltro('desarmado')">
+                    👮 Desarmados
+                </button>
+                <button class="filtro-btn" id="f-radio"     onclick="aplicarFiltro('radio')">
+                    📻 Con radio
+                </button>
+                <button class="pdf-btn" onclick="exportarPDF()" title="Exportar reporte PDF de esta provincia">
+                    ⬇️ PDF
+                </button>
+            </div>
+ 
+            <!-- Body: mapa + sidebar (responsivo) -->
+            <div id="prov-modal-body">
+ 
+                <!-- Mapa Leaflet -->
+                <div id="prov-map"></div>
+ 
+                <!-- Sidebar -->
+                <div id="prov-sidebar" class="custom-scrollbar">
+                    <div class="p-3">
+                        <!-- Hint -->
+                        <p class="text-[9px] text-slate-400 font-medium mb-2">Toca un proyecto para ver sus puestos</p>
+                        <!-- Lista de acordeones -->
+                        <div id="prov-proyectos" class="flex flex-col gap-2"></div>
+                    </div>
+                </div>
+ 
+            </div>
  
         </div>
     </div>
+ 
     <!-- ================================================================
          BOTÓN FLOTANTE + PANEL GLOBAL DE FILTROS
     ================================================================ -->
@@ -294,7 +351,6 @@
     <div id="panel-overlay" onclick="togglePanelFiltros()"
          style="display:none;position:fixed;inset:0;z-index:4998;background:rgba(0,0,0,0.3);backdrop-filter:blur(2px);"></div>
  
- 
     <!-- ── Módulos JS (orden importa: config → utils → data → map → filters → province → pdf) ── -->
     <script src="js/config.js"></script>
     <script src="js/utils.js"></script>
@@ -310,7 +366,7 @@
         // Fondo de página desde archivo
         document.body.style.backgroundImage = 'url(' + IMG_FONDO + ')';
  
-        // Precargar logo para PDF (usando FileReader en lugar de spread operator)
+        // Precargar logo para PDF
         try {
             const logoResp = await fetch(IMG_LOGO);
             const logoBuf  = await logoResp.arrayBuffer();
@@ -324,6 +380,9 @@
             console.warn('⚠️ No se pudo precargar el logo para el PDF:', e.message);
         }
  
+        // Inicializar chips de filtro
+        document.querySelectorAll('.chip[data-val="todos"]').forEach(c => c.classList.add('active-blue'));
+ 
         // Cargar datos
         await cargarDatos();
     };
@@ -331,3 +390,4 @@
  
 </body>
 </html>
+ 
