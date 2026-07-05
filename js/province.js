@@ -149,6 +149,7 @@ function abrirVistaProvincia(nombre) {
     const sidebar  = document.getElementById('prov-proyectos');
     sidebar.innerHTML = '';
     mostrandoTodos  = false;
+    mostrandoTodosProvincia = false;
     provinciaActual = nombre;
     puestosActuales = [];
     limpiarMarcadores();
@@ -161,12 +162,28 @@ function abrirVistaProvincia(nombre) {
         const totFilt   = calcTotalesFiltrados(nombre);
         const listaMapa = todosN ? detalle.proyectosList : totFilt.proyectosList;
 
+        // Botón global: ver todos los puestos de TODA la provincia
+        const hayPuestos = puestosData[nombre] && Object.keys(puestosData[nombre]).length > 0;
+        if (hayPuestos) {
+            const btnGlobal = document.createElement('button');
+            btnGlobal.id = 'btn-todos-provincia';
+            btnGlobal.className = 'w-full flex items-center justify-center gap-1.5 text-[10px] font-black px-3 py-2 rounded-xl transition-colors bg-indigo-600 hover:bg-indigo-700 text-white mb-3';
+            btnGlobal.innerHTML = '🗺️ Ver todos los puestos de la provincia';
+            btnGlobal.onclick = toggleTodosPuestosProvincia;
+            sidebar.appendChild(btnGlobal);
+        }
+
         if (listaMapa.length === 0) {
-            sidebar.innerHTML = `<p class="text-xs text-amber-600 font-bold px-1">⚙️ Ningún proyecto cumple el filtro activo.</p>
+            const p = document.createElement('div');
+            p.innerHTML = `<p class="text-xs text-amber-600 font-bold px-1">⚙️ Ningún proyecto cumple el filtro activo.</p>
                 <button onclick="resetearFiltros();abrirVistaProvincia('${nombre}')" class="text-[10px] text-blue-600 underline mt-1 px-1">Limpiar filtros y ver todos</button>`;
+            sidebar.appendChild(p);
         } else {
             if (!todosN) {
-                sidebar.innerHTML = `<p class="text-[9px] text-amber-600 font-bold px-1 mb-2">⚙️ Filtro activo: mostrando ${listaMapa.length} de ${detalle.proyectosList.length} proyectos</p>`;
+                const aviso = document.createElement('p');
+                aviso.className = 'text-[9px] text-amber-600 font-bold px-1 mb-2';
+                aviso.textContent = `⚙️ Filtro activo: mostrando ${listaMapa.length} de ${detalle.proyectosList.length} proyectos`;
+                sidebar.appendChild(aviso);
             }
             listaMapa.forEach((p, idx) => sidebar.appendChild(crearAcordeonProyecto(nombre, p, idx)));
         }
@@ -254,6 +271,12 @@ function crearAcordeonProyecto(provincia, proyecto, idx) {
         document.querySelectorAll('.acord-header').forEach(h => h.classList.remove('active'));
         limpiarMarcadores();
         mostrandoTodos = false;
+        mostrandoTodosProvincia = false;
+        const btnGlobal = document.getElementById('btn-todos-provincia');
+        if (btnGlobal) {
+            btnGlobal.innerHTML = '🗺️ Ver todos los puestos de la provincia';
+            btnGlobal.className = 'w-full flex items-center justify-center gap-1.5 text-[10px] font-black px-3 py-2 rounded-xl transition-colors bg-indigo-600 hover:bg-indigo-700 text-white mb-3';
+        }
         aplicarFiltro('todos');   // resetear filtros al cambiar proyecto
         if (!isOpen) {
             body.classList.add('open');
@@ -393,6 +416,26 @@ function colocarMarcador(puesto, abrirPopup) {
         ? puesto.rotacionCompleta
         : guardias;
 
+    // ── Guías de armas (envío/retorno) asignadas a este puesto ──
+    const armasDelPuesto = (armamentoDetalle || []).filter(a =>
+        a.provincia === provinciaActual &&
+        a.puesto && a.puesto.trim().toUpperCase() === (puesto.nombre || '').trim().toUpperCase() &&
+        (a.urlGuiaEnvio || a.urlGuiaRetorno)
+    );
+    const guiasHTML = armasDelPuesto.length > 0
+        ? `<div style="border-top:1px solid #f1f5f9;padding-top:8px;margin-top:2px;">
+               <p style="font-size:9px;font-weight:700;color:#94a3b8;text-transform:uppercase;margin-bottom:5px;">Guías de armamento</p>
+               ${armasDelPuesto.map(a => `
+                   <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;padding:4px 0;">
+                       <span style="font-size:9px;color:#475569;font-weight:600;">🔫 ${a.serie || 'Serie s/n'}</span>
+                       <div style="display:flex;gap:4px;">
+                           ${a.urlGuiaEnvio ? `<a href="${a.urlGuiaEnvio}" target="_blank" rel="noopener" style="font-size:8px;font-weight:800;background:#dbeafe;color:#1d4ed8;padding:2px 6px;border-radius:5px;text-decoration:none;">⬇️ Envío</a>` : ''}
+                           ${a.urlGuiaRetorno ? `<a href="${a.urlGuiaRetorno}" target="_blank" rel="noopener" style="font-size:8px;font-weight:800;background:#fef3c7;color:#92400e;padding:2px 6px;border-radius:5px;text-decoration:none;">⬇️ Retorno</a>` : ''}
+                       </div>
+                   </div>`).join('')}
+           </div>`
+        : '';
+
     const guardiasPopup = listaRotacion.length > 1
         ? listaRotacion.map((g) => {
             const esElDeHoy = tieneAsistenciaReal && g === puesto.enTurnoHoy;
@@ -435,6 +478,7 @@ function colocarMarcador(puesto, abrirPopup) {
                     <span style="font-size:11px;font-weight:800;color:#1e293b;">📅 ${puesto.dias}</span>
                 </div>
                 ${puesto.obs ? `<div style="margin-top:4px;padding:6px 8px;background:#f8fafc;border-radius:8px;font-size:9px;color:#64748b;">${puesto.obs}</div>` : ''}
+                ${guiasHTML}
                 <a href="https://www.google.com/maps/search/?api=1&query=${puesto.lat},${puesto.lng}"
                    target="_blank" rel="noopener"
                    style="display:flex;align-items:center;justify-content:center;gap:6px;margin-top:6px;padding:7px;background:#2563eb;color:white;text-decoration:none;border-radius:8px;font-size:10px;font-weight:800;">
@@ -482,6 +526,46 @@ function actualizarBotonTodos() {
     btn.className = mostrandoTodos
         ? 'flex items-center gap-1.5 text-[10px] font-black px-3 py-1.5 rounded-xl transition-colors w-full justify-center bg-slate-200 hover:bg-slate-300 text-slate-700'
         : 'flex items-center gap-1.5 text-[10px] font-black px-3 py-1.5 rounded-xl transition-colors w-full justify-center bg-blue-600 hover:bg-blue-700 text-white';
+}
+
+// Estado del toggle "ver todos de la provincia" (todas las proyectos a la vez)
+let mostrandoTodosProvincia = false;
+
+// Ver/ocultar TODOS los puestos de TODOS los proyectos de la provincia actual
+function toggleTodosPuestosProvincia() {
+    const btn = document.getElementById('btn-todos-provincia');
+
+    if (mostrandoTodosProvincia) {
+        limpiarMarcadores();
+        mostrandoTodosProvincia = false;
+        mostrandoTodos = false;
+        document.querySelectorAll('.acord-header').forEach(h => h.classList.remove('active'));
+        document.querySelectorAll('.acord-body').forEach(b => b.classList.remove('open'));
+        if (btn) {
+            btn.innerHTML = '🗺️ Ver todos los puestos de la provincia';
+            btn.className = 'w-full flex items-center justify-center gap-1.5 text-[10px] font-black px-3 py-2 rounded-xl transition-colors bg-indigo-600 hover:bg-indigo-700 text-white mb-3';
+        }
+        return;
+    }
+
+    limpiarMarcadores();
+    const todosLosPuestos = Object.values(puestosData[provinciaActual] || {}).flat();
+
+    if (todosLosPuestos.length === 0) {
+        alert('No hay puestos con coordenadas registradas en esta provincia todavía.');
+        return;
+    }
+
+    todosLosPuestos.forEach(puesto => colocarMarcador(puesto, false));
+    mostrandoTodosProvincia = true;
+
+    const bounds = L.latLngBounds(todosLosPuestos.map(p => [p.lat, p.lng]));
+    provMap.fitBounds(bounds, { padding: [50, 50] });
+
+    if (btn) {
+        btn.innerHTML = `🙈 Ocultar todos (${todosLosPuestos.length})`;
+        btn.className = 'w-full flex items-center justify-center gap-1.5 text-[10px] font-black px-3 py-2 rounded-xl transition-colors bg-slate-700 hover:bg-slate-800 text-white mb-3';
+    }
 }
 
 function limpiarMarcadores() {
