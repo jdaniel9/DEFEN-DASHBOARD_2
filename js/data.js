@@ -123,6 +123,7 @@ function procesarDatosAPI(json) {
             vigenciaInicio: ti.vigenciaInicio || null,
             vigenciaFin:    ti.vigenciaFin    || null,
             estadoTramite:  ti.estadoTramite  || null,
+            urlCertificado: ti.urlCertificado || null,
             supervisores:   Array.isArray(p.supervisores)  ? p.supervisores  : [],
             proyectosList:  Array.isArray(p.proyectosList) ? p.proyectosList : []
         };
