@@ -13,7 +13,7 @@ const IMG_LOGO  = 'img/logo.png';
 // ── Estado global de la aplicación ──────────────────────────────
 let data              = {};
 let detalleProvincias = {};
-let armamento         = { global:414, enCampo:0, rastrillo:0, perdida:1, confiscada:1 };
+let armamento         = { global:414, enCampo:0, enTransito:0, rastrillo:0, perdida:1, confiscada:1 };
 let armamentoDetalle  = [];
 let asistenciaHoy     = {};
 let puestosData       = {};
