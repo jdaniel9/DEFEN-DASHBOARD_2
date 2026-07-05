@@ -14,6 +14,47 @@
 </head>
 <body class="min-h-screen text-slate-900">
 
+    <!-- ================================================================
+         PANTALLA DE LOGIN — bloquea el acceso hasta autenticar
+    ================================================================ -->
+    <div id="login-screen" style="position:fixed;inset:0;z-index:99998;background:#0f172a;display:flex;align-items:center;justify-content:center;padding:20px;">
+        <div style="width:100%;max-width:360px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:20px;padding:32px 28px;backdrop-filter:blur(10px);">
+            <div style="text-align:center;margin-bottom:24px;">
+                <div style="width:56px;height:56px;background:linear-gradient(135deg,#f59e0b,#d97706);border-radius:16px;display:flex;align-items:center;justify-content:center;margin:0 auto 14px;font-size:26px;">🔒</div>
+                <h1 style="color:white;font-weight:900;font-size:16px;margin:0;">DEFEN CIA. LTDA.</h1>
+                <p style="color:#64748b;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;margin-top:2px;">Acceso restringido — Mapa operativo</p>
+            </div>
+
+            <form id="login-form" style="display:flex;flex-direction:column;gap:12px;">
+                <div>
+                    <label style="color:#94a3b8;font-size:10px;font-weight:700;text-transform:uppercase;display:block;margin-bottom:5px;">Usuario</label>
+                    <input type="text" id="login-usuario" autocomplete="username" required
+                           style="width:100%;padding:10px 12px;background:rgba(255,255,255,0.06);border:1.5px solid rgba(255,255,255,0.12);border-radius:10px;color:white;font-size:13px;font-weight:600;outline:none;">
+                </div>
+                <div>
+                    <label style="color:#94a3b8;font-size:10px;font-weight:700;text-transform:uppercase;display:block;margin-bottom:5px;">Contraseña</label>
+                    <input type="password" id="login-password" autocomplete="current-password" required
+                           style="width:100%;padding:10px 12px;background:rgba(255,255,255,0.06);border:1.5px solid rgba(255,255,255,0.12);border-radius:10px;color:white;font-size:13px;font-weight:600;outline:none;">
+                </div>
+
+                <p id="login-error" style="display:none;color:#f87171;font-size:11px;font-weight:700;background:rgba(248,113,113,0.1);border:1px solid rgba(248,113,113,0.25);border-radius:8px;padding:8px 10px;margin:0;"></p>
+
+                <button type="submit" id="login-btn"
+                        style="margin-top:6px;padding:11px;background:linear-gradient(135deg,#f59e0b,#d97706);color:#1c1917;font-weight:900;font-size:13px;border:none;border-radius:10px;cursor:pointer;">
+                    Ingresar
+                </button>
+            </form>
+        </div>
+    </div>
+
+        <!-- Barra superior: sesión activa -->
+        <div style="display:flex;justify-content:flex-end;align-items:center;padding:0 4px 10px;">
+            <button onclick="cerrarSesion()"
+                    style="display:flex;align-items:center;gap:6px;background:rgba(255,255,255,0.12);backdrop-filter:blur(8px);color:white;font-size:11px;font-weight:700;padding:6px 12px;border-radius:999px;border:1px solid rgba(255,255,255,0.2);cursor:pointer;">
+                🔒 Cerrar sesión
+            </button>
+        </div>
+
         <!-- Main grid: mapa | panel -->
         <div class="grid grid-cols-1 xl:grid-cols-[1fr_380px] gap-5 items-start">
 
@@ -81,6 +122,10 @@
                         <div class="flex justify-between items-center bg-green-50 px-3 py-2.5 rounded-xl border border-green-100">
                             <span class="text-[11px] font-bold text-green-700 uppercase tracking-wide">En Campo</span>
                             <span class="font-black text-green-600 text-base" id="armas-operativas-tbl">0</span>
+                        </div>
+                        <div class="flex justify-between items-center bg-blue-50 px-3 py-2.5 rounded-xl border border-blue-100">
+                            <span class="text-[11px] font-bold text-blue-700 uppercase tracking-wide">🚚 En Tránsito</span>
+                            <span class="font-black text-blue-600 text-base" id="armas-transito">—</span>
                         </div>
                         <div class="flex justify-between items-center bg-slate-50 px-3 py-2.5 rounded-xl border border-slate-200">
                             <span class="text-[11px] font-bold text-slate-600 uppercase tracking-wide">Rastrillo</span>
@@ -351,8 +396,9 @@
     <div id="panel-overlay" onclick="togglePanelFiltros()"
          style="display:none;position:fixed;inset:0;z-index:4998;background:rgba(0,0,0,0.3);backdrop-filter:blur(2px);"></div>
 
-    <!-- ── Módulos JS (orden importa: config → utils → data → map → filters → province → pdf) ── -->
+    <!-- ── Módulos JS (orden importa: config → utils → data → map → filters → province → pdf → auth) ── -->
     <script src="js/config.js"></script>
+    <script src="js/auth.js"></script>
     <script src="js/utils.js"></script>
     <script src="js/data.js"></script>
     <script src="js/map.js"></script>
@@ -361,8 +407,8 @@
     <script src="js/pdf.js"></script>
 
     <script>
-    // ── Arranque ─────────────────────────────────────────────────
-    window.onload = async () => {
+    // ── Arranque real del dashboard (solo tras login exitoso) ──────
+    async function iniciarDashboard() {
         // Fondo de página desde archivo
         document.body.style.backgroundImage = 'url(' + IMG_FONDO + ')';
 
@@ -385,6 +431,11 @@
 
         // Cargar datos
         await cargarDatos();
+    }
+
+    // ── Punto de entrada: primero exige login ──────────────────────
+    window.onload = () => {
+        inicializarLogin();
     };
     </script>
 
