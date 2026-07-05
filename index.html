@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DEFEN CIA. LTDA. — Mapa Operativo Nacional</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="css/main.css">
+    <link rel="stylesheet" href="css/map.css">
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+</head>
+<body class="min-h-screen text-slate-900">
+
+    <!-- ================================================================
+         PANTALLA DE LOGIN — bloquea el acceso hasta autenticar
+    ================================================================ -->
+    <div id="login-screen" style="position:fixed;inset:0;z-index:99998;background:#0f172a;display:flex;align-items:center;justify-content:center;padding:20px;">
+        <div style="width:100%;max-width:360px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:20px;padding:32px 28px;backdrop-filter:blur(10px);">
+            <div style="text-align:center;margin-bottom:24px;">
+                <div style="width:56px;height:56px;background:linear-gradient(135deg,#f59e0b,#d97706);border-radius:16px;display:flex;align-items:center;justify-content:center;margin:0 auto 14px;font-size:26px;">🔒</div>
+                <h1 style="color:white;font-weight:900;font-size:16px;margin:0;">DEFEN CIA. LTDA.</h1>
+                <p style="color:#64748b;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;margin-top:2px;">Acceso restringido — Mapa operativo</p>
+            </div>
+
+            <form id="login-form" style="display:flex;flex-direction:column;gap:12px;">
+                <div>
+                    <label style="color:#94a3b8;font-size:10px;font-weight:700;text-transform:uppercase;display:block;margin-bottom:5px;">Usuario</label>
+                    <input type="text" id="login-usuario" autocomplete="username" required
+                           style="width:100%;padding:10px 12px;background:rgba(255,255,255,0.06);border:1.5px solid rgba(255,255,255,0.12);border-radius:10px;color:white;font-size:13px;font-weight:600;outline:none;">
+                </div>
+                <div>
+                    <label style="color:#94a3b8;font-size:10px;font-weight:700;text-transform:uppercase;display:block;margin-bottom:5px;">Contraseña</label>
+                    <input type="password" id="login-password" autocomplete="current-password" required
+                           style="width:100%;padding:10px 12px;background:rgba(255,255,255,0.06);border:1.5px solid rgba(255,255,255,0.12);border-radius:10px;color:white;font-size:13px;font-weight:600;outline:none;">
+                </div>
+
+                <p id="login-error" style="display:none;color:#f87171;font-size:11px;font-weight:700;background:rgba(248,113,113,0.1);border:1px solid rgba(248,113,113,0.25);border-radius:8px;padding:8px 10px;margin:0;"></p>
+
+                <button type="submit" id="login-btn"
+                        style="margin-top:6px;padding:11px;background:linear-gradient(135deg,#f59e0b,#d97706);color:#1c1917;font-weight:900;font-size:13px;border:none;border-radius:10px;cursor:pointer;">
+                    Ingresar
+                </button>
+            </form>
+        </div>
+    </div>
+
+        <!-- Barra superior: sesión activa -->
+        <div style="display:flex;justify-content:flex-end;align-items:center;padding:0 4px 10px;">
+            <button onclick="cerrarSesion()"
+                    style="display:flex;align-items:center;gap:6px;background:rgba(255,255,255,0.12);backdrop-filter:blur(8px);color:white;font-size:11px;font-weight:700;padding:6px 12px;border-radius:999px;border:1px solid rgba(255,255,255,0.2);cursor:pointer;">
+                🔒 Cerrar sesión
+            </button>
+        </div>
+
+        <!-- Main grid: mapa | panel -->
+        <div class="grid grid-cols-1 xl:grid-cols-[1fr_380px] gap-5 items-start">
+
+            <!-- ====== MAPA ====== -->
+            <div class="p-4 rounded-2xl shadow-sm border border-white/20" style="min-height:0; background: rgba(255,255,255,0.12); backdrop-filter: blur(8px);">
+                <div class="map-wrapper" id="map-container" style="background:transparent;">
+                    <img src="img/mapa.png"
+                         alt="Mapa de Ecuador"
+                         class="map-image"
+                         id="ecuador-map">
+                    <div id="markers-layer"></div>
+                </div>
+
+                <!-- Panel de detalle (debajo del mapa dentro del mismo blanco) -->
+                <div id="detail-panel" class="mt-5 border-t border-white/20 pt-5">
+                    <!-- contenido inyectado por JS -->
+                </div>
+            </div>
+
+            <!-- ====== PANEL DERECHO ====== -->
+            <div class="flex flex-col gap-4" style="position:sticky;top:16px;">
+
+                <!-- Resumen ejecutivo -->
+                <div class="bg-slate-900 p-6 rounded-2xl shadow-xl text-white">
+                    <h3 class="text-slate-400 font-bold uppercase tracking-widest text-[9px] mb-4">Resumen Ejecutivo Nacional</h3>
+                    <div class="grid grid-cols-2 gap-3 mb-3">
+                        <div class="bg-white/5 p-3 rounded-xl border border-white/10">
+                            <p class="text-2xl font-black text-blue-400" id="total-guardias">0</p>
+                            <p class="text-[9px] text-slate-400 font-bold uppercase mt-0.5">Guardia(s)</p>
+                        </div>
+                        <div class="bg-white/5 p-3 rounded-xl border border-white/10">
+                            <p class="text-2xl font-black text-green-400" id="total-armas">0</p>
+                            <p class="text-[9px] text-slate-400 font-bold uppercase mt-0.5">Arma(s) en Campo</p>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-3 gap-2">
+                        <div class="bg-white/5 p-2.5 rounded-xl border border-white/10 text-center">
+                            <p class="text-lg font-black" id="total-puestos">0</p>
+                            <p class="text-[8px] text-slate-400 font-bold uppercase">Puesto(s)</p>
+                        </div>
+                        <div class="bg-white/5 p-2.5 rounded-xl border border-white/10 text-center">
+                            <p class="text-lg font-black" id="total-proyectos">0</p>
+                            <p class="text-[8px] text-slate-400 font-bold uppercase">Proyecto(s)</p>
+                        </div>
+                        <div class="bg-white/5 p-2.5 rounded-xl border border-white/10 text-center">
+                            <p class="text-lg font-black" id="total-provincias">0</p>
+                            <p class="text-[8px] text-slate-400 font-bold uppercase">Prov. Act.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Lista de provincias -->
+                <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex flex-col">
+                    <h2 class="text-base font-black text-slate-800 mb-3 px-1">Detalle por Provincia</h2>
+                    <p class="text-[10px] text-slate-400 mb-3 px-1 font-medium">Haz clic en una provincia para ver su detalle completo ↓</p>
+                    <div id="province-list" class="space-y-2 overflow-y-auto pr-1 custom-scrollbar" style="max-height:310px;">
+                        <!-- dinámico -->
+                    </div>
+                </div>
+
+                <!-- Resumen Armamento -->
+                <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
+                    <h2 class="text-base font-black text-slate-800 mb-3 px-1">Resumen Armamento</h2>
+                    <div class="flex flex-col gap-2">
+                        <div class="flex justify-between items-center bg-green-50 px-3 py-2.5 rounded-xl border border-green-100">
+                            <span class="text-[11px] font-bold text-green-700 uppercase tracking-wide">En Campo</span>
+                            <span class="font-black text-green-600 text-base" id="armas-operativas-tbl">0</span>
+                        </div>
+                        <div class="flex justify-between items-center bg-blue-50 px-3 py-2.5 rounded-xl border border-blue-100">
+                            <span class="text-[11px] font-bold text-blue-700 uppercase tracking-wide">🚚 En Tránsito</span>
+                            <span class="font-black text-blue-600 text-base" id="armas-transito">—</span>
+                        </div>
+                        <div class="flex justify-between items-center bg-slate-50 px-3 py-2.5 rounded-xl border border-slate-200">
+                            <span class="text-[11px] font-bold text-slate-600 uppercase tracking-wide">Rastrillo</span>
+                            <span class="font-black text-slate-700 text-base" id="armas-rastrillo">—</span>
+                        </div>
+                        <div class="flex justify-between items-center bg-red-50 px-3 py-2.5 rounded-xl border border-red-100">
+                            <span class="text-[11px] font-bold text-red-700 uppercase tracking-wide">Pérdida/Robada</span>
+                            <span class="font-black text-red-600 text-base" id="armas-perdida">—</span>
+                        </div>
+                        <div class="flex justify-between items-center bg-orange-50 px-3 py-2.5 rounded-xl border border-orange-100">
+                            <span class="text-[11px] font-bold text-orange-700 uppercase tracking-wide">Confiscada COSP/CCFF</span>
+                            <span class="font-black text-orange-600 text-base" id="armas-confiscada">—</span>
+                        </div>
+                        <div class="flex justify-between items-center bg-slate-900 px-4 py-3 rounded-xl mt-1">
+                            <span class="text-[11px] font-black text-white uppercase tracking-wider">Global</span>
+                            <span class="font-black text-white text-lg" id="armas-global">—</span>
+                        </div>
+                    </div>
+                </div>
+
+            </div><!-- /panel derecho -->
+        </div><!-- /grid -->
+
+    <!-- Tooltip mapa nacional -->
+    <div id="tooltip" class="tooltip"></div>
+
+    <!-- Loading overlay -->
+    <div id="loading-overlay" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,0.75);z-index:99999;flex-direction:column;align-items:center;justify-content:center;gap:14px;backdrop-filter:blur(4px);">
+        <div style="width:44px;height:44px;border:4px solid rgba(255,255,255,0.15);border-top-color:white;border-radius:50%;animation:spin2 0.8s linear infinite;"></div>
+        <p style="color:white;font-size:13px;font-weight:700;font-family:'DM Sans',sans-serif;">Cargando datos desde Google Sheets…</p>
+        <style>@keyframes spin2{to{transform:rotate(360deg)}}</style>
+    </div>
+
+    <!-- ================================================================
+         MODAL — Vista de Provincia con Mapa Interactivo (Responsivo)
+    ================================================================ -->
+    <div id="prov-modal">
+        <div id="prov-modal-inner">
+
+            <!-- Header -->
+            <div class="flex items-center justify-between px-4 py-2.5 bg-slate-900 flex-shrink-0">
+                <div class="flex items-center gap-2 min-w-0">
+                    <button onclick="cerrarVistaProvincia()"
+                            class="text-slate-400 hover:text-white transition-colors p-1.5 rounded-lg hover:bg-white/10 flex-shrink-0 text-xs font-bold">
+                        ← Volver
+                    </button>
+                    <div class="w-px h-4 bg-white/20 flex-shrink-0"></div>
+                    <div class="min-w-0">
+                        <h2 class="text-white font-black text-sm tracking-tight truncate" id="prov-nombre"></h2>
+                        <p class="text-slate-400 text-[8px] font-bold uppercase tracking-widest hidden sm:block">Vista de Provincia · Puestos Operativos</p>
+                    </div>
+                </div>
+                <button onclick="cerrarVistaProvincia()"
+                        class="text-slate-400 hover:text-white text-xl leading-none p-1 rounded-lg hover:bg-white/10 transition-colors ml-2">✕</button>
+            </div>
+
+            <!-- Barra de filtros + botón PDF -->
+            <div id="filtros-bar">
+                <span class="text-[9px] font-bold text-slate-500 uppercase tracking-wider mr-1 hidden sm:inline">Filtrar:</span>
+                <button class="filtro-btn on-todos" id="f-todos"     onclick="aplicarFiltro('todos')">
+                    ◉ Todos
+                </button>
+                <button class="filtro-btn" id="f-armado"    onclick="aplicarFiltro('armado')">
+                    🔫 Armados
+                </button>
+                <button class="filtro-btn" id="f-desarmado" onclick="aplicarFiltro('desarmado')">
+                    👮 Desarmados
+                </button>
+                <button class="filtro-btn" id="f-radio"     onclick="aplicarFiltro('radio')">
+                    📻 Con radio
+                </button>
+                <button class="pdf-btn" onclick="exportarPDF()" title="Exportar reporte PDF de esta provincia">
+                    ⬇️ PDF
+                </button>
+            </div>
+
+            <!-- Body: mapa + sidebar (responsivo) -->
+            <div id="prov-modal-body">
+
+                <!-- Mapa Leaflet -->
+                <div id="prov-map"></div>
+
+                <!-- Sidebar -->
+                <div id="prov-sidebar" class="custom-scrollbar">
+                    <div class="p-3">
+                        <!-- Hint -->
+                        <p class="text-[9px] text-slate-400 font-medium mb-2">Toca un proyecto para ver sus puestos</p>
+                        <!-- Lista de acordeones -->
+                        <div id="prov-proyectos" class="flex flex-col gap-2"></div>
+                    </div>
+                </div>
+
+            </div>
+
+        </div>
+    </div>
+
+    <!-- ================================================================
+         BOTÓN FLOTANTE + PANEL GLOBAL DE FILTROS
+    ================================================================ -->
+
+    <!-- FAB -->
+    <button id="fab-filtros" onclick="togglePanelFiltros()" title="Filtros y reportes globales">
+        <span id="fab-icon">⚙️</span>
+        <span id="fab-badge">0</span>
+    </button>
+
+    <!-- Panel lateral -->
+    <div id="panel-filtros-global">
+
+        <!-- Header del panel -->
+        <div class="flex items-center justify-between px-5 py-4 flex-shrink-0" style="border-bottom:1px solid rgba(255,255,255,0.08);">
+            <div>
+                <h2 style="color:white;font-weight:900;font-size:14px;">Filtros & Reportes</h2>
+                <p style="color:#64748b;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;">Control operativo nacional</p>
+            </div>
+            <button onclick="togglePanelFiltros()" style="color:#64748b;font-size:20px;background:none;border:none;cursor:pointer;line-height:1;">✕</button>
+        </div>
+
+        <!-- Scroll interior -->
+        <div class="custom-scrollbar" style="overflow-y:auto;flex:1;padding-bottom:8px;">
+
+            <!-- ── 1. TIPO DE JORNADA ── -->
+            <div class="pfg-section">
+                <p class="pfg-title">⏱ Tipo de jornada</p>
+                <div class="pfg-chips">
+                    <button class="chip" data-filtro="jornada" data-val="todos"  onclick="toggleChip(this,'blue')"  >◉ Todas</button>
+                    <button class="chip" data-filtro="jornada" data-val="24h"    onclick="toggleChip(this,'purple')">🌙 24 Horas</button>
+                    <button class="chip" data-filtro="jornada" data-val="12h"    onclick="toggleChip(this,'blue')"  >🔄 12 Horas</button>
+                    <button class="chip" data-filtro="jornada" data-val="10h"    onclick="toggleChip(this,'amber')" >📋 10 Horas</button>
+                    <button class="chip" data-filtro="jornada" data-val="8h"     onclick="toggleChip(this,'green')" >☀️ 8 Horas</button>
+                </div>
+            </div>
+
+            <!-- ── 2. ARMAMENTO ── -->
+            <div class="pfg-section">
+                <p class="pfg-title">🔫 Armamento</p>
+                <div class="pfg-chips">
+                    <button class="chip" data-filtro="arma" data-val="todos"     onclick="toggleChip(this,'blue')"  >◉ Todos</button>
+                    <button class="chip" data-filtro="arma" data-val="armado"    onclick="toggleChip(this,'red')"   >🔫 Con arma</button>
+                    <button class="chip" data-filtro="arma" data-val="desarmado" onclick="toggleChip(this,'green')" >👮 Sin arma</button>
+                </div>
+            </div>
+
+            <!-- ── 3. RADIO ── -->
+            <div class="pfg-section">
+                <p class="pfg-title">📻 Radio</p>
+                <div class="pfg-chips">
+                    <button class="chip" data-filtro="radio" data-val="todos"    onclick="toggleChip(this,'blue')"  >◉ Todos</button>
+                    <button class="chip" data-filtro="radio" data-val="conradio" onclick="toggleChip(this,'purple')">📻 Con radio</button>
+                    <button class="chip" data-filtro="radio" data-val="sinradio" onclick="toggleChip(this,'slate')" >🔇 Sin radio</button>
+                </div>
+            </div>
+
+            <!-- ── 4. ESTADO DE PROYECTO ── -->
+            <div class="pfg-section">
+                <p class="pfg-title">📅 Vencimiento de proyectos</p>
+                <div class="pfg-chips">
+                    <button class="chip" data-filtro="vence" data-val="todos"    onclick="toggleChip(this,'blue')"  >◉ Todos</button>
+                    <button class="chip" data-filtro="vence" data-val="critico"  onclick="toggleChip(this,'red')"   >🔴 ≤30 días</button>
+                    <button class="chip" data-filtro="vence" data-val="alerta"   onclick="toggleChip(this,'amber')" >🟡 ≤60 días</button>
+                    <button class="chip" data-filtro="vence" data-val="ok"       onclick="toggleChip(this,'green')" >🟢 &gt;60 días</button>
+                </div>
+            </div>
+
+            <!-- ── 5. TIPO DE PROYECTO ── -->
+            <div class="pfg-section">
+                <p class="pfg-title">📑 Tipo de proyecto</p>
+                <div class="pfg-chips">
+                    <button class="chip" data-filtro="contrato" data-val="todos" onclick="toggleChip(this,'blue')"  >◉ Todos</button>
+                    <button class="chip" data-filtro="contrato" data-val="odc"   onclick="toggleChip(this,'amber')" >📦 ODC</button>
+                    <button class="chip" data-filtro="contrato" data-val="ct"    onclick="toggleChip(this,'green')" >📄 Contrato</button>
+                    <button class="chip" data-filtro="contrato" data-val="brow"  onclick="toggleChip(this,'purple')">🤝 Brow</button>
+                    <button class="chip" data-filtro="contrato" data-val="cust"  onclick="toggleChip(this,'slate')" >👮 Custodios</button>
+                </div>
+            </div>
+
+            <!-- ── 6. PRESENCIA ── -->
+            <div class="pfg-section">
+                <p class="pfg-title">📍 Presencia</p>
+                <div class="pfg-chips">
+                    <button class="chip" data-filtro="cat" data-val="todos"        onclick="toggleChip(this,'blue')"  >◉ Todos</button>
+                    <button class="chip" data-filtro="cat" data-val="active"       onclick="toggleChip(this,'green')" >🟢 Con proyectos</button>
+                    <button class="chip" data-filtro="cat" data-val="agency_only"  onclick="toggleChip(this,'amber')" >🟡 Sin proyectos</button>
+                    <button class="chip" data-filtro="cat" data-val="none"         onclick="toggleChip(this,'red')"   >🔴 Sin presencia</button>
+                </div>
+            </div>
+
+            <!-- ── RESUMEN FILTRADO ── -->
+            <div class="pfg-section">
+                <p class="pfg-title">📊 Resultados del filtro</p>
+                <div id="filtro-resumen" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+                    <div style="background:rgba(255,255,255,0.05);border-radius:10px;padding:10px 12px;">
+                        <p style="font-size:18px;font-weight:900;color:#60a5fa;" id="fr-provincias">—</p>
+                        <p style="font-size:8px;color:#64748b;font-weight:700;text-transform:uppercase;">Provincias</p>
+                    </div>
+                    <div style="background:rgba(255,255,255,0.05);border-radius:10px;padding:10px 12px;">
+                        <p style="font-size:18px;font-weight:900;color:#4ade80;" id="fr-guardias">—</p>
+                        <p style="font-size:8px;color:#64748b;font-weight:700;text-transform:uppercase;">Guardia(s)</p>
+                    </div>
+                    <div style="background:rgba(255,255,255,0.05);border-radius:10px;padding:10px 12px;">
+                        <p style="font-size:18px;font-weight:900;color:#f87171;" id="fr-armas">—</p>
+                        <p style="font-size:8px;color:#64748b;font-weight:700;text-transform:uppercase;">Arma(s)</p>
+                    </div>
+                    <div style="background:rgba(255,255,255,0.05);border-radius:10px;padding:10px 12px;">
+                        <p style="font-size:18px;font-weight:900;color:#c084fc;" id="fr-proyectos">—</p>
+                        <p style="font-size:8px;color:#64748b;font-weight:700;text-transform:uppercase;">Proyecto(s)</p>
+                    </div>
+                </div>
+                <button onclick="resetearFiltros()"
+                        style="margin-top:10px;width:100%;padding:7px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:10px;color:#94a3b8;font-size:10px;font-weight:700;cursor:pointer;">
+                    🔄 Limpiar todos los filtros
+                </button>
+            </div>
+
+            <!-- ── GENERADOR PDF GLOBAL ── -->
+            <div class="pfg-section">
+                <p class="pfg-title">📄 Generar reporte PDF</p>
+                <p style="font-size:9px;color:#64748b;margin-bottom:10px;">Selecciona las secciones a incluir:</p>
+
+                <div class="pdf-check-row" onclick="toggleCheck('pdf-resumen')">
+                    <input type="checkbox" id="pdf-resumen" checked>
+                    <label for="pdf-resumen">Resumen ejecutivo nacional</label>
+                    <span>Totales</span>
+                </div>
+                <div class="pdf-check-row" onclick="toggleCheck('pdf-armamento')">
+                    <input type="checkbox" id="pdf-armamento" checked>
+                    <label for="pdf-armamento">Inventario de armamento</label>
+                    <span>Por provincia</span>
+                </div>
+                <div class="pdf-check-row" onclick="toggleCheck('pdf-radios')">
+                    <input type="checkbox" id="pdf-radios" checked>
+                    <label for="pdf-radios">Inventario de radios</label>
+                    <span>Por puesto</span>
+                </div>
+                <div class="pdf-check-row" onclick="toggleCheck('pdf-personal')">
+                    <input type="checkbox" id="pdf-personal" checked>
+                    <label for="pdf-personal">Nómina de personal</label>
+                    <span>Guardias activos</span>
+                </div>
+                <div class="pdf-check-row" onclick="toggleCheck('pdf-proyectos')">
+                    <input type="checkbox" id="pdf-proyectos" checked>
+                    <label for="pdf-proyectos">Proyectos por provincia</label>
+                    <span>Con vencimientos</span>
+                </div>
+                <div class="pdf-check-row" onclick="toggleCheck('pdf-tramites')">
+                    <input type="checkbox" id="pdf-tramites" checked>
+                    <label for="pdf-tramites">Estado de trámites</label>
+                    <span>Vigencias</span>
+                </div>
+                <div class="pdf-check-row" onclick="toggleCheck('pdf-puestos')">
+                    <input type="checkbox" id="pdf-puestos">
+                    <label for="pdf-puestos">Detalle de puestos operativos</label>
+                    <span>Con coordenadas</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Botón generar -->
+        <div style="flex-shrink:0;padding:0 0 env(safe-area-inset-bottom);">
+            <button id="btn-generar-pdf-global" onclick="generarPDFGlobal()">
+                ⬇️ Generar PDF con selección
+            </button>
+        </div>
+    </div>
+
+    <!-- Overlay para cerrar al hacer clic fuera -->
+    <div id="panel-overlay" onclick="togglePanelFiltros()"
+         style="display:none;position:fixed;inset:0;z-index:4998;background:rgba(0,0,0,0.3);backdrop-filter:blur(2px);"></div>
+
+    <!-- ── Módulos JS (orden importa: config → utils → data → map → filters → province → pdf → auth) ── -->
+    <script src="js/config.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/utils.js"></script>
+    <script src="js/data.js"></script>
+    <script src="js/map.js"></script>
+    <script src="js/filters.js"></script>
+    <script src="js/province.js"></script>
+    <script src="js/pdf.js"></script>
+
+    <script>
+    // ── Arranque real del dashboard (solo tras login exitoso) ──────
+    async function iniciarDashboard() {
+        // Fondo de página desde archivo
+        document.body.style.backgroundImage = 'url(' + IMG_FONDO + ')';
+
+        // Precargar logo para PDF
+        try {
+            const logoResp = await fetch(IMG_LOGO);
+            const logoBuf  = await logoResp.arrayBuffer();
+            const logoArr  = new Uint8Array(logoBuf);
+            let binary = '';
+            for (let i = 0; i < logoArr.byteLength; i++) {
+                binary += String.fromCharCode(logoArr[i]);
+            }
+            window._LOGO_B64 = 'data:image/png;base64,' + btoa(binary);
+        } catch (e) {
+            console.warn('⚠️ No se pudo precargar el logo para el PDF:', e.message);
+        }
+
+        // Inicializar chips de filtro
+        document.querySelectorAll('.chip[data-val="todos"]').forEach(c => c.classList.add('active-blue'));
+
+        // Cargar datos
+        await cargarDatos();
+    }
+
+    // ── Punto de entrada: primero exige login ──────────────────────
+    window.onload = () => {
+        inicializarLogin();
+    };
+    </script>
+
+</body>
+</html>
