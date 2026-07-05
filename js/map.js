@@ -27,16 +27,30 @@ function renderDetailPanel(nombre) {
     const diasTramite    = enTramite ? null : diasRestantes(detalle.vigenciaFin);
     const alTramite      = (!enTramite && diasTramite !== null) ? alertaVigencia(diasTramite) : null;
 
+    // Etiqueta dinámica: "AGENCIA VIGENTE" / "SUCURSAL EN TRÁMITE" / etc.
+    const tipoLabel   = (prov.tipo || 'AGENCIA').toUpperCase();
+    const estadoLabel = sinRegistro ? 'SIN REGISTRO' : (enTramite ? 'EN TRÁMITE' : 'VIGENTE');
+    const labelVigencia = `${tipoLabel} ${estadoLabel}`;
+
     const tramiteHTML = sinRegistro
         ? `<p class="text-sm font-bold text-slate-400 italic">Sin registro de trámite</p>`
-        : `<p class="font-black text-slate-900 text-sm" style="font-family:'DM Mono',monospace">${detalle.tramite}</p>`;
+        : `<div class="flex items-center justify-between gap-2">
+               <p class="font-black text-slate-900 text-sm" style="font-family:'DM Mono',monospace">${detalle.tramite}</p>
+               ${detalle.urlCertificado ? `
+               <a href="${detalle.urlCertificado}" target="_blank" rel="noopener"
+                  class="flex-shrink-0 flex items-center gap-1 bg-blue-600 hover:bg-blue-700 text-white text-[9px] font-black px-2 py-1 rounded-lg transition-colors"
+                  title="Descargar certificado del trámite">
+                   ⬇️ PDF
+               </a>` : ''}
+           </div>`;
 
     const vigenciaHTML = sinRegistro
         ? `<p class="text-slate-400 text-[11px] italic">Sin datos de vigencia</p>`
         : enTramite
-            ? `<p class="text-[11px] font-black text-amber-600">🕐 EN TRÁMITE</p>
+            ? `<p class="text-[11px] font-black text-amber-600">🕐 ${labelVigencia}</p>
                <p class="text-[10px] text-slate-400 mt-0.5">${detalle.estadoTramite || 'Registro de Inspección'}</p>`
-            : `<p class="text-[11px] text-slate-600 font-semibold">${formatFecha(detalle.vigenciaInicio)} → ${formatFecha(detalle.vigenciaFin)}</p>
+            : `<p class="text-[11px] font-black text-green-600">✅ ${labelVigencia}</p>
+               <p class="text-[11px] text-slate-600 font-semibold mt-0.5">${formatFecha(detalle.vigenciaInicio)} → ${formatFecha(detalle.vigenciaFin)}</p>
                <p class="text-[11px] font-black mt-1 ${alTramite.cls}">${alTramite.label}</p>`;
 
     // ── Supervisores provincia ──
@@ -64,7 +78,15 @@ function renderDetailPanel(nombre) {
             <div class="project-row bg-white flex flex-col gap-2">
                 <div class="flex items-start justify-between gap-2">
                     <span class="text-sm font-black text-slate-800 leading-tight">${p.nombre}</span>
-                    <span class="text-[10px] font-bold px-2.5 py-1 rounded-full whitespace-nowrap ${al.cls}">${al.label}</span>
+                    <div class="flex items-center gap-1.5 flex-shrink-0">
+                        ${p.urlDocumento ? `
+                        <a href="${p.urlDocumento}" target="_blank" rel="noopener"
+                           class="flex items-center gap-1 bg-slate-700 hover:bg-slate-800 text-white text-[9px] font-black px-2 py-1 rounded-full transition-colors"
+                           title="Descargar OC / Contrato">
+                            ⬇️ OC/CT
+                        </a>` : ''}
+                        <span class="text-[10px] font-bold px-2.5 py-1 rounded-full whitespace-nowrap ${al.cls}">${al.label}</span>
+                    </div>
                 </div>
                 <div class="flex flex-wrap gap-3 text-[11px] text-slate-500 font-semibold">
                     <span>👮 ${p.guardias} guardia(s)</span>
@@ -107,7 +129,7 @@ function renderDetailPanel(nombre) {
                 ${tramiteHTML}
             </div>
             <div class="bg-slate-50 border border-slate-200 rounded-xl p-3">
-                <p class="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">Vigencia Trámite</p>
+                <p class="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">Estado</p>
                 ${vigenciaHTML}
             </div>
             <div class="bg-slate-50 border border-slate-200 rounded-xl p-3">
@@ -186,6 +208,7 @@ function init() {
     // Resumen armamento — todos los valores calculados automáticamente
     const set = (id, val) => { const el = document.getElementById(id); if (el) el.innerText = val !== null && val !== undefined ? val : '—'; };
     set('armas-operativas-tbl', armamento.enCampo  ?? totals.A);
+    set('armas-transito',       armamento.enTransito);
     set('armas-rastrillo',      armamento.rastrillo);
     set('armas-perdida',        armamento.perdida);
     set('armas-confiscada',     armamento.confiscada);
