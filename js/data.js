@@ -21,7 +21,7 @@ async function cargarDatos() {
     if (!cargadoDesdeAPI) {
         data              = DATOS_LOCALES_data;
         detalleProvincias = DATOS_LOCALES_detalle;
-        armamento         = { rastrillo: 289, perdida: 1, confiscada: 1, global: 414 };
+        armamento         = { rastrillo: 289, perdida: 1, confiscada: 1, global: 414, enCampo: 0, enTransito: 0 };
         puestosData       = PUESTOS_LOCALES;
     }
 
@@ -48,6 +48,7 @@ function procesarDatosAPI(json) {
         armamento = {
             global:     Number(a.global)     || 0,
             enCampo:    Number(a.enCampo)    || 0,
+            enTransito: Number(a.enTransito) || 0,
             rastrillo:  Number(a.rastrillo)  || 0,
             perdida:    Number(a.perdida)     || 0,
             confiscada: Number(a.confiscada) || 0
