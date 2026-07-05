@@ -188,9 +188,9 @@ function actualizarResumenFiltro() {
     const elCampo = document.getElementById('armas-operativas-tbl');
     if (elCampo) elCampo.innerText = armas;
 
-    // Rastrillo dinámico = Global - ArmasFiltradas - Perdida - Confiscada
+    // Rastrillo dinámico = Global - ArmasFiltradas - EnTránsito - Pérdida - Confiscada
     if (!todosNeutros) {
-        const rastrilloDin = (armamento.global||0) - armas - (armamento.perdida||0) - (armamento.confiscada||0);
+        const rastrilloDin = (armamento.global||0) - armas - (armamento.enTransito||0) - (armamento.perdida||0) - (armamento.confiscada||0);
         const elRas = document.getElementById('armas-rastrillo');
         if (elRas) elRas.innerText = rastrilloDin;
     } else {
