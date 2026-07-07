@@ -1,17 +1,18 @@
+
 // ================================================================
 // province.js — Vista de provincia: Leaflet, puestos, PDF por provincia
 // ================================================================
-
+ 
 function calcTotalesFiltrados(nombre) {
     const detalle = detalleProvincias[nombre];
     if (!detalle || !detalle.proyectosList) return { guardias:0, armas:0, puestos:0, proyectos:0, proyectosList:[] };
-
+ 
     const fj   = filtrosActivos.jornada;
     const fa   = filtrosActivos.arma;
     const fr   = filtrosActivos.radio;
     const fv   = filtrosActivos.vence;
     const fcon = filtrosActivos.contrato;
-
+ 
     // Filtrar proyectos según vencimiento
     let proysFiltrados = detalle.proyectosList.filter(p => {
         if (fv === 'todos') return true;
@@ -21,14 +22,14 @@ function calcTotalesFiltrados(nombre) {
         if (fv === 'ok')      return d > 60;
         return true;
     });
-
+ 
     // Filtrar por tipo de contrato (ODC/CT/BROW/CUST)
     if (fcon !== 'todos') {
         proysFiltrados = proysFiltrados.filter(p =>
             (p.tipoContrato || '').toLowerCase() === fcon
         );
     }
-
+ 
     // Si hay filtros de puesto (jornada/arma/radio), filtrar proyectos que tengan
     // al menos un puesto que los cumpla, Y recalcular armas reales de esos puestos
     const hayFiltroPuesto = fj !== 'todos' || fa !== 'todos' || fr !== 'todos';
@@ -60,7 +61,7 @@ function calcTotalesFiltrados(nombre) {
             })
             .filter(Boolean);
     }
-
+ 
     // Calcular totales SOLO de proyectos filtrados
     let g=0, a=0, pu=0;
     proysFiltrados.forEach(p => {
@@ -68,10 +69,10 @@ function calcTotalesFiltrados(nombre) {
         a  += Number(p.armas)    || 0;
         pu += Number(p.puestos)  || 0;
     });
-
+ 
     return { guardias:g, armas:a, puestos:pu, proyectos:proysFiltrados.length, proyectosList:proysFiltrados };
 }
-
+ 
 // =====================================================================
 // Filtrar puestos de un proyecto según filtros activos
 // =====================================================================
@@ -95,14 +96,14 @@ function puestosFiltrados(nombre, proyectoNombre) {
         return true;
     });
 }
-
-
-
-
+ 
+ 
+ 
+ 
 // =====================================================================
 // SISTEMA DE VISTA DE PROVINCIA (Leaflet)
 // =====================================================================
-
+ 
 // Centros aproximados de cada provincia para el zoom inicial
 const provinciaCentros = {
     "AZUAY":           [-2.9001, -78.9999, 10],
@@ -130,21 +131,21 @@ const provinciaCentros = {
     "TUNGURAHUA":      [-1.2490, -78.6196, 11],
     "ZAMORA CHINCHIPE":[-4.0653, -78.9500,  9]
 };
-
+ 
 // Abrir modal de provincia
-
+ 
 function abrirVistaProvincia(nombre) {
     const modal = document.getElementById('prov-modal');
     modal.classList.add('open');
     document.getElementById('prov-nombre').textContent = nombre;
-
+ 
     if (provMap) { provMap.remove(); provMap = null; }
     const centro = provinciaCentros[nombre] || [-1.8312, -78.1834, 9];
     provMap = L.map('prov-map', { zoomControl: true }).setView([centro[0], centro[1]], centro[2]);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '© OpenStreetMap', maxZoom: 19, crossOrigin: true
     }).addTo(provMap);
-
+ 
     const detalle  = detalleProvincias[nombre];
     const sidebar  = document.getElementById('prov-proyectos');
     sidebar.innerHTML = '';
@@ -153,7 +154,7 @@ function abrirVistaProvincia(nombre) {
     provinciaActual = nombre;
     puestosActuales = [];
     limpiarMarcadores();
-
+ 
     if (!detalle || !detalle.proyectosList || detalle.proyectosList.length === 0) {
         sidebar.innerHTML = '<p class="text-xs text-slate-400 px-1">Esta provincia no tiene proyectos registrados.</p>';
     } else {
@@ -161,7 +162,7 @@ function abrirVistaProvincia(nombre) {
         const todosN    = Object.values(filtrosActivos).every(v => v === 'todos');
         const totFilt   = calcTotalesFiltrados(nombre);
         const listaMapa = todosN ? detalle.proyectosList : totFilt.proyectosList;
-
+ 
         // Botón global: ver todos los puestos de TODA la provincia
         const hayPuestos = puestosData[nombre] && Object.keys(puestosData[nombre]).length > 0;
         if (hayPuestos) {
@@ -172,7 +173,7 @@ function abrirVistaProvincia(nombre) {
             btnGlobal.onclick = toggleTodosPuestosProvincia;
             sidebar.appendChild(btnGlobal);
         }
-
+ 
         if (listaMapa.length === 0) {
             const p = document.createElement('div');
             p.innerHTML = `<p class="text-xs text-amber-600 font-bold px-1">⚙️ Ningún proyecto cumple el filtro activo.</p>
@@ -188,22 +189,22 @@ function abrirVistaProvincia(nombre) {
             listaMapa.forEach((p, idx) => sidebar.appendChild(crearAcordeonProyecto(nombre, p, idx)));
         }
     }
-
+ 
     filtroActivo = 'todos';
     aplicarFiltro('todos');
     setTimeout(() => provMap.invalidateSize(), 150);
 }
-
+ 
 // Crear acordeón para un proyecto
 function crearAcordeonProyecto(provincia, proyecto, idx) {
     const dias    = diasRestantes(proyecto.fin);
     const al      = alertaProyecto(dias);
     // Usar puestos filtrados según filtros globales
     const puestos = puestosFiltrados(provincia, proyecto.nombre);
-
+ 
     const wrap   = document.createElement('div');
     wrap.className = 'acord-proyecto';
-
+ 
     const header = document.createElement('div');
     header.className = 'acord-header';
     header.innerHTML = `
@@ -218,17 +219,17 @@ function crearAcordeonProyecto(provincia, proyecto, idx) {
             ${puestos.length > 0 ? `<span class="text-[9px] font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded-full">${puestos.length} pts</span>` : ''}
             <span class="acord-chevron">▼</span>
         </div>`;
-
+ 
     const body = document.createElement('div');
     body.className = 'acord-body';
-
+ 
     if (puestos.length === 0) {
         body.innerHTML = `<p class="text-[10px] text-slate-400 italic px-1 py-1">Sin puestos con coordenadas.<br>Agrégalos en la pestaña <strong>puestos</strong> del Excel.</p>`;
     } else {
         // Fila de botones: Ver todos + Reporte PDF de este proyecto
         const filaBtns = document.createElement('div');
         filaBtns.className = 'flex gap-1.5 mb-2';
-
+ 
         const btnTodos = document.createElement('button');
         btnTodos.className = 'flex-1 flex items-center gap-1.5 text-[10px] font-black px-3 py-1.5 rounded-xl transition-colors justify-center bg-blue-600 hover:bg-blue-700 text-white';
         btnTodos.innerHTML = `🗺️ Ver todos (${puestos.length})`;
@@ -255,7 +256,7 @@ function crearAcordeonProyecto(provincia, proyecto, idx) {
             }
         };
         filaBtns.appendChild(btnTodos);
-
+ 
         const btnPdfProy = document.createElement('button');
         btnPdfProy.className = 'flex items-center gap-1 text-[10px] font-black px-3 py-1.5 rounded-xl transition-colors bg-amber-500 hover:bg-amber-600 text-white';
         btnPdfProy.title = 'Descargar reporte PDF de este proyecto';
@@ -265,9 +266,9 @@ function crearAcordeonProyecto(provincia, proyecto, idx) {
             exportarPDFProyecto(proyecto.nombre);
         };
         filaBtns.appendChild(btnPdfProy);
-
+ 
         body.appendChild(filaBtns);
-
+ 
         // Tarjetas de puestos
         puestos.forEach((puesto, pi) => {
             const card = crearTarjetaPuesto(puesto, pi);
@@ -278,7 +279,7 @@ function crearAcordeonProyecto(provincia, proyecto, idx) {
             body.appendChild(card);
         });
     }
-
+ 
     // Toggle acordeón al hacer clic en header
     header.onclick = () => {
         const isOpen = body.classList.contains('open');
@@ -299,12 +300,12 @@ function crearAcordeonProyecto(provincia, proyecto, idx) {
             seleccionarProyectoActual(provincia, proyecto.nombre, puestos);
         }
     };
-
+ 
     wrap.appendChild(header);
     wrap.appendChild(body);
     return wrap;
 }
-
+ 
 // Actualiza estado global del proyecto activo y centra el mapa
 function seleccionarProyectoActual(provincia, nombreProyecto, puestos) {
     provinciaActual = provincia;
@@ -316,23 +317,23 @@ function seleccionarProyectoActual(provincia, nombreProyecto, puestos) {
         provMap.fitBounds(bounds, { padding: [60, 60] });
     }
 }
-
+ 
 // Mantener por compatibilidad — vacía, reemplazada por crearAcordeonProyecto
 function seleccionarProyecto() {}
-
+ 
 // Crear tarjeta de puesto con guardias múltiples
 function crearTarjetaPuesto(puesto, idx) {
     const card = document.createElement('div');
     card.className      = 'puesto-card';
     card.dataset.idx    = idx;
-
+ 
     // Guardias: puede ser string único o array separado por comas
     const guardias = Array.isArray(puesto.guardias)
         ? puesto.guardias
         : (puesto.guardia || '').split(',').map(g => g.trim()).filter(Boolean);
-
+ 
     const tieneAsistenciaReal = !!puesto.enTurnoHoy;
-
+ 
     const guardiasHTML = guardias.length > 1
         ? `<div class="flex flex-col gap-0.5 mt-1">
             ${guardias.map((g) => {
@@ -345,7 +346,7 @@ function crearTarjetaPuesto(puesto, idx) {
             }).join('')}
            </div>`
         : `<p class="text-[9px] text-slate-400 font-medium">👮 ${guardias[0] || '—'} · ${puesto.tipo}</p>`;
-
+ 
     // Badge "En turno hoy" — solo si hay dato real de asistencia
     const badgeTurnoHoy = tieneAsistenciaReal
         ? `<div class="flex items-center gap-1 mt-1.5 bg-green-50 border border-green-200 rounded-lg px-2 py-1">
@@ -353,7 +354,7 @@ function crearTarjetaPuesto(puesto, idx) {
                <span class="text-[9px] font-black text-green-700">EN TURNO: ${puesto.enTurnoHoy}</span>
            </div>`
         : '';
-
+ 
     card.innerHTML = `
         <div class="flex items-start gap-2">
             <span class="w-2.5 h-2.5 rounded-full flex-shrink-0 mt-1 ${puesto.armado ? 'bg-red-500' : 'bg-green-500'}" style="min-width:10px;"></span>
@@ -366,12 +367,12 @@ function crearTarjetaPuesto(puesto, idx) {
     card.onclick = () => seleccionarPuesto(puesto, card, idx);
     return card;
 }
-
+ 
 // Seleccionar puesto individual → volar y mostrar popup
 function seleccionarPuesto(puesto, cardEl, idx) {
     document.querySelectorAll('.puesto-card').forEach(c => c.classList.remove('active'));
     if (cardEl) cardEl.classList.add('active');
-
+ 
     // Si estaba en modo "todos", solo resaltar ese pin sin limpiar los demás
     if (!mostrandoTodos) {
         limpiarMarcadores();
@@ -388,16 +389,16 @@ function seleccionarPuesto(puesto, cardEl, idx) {
         }
         return;
     }
-
+ 
     provMap.flyTo([puesto.lat, puesto.lng], 16, { duration: 1.2 });
 }
-
+ 
 // Colocar un marcador en el mapa y devolver la instancia
 function colocarMarcador(puesto, abrirPopup) {
     const guardias = Array.isArray(puesto.guardias)
         ? puesto.guardias
         : (puesto.guardia || '').split(',').map(g => g.trim()).filter(Boolean);
-
+ 
     const iconHtml = `
         <div style="
             width:34px;height:34px;
@@ -408,11 +409,11 @@ function colocarMarcador(puesto, abrirPopup) {
             display:flex;align-items:center;justify-content:center;transition:opacity 0.2s;">
             <span style="transform:rotate(45deg);font-size:13px;">${puesto.armado ? '🔫' : '👮'}</span>
         </div>`;
-
+ 
     const icon = L.divIcon({ html: iconHtml, className:'', iconSize:[34,34], iconAnchor:[17,34], popupAnchor:[0,-36] });
     const marker = L.marker([puesto.lat, puesto.lng], { icon }).addTo(provMap);
     marker._puestoData = puesto;  // ← referencia para los filtros
-
+ 
     // ── Bloque "EN TURNO HOY" — datos reales desde asistencia (Zoho) ──
     const tieneAsistenciaReal = !!puesto.enTurnoHoy;
     const bloqueTurnoHoy = tieneAsistenciaReal ? `
@@ -425,12 +426,12 @@ function colocarMarcador(puesto, abrirPopup) {
             <p style="font-size:9px;font-weight:700;color:#16a34a;margin:2px 0 0;">${iconoTurno(puesto.tipoTurnoHoy)} Turno ${puesto.tipoTurnoHoy}</p>
         </div>
     ` : '';
-
+ 
     // Lista de rotación (todos los que cubren el puesto)
     const listaRotacion = puesto.rotacionCompleta && puesto.rotacionCompleta.length > 0
         ? puesto.rotacionCompleta
         : guardias;
-
+ 
     // ── Guías de armas (envío/retorno) asignadas a este puesto ──
     const armasDelPuesto = (armamentoDetalle || []).filter(a =>
         a.provincia === provinciaActual &&
@@ -450,7 +451,7 @@ function colocarMarcador(puesto, abrirPopup) {
                    </div>`).join('')}
            </div>`
         : '';
-
+ 
     const guardiasPopup = listaRotacion.length > 1
         ? listaRotacion.map((g) => {
             const esElDeHoy = tieneAsistenciaReal && g === puesto.enTurnoHoy;
@@ -465,7 +466,7 @@ function colocarMarcador(puesto, abrirPopup) {
                 <span style="font-size:9px;font-weight:700;color:#94a3b8;text-transform:uppercase;">Guardia</span>
                 <span style="font-size:11px;font-weight:800;color:#1e293b;">👮 ${listaRotacion[0] || '—'}</span>
            </div>`;
-
+ 
     const popup = `
         <div style="font-family:'DM Sans',sans-serif;min-width:240px;max-width:300px;">
             <div style="background:${puesto.armado ? '#dc2626' : '#16a34a'};padding:10px 14px;">
@@ -501,14 +502,14 @@ function colocarMarcador(puesto, abrirPopup) {
                 </a>
             </div>
         </div>`;
-
+ 
     marker.bindPopup(popup, { maxWidth:300, minWidth:240 });
     marker._puestoData = puesto;   // ← necesario para que los filtros funcionen
     if (abrirPopup) marker.openPopup();
     marcadoresMapa.push(marker);
     return marker;
 }
-
+ 
 // Toggle: mostrar / ocultar todos los puestos
 function toggleTodosPuestos() {
     if (mostrandoTodos) {
@@ -529,7 +530,7 @@ function toggleTodosPuestos() {
     }
     actualizarBotonTodos();
 }
-
+ 
 function actualizarBotonTodos() {
     const btn = document.getElementById('btn-todos-puestos');
     if (!btn) return;
@@ -542,14 +543,14 @@ function actualizarBotonTodos() {
         ? 'flex items-center gap-1.5 text-[10px] font-black px-3 py-1.5 rounded-xl transition-colors w-full justify-center bg-slate-200 hover:bg-slate-300 text-slate-700'
         : 'flex items-center gap-1.5 text-[10px] font-black px-3 py-1.5 rounded-xl transition-colors w-full justify-center bg-blue-600 hover:bg-blue-700 text-white';
 }
-
+ 
 // Estado del toggle "ver todos de la provincia" (todas las proyectos a la vez)
 let mostrandoTodosProvincia = false;
-
+ 
 // Ver/ocultar TODOS los puestos de TODOS los proyectos de la provincia actual
 function toggleTodosPuestosProvincia() {
     const btn = document.getElementById('btn-todos-provincia');
-
+ 
     if (mostrandoTodosProvincia) {
         limpiarMarcadores();
         mostrandoTodosProvincia = false;
@@ -562,27 +563,27 @@ function toggleTodosPuestosProvincia() {
         }
         return;
     }
-
+ 
     limpiarMarcadores();
     const todosLosPuestos = Object.values(puestosData[provinciaActual] || {}).flat();
-
+ 
     if (todosLosPuestos.length === 0) {
         alert('No hay puestos con coordenadas registradas en esta provincia todavía.');
         return;
     }
-
+ 
     todosLosPuestos.forEach(puesto => colocarMarcador(puesto, false));
     mostrandoTodosProvincia = true;
-
+ 
     const bounds = L.latLngBounds(todosLosPuestos.map(p => [p.lat, p.lng]));
     provMap.fitBounds(bounds, { padding: [50, 50] });
-
+ 
     if (btn) {
         btn.innerHTML = `🙈 Ocultar todos (${todosLosPuestos.length})`;
         btn.className = 'w-full flex items-center justify-center gap-1.5 text-[10px] font-black px-3 py-2 rounded-xl transition-colors bg-slate-700 hover:bg-slate-800 text-white mb-3';
     }
 }
-
+ 
 // =====================================================================
 // CAPTURA DEL MAPA REAL (con calles) usando html2canvas
 // Muestra los pines necesarios, espera a que carguen los tiles, y toma
@@ -592,20 +593,20 @@ function toggleTodosPuestosProvincia() {
 async function capturarMapaLeaflet(puestosAMostrar) {
     if (!provMap || typeof html2canvas === 'undefined') return null;
     if (!puestosAMostrar || puestosAMostrar.length === 0) return null;
-
+ 
     try {
         limpiarMarcadores();
         puestosAMostrar.forEach(p => colocarMarcador(p, false));
-
+ 
         const bounds = L.latLngBounds(puestosAMostrar.map(p => [p.lat, p.lng]));
         provMap.fitBounds(bounds, { padding: [40, 40] });
-
+ 
         // Esperar a que el mapa se reajuste y los tiles nuevos terminen de cargar
         await new Promise(resolve => {
             provMap.once('moveend', () => setTimeout(resolve, 900));
             setTimeout(resolve, 1400); // respaldo por si moveend no dispara
         });
-
+ 
         const mapEl = document.getElementById('prov-map');
         const canvas = await html2canvas(mapEl, {
             useCORS: true,
@@ -613,33 +614,33 @@ async function capturarMapaLeaflet(puestosAMostrar) {
             logging: false,
             scale: 2
         });
-
+ 
         return canvas.toDataURL('image/jpeg', 0.92);
     } catch (e) {
         console.warn('⚠️ No se pudo capturar el mapa real, se usará el mapa esquemático:', e.message);
         return null;
     }
 }
-
+ 
 function limpiarMarcadores() {
     marcadoresMapa.forEach(m => provMap.removeLayer(m));
     marcadoresMapa = [];
 }
-
+ 
 // =====================================================================
 // FILTROS DE ESTADO
 // =====================================================================
-
+ 
 function aplicarFiltro(tipo) {
     filtroActivo = tipo;
-
+ 
     // Actualizar estilo de botones
     ['todos','armado','desarmado','radio'].forEach(t => {
         const btn = document.getElementById(`f-${t}`);
         if (!btn) return;
         btn.className = tipo === t ? `filtro-btn on-${t}` : 'filtro-btn';
     });
-
+ 
     // Aplicar / quitar atenuado en marcadores
     marcadoresMapa.forEach(marker => {
         const puesto = marker._puestoData;
@@ -654,7 +655,7 @@ function aplicarFiltro(tipo) {
             el.style.pointerEvents = visible ? '' : 'none';
         }
     });
-
+ 
     // Contador de visibles
     const total    = marcadoresMapa.length;
     if (total === 0) return;
@@ -665,7 +666,7 @@ function aplicarFiltro(tipo) {
         if (tipo === 'desarmado') return !(p.armado === true || p.armado === 'Si');
         if (tipo === 'radio')     return p.radio === true  || p.radio  === 'Si';
     }).length;
-
+ 
     // Insertar/actualizar contador junto al botón PDF
     let counter = document.getElementById('filtro-counter');
     if (!counter) {
@@ -677,7 +678,7 @@ function aplicarFiltro(tipo) {
     }
     counter.textContent = tipo !== 'todos' ? `${visibles} de ${total}` : '';
 }
-
+ 
 // =====================================================================
 // EXPORTAR PDF
 // =====================================================================
@@ -685,13 +686,13 @@ function aplicarFiltro(tipo) {
 // HELPERS DE REPORTES PDF — membrete con márgenes de 2.5cm, mapa esquemático
 // =====================================================================
 const MARGEN_PDF = 25; // 2.5 cm en mm (header y footer)
-
+ 
 // Dibuja el membrete (encabezado 2.5cm) y el pie de página (2.5cm) en la página actual
 function dibujarMembretePDF(doc, subtitulo, fechaHoy) {
     const W = 210, H = 297;
     const DARK = [15,15,15], ORANGE = [245,158,11];
     const LOGO_B64 = window._LOGO_B64 || '';
-
+ 
     // ── Encabezado (0 a 25mm) ──
     doc.setFillColor(209,213,219);
     doc.rect(0, 0, W, MARGEN_PDF, 'F');
@@ -705,7 +706,7 @@ function dibujarMembretePDF(doc, subtitulo, fechaHoy) {
     doc.text(subtitulo, 8, 18);
     doc.setFontSize(6.5);
     doc.text(`Generado: ${fechaHoy}`, 8, 23);
-
+ 
     // ── Pie de página (últimos 25mm) ──
     const yFooter = H - MARGEN_PDF;
     doc.setDrawColor(...ORANGE); doc.setLineWidth(0.8);
@@ -714,24 +715,24 @@ function dibujarMembretePDF(doc, subtitulo, fechaHoy) {
     doc.text('Dirección: Cdla. Álamos II Mz K Solar 09', W/2, yFooter + 9, {align:'center'});
     doc.text('Correo Electrónico: info@defen.com.ec  ·  Guayaquil - Ecuador', W/2, yFooter + 14, {align:'center'});
 }
-
+ 
 // Paleta de colores por índice de proyecto (para el mapa esquemático)
 const PALETA_PROYECTOS = [
     [37,99,235], [22,163,74], [220,38,38], [217,119,6],
     [124,58,237], [219,39,119], [8,145,178], [101,63,241]
 ];
-
+ 
 // Dibuja un "mapa esquemático" con los puestos ubicados según lat/lng real,
 // coloreados por proyecto. No requiere internet ni depende de CORS — siempre funciona.
 function dibujarMapaEsquematico(doc, y, puestosPorProyecto, W) {
     const alturaBox = 90;
     const xBox = 14, wBox = W - 28;
-
+ 
     doc.setFillColor(248,250,252);
     doc.roundedRect(xBox, y, wBox, alturaBox, 3, 3, 'F');
     doc.setDrawColor(226,232,240); doc.setLineWidth(0.3);
     doc.roundedRect(xBox, y, wBox, alturaBox, 3, 3, 'S');
-
+ 
     // Recolectar todos los puestos con coordenadas válidas
     const todos = [];
     Object.entries(puestosPorProyecto).forEach(([nombreProy, lista], idx) => {
@@ -739,28 +740,28 @@ function dibujarMapaEsquematico(doc, y, puestosPorProyecto, W) {
             if (p.lat && p.lng) todos.push({ ...p, _proyIdx: idx % PALETA_PROYECTOS.length, _proyNombre: nombreProy });
         });
     });
-
+ 
     if (todos.length === 0) {
         doc.setFontSize(9); doc.setTextColor(148,163,184); doc.setFont('helvetica','italic');
         doc.text('Sin puestos con coordenadas registradas para graficar.', W/2, y + alturaBox/2, {align:'center'});
         return y + alturaBox + 8;
     }
-
+ 
     const lats = todos.map(p => p.lat), lngs = todos.map(p => p.lng);
     const minLat = Math.min(...lats), maxLat = Math.max(...lats);
     const minLng = Math.min(...lngs), maxLng = Math.max(...lngs);
     const padLat = (maxLat - minLat) * 0.15 || 0.01;
     const padLng = (maxLng - minLng) * 0.15 || 0.01;
-
+ 
     const areaX = xBox + 8, areaW = wBox - 16;
     const areaY = y + 8,   areaH = alturaBox - 16;
-
+ 
     const proyectar = (lat, lng) => {
         const px = areaX + ((lng - (minLng-padLng)) / ((maxLng+padLng) - (minLng-padLng))) * areaW;
         const py = areaY + areaH - ((lat - (minLat-padLat)) / ((maxLat+padLat) - (minLat-padLat))) * areaH;
         return [px, py];
     };
-
+ 
     todos.forEach(p => {
         const [px, py] = proyectar(p.lat, p.lng);
         const col = PALETA_PROYECTOS[p._proyIdx];
@@ -769,7 +770,7 @@ function dibujarMapaEsquematico(doc, y, puestosPorProyecto, W) {
         doc.setDrawColor(255,255,255); doc.setLineWidth(0.3);
         doc.circle(px, py, 1.6, 'S');
     });
-
+ 
     // Leyenda de proyectos (colores) debajo del recuadro
     const nombresProy = Object.keys(puestosPorProyecto);
     let legY = y + alturaBox + 6;
@@ -785,10 +786,10 @@ function dibujarMapaEsquematico(doc, y, puestosPorProyecto, W) {
         doc.text(texto, legX + 4.5, legY);
         legX += 50;
     });
-
+ 
     return legY + 6;
 }
-
+ 
 // =====================================================================
 // REPORTE POR PROVINCIA — Resumen → Proyectos → Puestos → Mapa esquemático
 // =====================================================================
@@ -800,18 +801,18 @@ async function exportarPDF() {
     const hoy      = new Date();
     const fechaHoy = `${String(hoy.getDate()).padStart(2,'0')}/${String(hoy.getMonth()+1).padStart(2,'0')}/${hoy.getFullYear()}`;
     const W = 210, H = 297;
-
+ 
     const DARK  = [15,23,42], GREEN = [22,163,74], RED = [220,38,38], GRAY = [241,245,249];
-
+ 
     dibujarMembretePDF(doc, `Reporte Operativo de Provincia — ${prov}`, fechaHoy);
     const didDrawPageProv = () => dibujarMembretePDF(doc, `Reporte Operativo de Provincia — ${prov}`, fechaHoy);
-
+ 
     let y = MARGEN_PDF + 8;
-
+ 
     // ── 1. RESUMEN ────────────────────────────────────────────
     doc.setTextColor(...DARK); doc.setFontSize(15); doc.setFont('helvetica','bold');
     doc.text(prov, 14, y); y += 8;
-
+ 
     doc.setFillColor(...GRAY);
     doc.roundedRect(14, y, W-28, 22, 3, 3, 'F');
     doc.setFontSize(7); doc.setFont('helvetica','bold'); doc.setTextColor(100,116,139);
@@ -820,7 +821,7 @@ async function exportarPDF() {
     doc.text('ESTADO', 155, y+5);
     doc.setTextColor(...DARK); doc.setFontSize(9); doc.setFont('helvetica','bold');
     doc.text(detalle.tramite || 'Sin registro', 20, y+12);
-
+ 
     if (detalle.vigenciaInicio && detalle.vigenciaFin) {
         const dias = Math.round((new Date(detalle.vigenciaFin) - hoy) / 86400000);
         doc.text(`${formatFecha(detalle.vigenciaInicio)} → ${formatFecha(detalle.vigenciaFin)}`, 85, y+12);
@@ -838,7 +839,7 @@ async function exportarPDF() {
     const provInfo = data[prov] || {};
     doc.text(provInfo.estado || '—', 155, y+12);
     y += 28;
-
+ 
     if (detalle.supervisores && detalle.supervisores.length > 0) {
         doc.setFontSize(7); doc.setFont('helvetica','bold'); doc.setTextColor(100,116,139);
         doc.text('SUPERVISOR(ES) DE PROVINCIA', 14, y);
@@ -846,14 +847,31 @@ async function exportarPDF() {
         doc.text(detalle.supervisores.join('  ·  '), 14, y+5);
         y += 12;
     }
-
-    const proyectosList = detalle.proyectosList || [];
-
-    // ── 2. PROYECTOS (resumen de todos, sin interleavar puestos) ──
+ 
+    // ── Aplicar filtros globales activos a todo el reporte ──
+    const todosNeutros  = Object.values(filtrosActivos).every(v => v === 'todos');
+    const totFiltrados  = calcTotalesFiltrados(prov);
+    const proyectosList = todosNeutros ? (detalle.proyectosList || []) : totFiltrados.proyectosList;
+ 
+    if (!todosNeutros) {
+        const chips = [];
+        if (filtrosActivos.jornada  !== 'todos') chips.push(`Jornada: ${filtrosActivos.jornada}`);
+        if (filtrosActivos.arma     !== 'todos') chips.push(`Arma: ${filtrosActivos.arma}`);
+        if (filtrosActivos.radio    !== 'todos') chips.push(`Radio: ${filtrosActivos.radio}`);
+        if (filtrosActivos.vence    !== 'todos') chips.push(`Vencimiento: ${filtrosActivos.vence}`);
+        if (filtrosActivos.contrato !== 'todos') chips.push(`Contrato: ${filtrosActivos.contrato}`);
+        doc.setFillColor(254,243,199);
+        doc.roundedRect(14, y, W-28, 8, 2, 2, 'F');
+        doc.setFontSize(7.5); doc.setFont('helvetica','bold'); doc.setTextColor(146,64,14);
+        doc.text(`⚙️ FILTROS ACTIVOS: ${chips.join('  ·  ')}`, 18, y+5.3);
+        y += 12;
+    }
+ 
+    // ── 2. PROYECTOS (resumen de todos los que pasan el filtro) ──
     if (proyectosList.length > 0) {
         doc.setFontSize(11); doc.setFont('helvetica','bold'); doc.setTextColor(...DARK);
         doc.text(`PROYECTOS ACTIVOS (${proyectosList.length})`, 14, y); y += 5;
-
+ 
         doc.autoTable({
             startY: y,
             margin: { left:14, right:14, top:MARGEN_PDF+4, bottom:MARGEN_PDF+4 },
@@ -876,29 +894,37 @@ async function exportarPDF() {
             columnStyles: { 0:{fontStyle:'bold', cellWidth:38}, 1:{halign:'center',cellWidth:18}, 2:{halign:'center',cellWidth:16}, 3:{halign:'center',cellWidth:18} }
         });
         y = doc.lastAutoTable.finalY + 8;
+    } else if (!todosNeutros) {
+        doc.setFontSize(9); doc.setTextColor(148,163,184); doc.setFont('helvetica','italic');
+        doc.text('Ningún proyecto de esta provincia cumple los filtros activos.', 14, y);
+        y += 10;
     }
-
-    // ── 3. DETALLE POR PUESTO — separado primero por proyecto ──
-    const puestosPorProyecto = puestosData[prov] || {};
-
-    if (Object.keys(puestosPorProyecto).length > 0) {
+ 
+    // ── 3. DETALLE POR PUESTO — separado primero por proyecto, respetando filtros ──
+    const puestosPorProyectoFiltrados = {};
+    proyectosList.forEach(p => {
+        const lista = puestosFiltrados(prov, p.nombre);
+        if (lista.length > 0) puestosPorProyectoFiltrados[p.nombre] = lista;
+    });
+ 
+    if (Object.keys(puestosPorProyectoFiltrados).length > 0) {
         if (y > 240) { doc.addPage(); dibujarMembretePDF(doc, `Reporte Operativo de Provincia — ${prov}`, fechaHoy); y = MARGEN_PDF + 8; }
         doc.setFontSize(13); doc.setFont('helvetica','bold'); doc.setTextColor(...DARK);
         doc.text('DETALLE POR PUESTO', 14, y); y += 7;
-
+ 
         proyectosList.forEach(p => {
-            const puestos = puestosPorProyecto[p.nombre] || [];
+            const puestos = puestosPorProyectoFiltrados[p.nombre] || [];
             if (puestos.length === 0) return;
-
+ 
             if (y > 250) { doc.addPage(); dibujarMembretePDF(doc, `Reporte Operativo de Provincia — ${prov}`, fechaHoy); y = MARGEN_PDF + 8; }
-
+ 
             // Nombre del proyecto como separador
             doc.setFillColor(...DARK);
             doc.roundedRect(14, y, W-28, 8, 2, 2, 'F');
             doc.setTextColor(255,255,255); doc.setFontSize(9.5); doc.setFont('helvetica','bold');
             doc.text(`${p.nombre}  ·  ${puestos.length} puesto(s)`, 18, y+5.5);
             y += 12;
-
+ 
             doc.autoTable({
                 startY: y,
                 margin: { left:14, right:14, top:MARGEN_PDF+4, bottom:MARGEN_PDF+4 },
@@ -924,16 +950,16 @@ async function exportarPDF() {
             y = doc.lastAutoTable.finalY + 9;
         });
     }
-
-    // ── 4. MAPA CON TODOS LOS PUESTOS ACTIVOS (real con calles; esquemático como respaldo) ──
+ 
+    // ── 4. MAPA CON LOS PUESTOS QUE CUMPLEN EL FILTRO (real con calles; esquemático como respaldo) ──
     const todosLosPuestosMapa = [];
-    Object.values(puestosPorProyecto).forEach(lista => todosLosPuestosMapa.push(...lista));
-
+    Object.values(puestosPorProyectoFiltrados).forEach(lista => todosLosPuestosMapa.push(...lista));
+ 
     if (todosLosPuestosMapa.length > 0) {
         if (y > 170) { doc.addPage(); dibujarMembretePDF(doc, `Reporte Operativo de Provincia — ${prov}`, fechaHoy); y = MARGEN_PDF + 8; }
         doc.setFontSize(11); doc.setFont('helvetica','bold'); doc.setTextColor(...DARK);
-        doc.text('MAPA DE PUESTOS ACTIVOS', 14, y); y += 5;
-
+        doc.text(todosNeutros ? 'MAPA DE PUESTOS ACTIVOS' : 'MAPA DE PUESTOS (según filtro activo)', 14, y); y += 5;
+ 
         const imgMapa = await capturarMapaLeaflet(todosLosPuestosMapa);
         if (imgMapa) {
             const altoImg = 100;
@@ -942,10 +968,10 @@ async function exportarPDF() {
             doc.rect(14, y, W-28, altoImg, 'S');
             y += altoImg + 6;
         } else {
-            dibujarMapaEsquematico(doc, y, puestosPorProyecto, W);
+            dibujarMapaEsquematico(doc, y, puestosPorProyectoFiltrados, W);
         }
     }
-
+ 
     // ── Numeración de páginas ──
     const totalPag = doc.getNumberOfPages();
     for (let i = 1; i <= totalPag; i++) {
@@ -954,10 +980,10 @@ async function exportarPDF() {
         doc.text(`Página ${i} de ${totalPag}`, W-14, H-MARGEN_PDF+20, { align:'right' });
         doc.text('Documento confidencial · Uso interno', 14, H-MARGEN_PDF+20);
     }
-
+ 
     doc.save(`Reporte_${prov}_${fechaHoy.replace(/\//g,'-')}.pdf`);
 }
-
+ 
 // =====================================================================
 // REPORTE POR PROYECTO/PUESTO — Resumen → Agentes/Armas/Radios/Puestos → Mapa
 // =====================================================================
@@ -971,22 +997,36 @@ async function exportarPDFProyecto(nombreProyecto) {
     const fechaHoy = `${String(hoy.getDate()).padStart(2,'0')}/${String(hoy.getMonth()+1).padStart(2,'0')}/${hoy.getFullYear()}`;
     const W = 210, H = 297;
     const DARK = [15,23,42], GREEN = [22,163,74], RED = [220,38,38], GRAY = [241,245,249];
-
+ 
     const subt = `Reporte de Proyecto — ${nombreProyecto}`;
     dibujarMembretePDF(doc, subt, fechaHoy);
     const didDrawPageProy = () => dibujarMembretePDF(doc, subt, fechaHoy);
-
+ 
     let y = MARGEN_PDF + 8;
-
+ 
     // ── 1. RESUMEN DEL PROYECTO ──
     doc.setTextColor(...DARK); doc.setFontSize(14); doc.setFont('helvetica','bold');
     doc.text(nombreProyecto, 14, y); y += 3;
     doc.setFontSize(8.5); doc.setFont('helvetica','normal'); doc.setTextColor(100,116,139);
     doc.text(`${prov}`, 14, y+4); y += 10;
-
-    const puestos = (puestosData[prov] || {})[nombreProyecto] || [];
+ 
+    const puestosTodos = (puestosData[prov] || {})[nombreProyecto] || [];
+    const puestos       = puestosFiltrados(prov, nombreProyecto);
+    const hayFiltroPuesto = filtrosActivos.jornada !== 'todos' || filtrosActivos.arma !== 'todos' || filtrosActivos.radio !== 'todos';
     const dias    = proyecto && proyecto.fin ? Math.round((new Date(proyecto.fin) - hoy)/86400000) : null;
-
+ 
+    if (hayFiltroPuesto) {
+        const chips = [];
+        if (filtrosActivos.jornada !== 'todos') chips.push(`Jornada: ${filtrosActivos.jornada}`);
+        if (filtrosActivos.arma    !== 'todos') chips.push(`Arma: ${filtrosActivos.arma}`);
+        if (filtrosActivos.radio   !== 'todos') chips.push(`Radio: ${filtrosActivos.radio}`);
+        doc.setFillColor(254,243,199);
+        doc.roundedRect(14, y, W-28, 8, 2, 2, 'F');
+        doc.setFontSize(7.5); doc.setFont('helvetica','bold'); doc.setTextColor(146,64,14);
+        doc.text(`⚙️ FILTROS ACTIVOS: ${chips.join('  ·  ')}  (mostrando ${puestos.length} de ${puestosTodos.length} puesto(s))`, 18, y+5.3);
+        y += 12;
+    }
+ 
     doc.setFillColor(...GRAY);
     doc.roundedRect(14, y, W-28, 22, 3, 3, 'F');
     doc.setFontSize(7); doc.setFont('helvetica','bold'); doc.setTextColor(100,116,139);
@@ -1004,7 +1044,7 @@ async function exportarPDFProyecto(nombreProyecto) {
                      dias===null ? 139 : dias<0?RED[2]:dias<=30?RED[2]:dias<=60?6:GREEN[2]);
     doc.text(proyecto?.fin ? `${formatFecha(proyecto.fin)} (${dias<0?'VENCIDO':dias+'d'})` : '—', 150, y+13);
     y += 28;
-
+ 
     if (proyecto?.supervisores && proyecto.supervisores.length > 0) {
         doc.setFontSize(7); doc.setFont('helvetica','bold'); doc.setTextColor(100,116,139);
         doc.text('SUPERVISOR(ES)', 14, y);
@@ -1012,12 +1052,12 @@ async function exportarPDFProyecto(nombreProyecto) {
         doc.text(proyecto.supervisores.join('  ·  '), 14, y+5);
         y += 12;
     }
-
+ 
     // ── 2. DETALLE: AGENTES, ARMAS, RADIOS, PUESTOS ──
     if (puestos.length > 0) {
         doc.setFontSize(11); doc.setFont('helvetica','bold'); doc.setTextColor(...DARK);
         doc.text(`AGENTES · ARMAS · RADIOS · PUESTOS (${puestos.length})`, 14, y); y += 5;
-
+ 
         doc.autoTable({
             startY: y,
             margin: { left:14, right:14, top:MARGEN_PDF+4, bottom:MARGEN_PDF+4 },
@@ -1046,13 +1086,13 @@ async function exportarPDFProyecto(nombreProyecto) {
         doc.text('Este proyecto aún no tiene puestos con coordenadas registradas.', 14, y);
         y += 10;
     }
-
+ 
     // ── 3. MAPA DE PUESTOS DEL PROYECTO (real con calles; esquemático como respaldo) ──
     if (puestos.length > 0) {
         if (y > 170) { doc.addPage(); dibujarMembretePDF(doc, subt, fechaHoy); y = MARGEN_PDF + 8; }
         doc.setFontSize(11); doc.setFont('helvetica','bold'); doc.setTextColor(...DARK);
         doc.text('MAPA DE PUESTOS DEL PROYECTO', 14, y); y += 5;
-
+ 
         const imgMapa = await capturarMapaLeaflet(puestos);
         if (imgMapa) {
             const altoImg = 100;
@@ -1064,7 +1104,7 @@ async function exportarPDFProyecto(nombreProyecto) {
             dibujarMapaEsquematico(doc, y, { [nombreProyecto]: puestos }, W);
         }
     }
-
+ 
     // ── Numeración de páginas ──
     const totalPag = doc.getNumberOfPages();
     for (let i = 1; i <= totalPag; i++) {
@@ -1073,10 +1113,10 @@ async function exportarPDFProyecto(nombreProyecto) {
         doc.text(`Página ${i} de ${totalPag}`, W-14, H-MARGEN_PDF+20, { align:'right' });
         doc.text('Documento confidencial · Uso interno', 14, H-MARGEN_PDF+20);
     }
-
+ 
     doc.save(`Reporte_${nombreProyecto.replace(/[^\w]+/g,'_')}_${fechaHoy.replace(/\//g,'-')}.pdf`);
 }
-
+ 
 function cerrarVistaProvincia() {
     document.getElementById('prov-modal').classList.remove('open');
     limpiarMarcadores();
@@ -1087,7 +1127,7 @@ function cerrarVistaProvincia() {
         if (b) b.className = `filtro-btn${t==='todos' ? ' on-todos' : ''}`;
     });
 }
-
+ 
 // Cerrar con Escape
 document.addEventListener('keydown', e => {
     if (e.key === 'Escape') {
@@ -1096,5 +1136,5 @@ document.addEventListener('keydown', e => {
             togglePanelFiltros();
     }
 });
-
+ 
 // =====================================================================
