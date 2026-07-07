@@ -13,7 +13,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 </head>
 <body class="min-h-screen text-slate-900">
-
+ 
     <!-- ================================================================
          PANTALLA DE LOGIN — bloquea el acceso hasta autenticar
     ================================================================ -->
@@ -24,7 +24,7 @@
                 <h1 style="color:white;font-weight:900;font-size:16px;margin:0;">DEFEN CIA. LTDA.</h1>
                 <p style="color:#64748b;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;margin-top:2px;">Acceso restringido — Mapa operativo</p>
             </div>
-
+ 
             <form id="login-form" style="display:flex;flex-direction:column;gap:12px;">
                 <div>
                     <label style="color:#94a3b8;font-size:10px;font-weight:700;text-transform:uppercase;display:block;margin-bottom:5px;">Usuario</label>
@@ -36,9 +36,9 @@
                     <input type="password" id="login-password" autocomplete="current-password" required
                            style="width:100%;padding:10px 12px;background:rgba(255,255,255,0.06);border:1.5px solid rgba(255,255,255,0.12);border-radius:10px;color:white;font-size:13px;font-weight:600;outline:none;">
                 </div>
-
+ 
                 <p id="login-error" style="display:none;color:#f87171;font-size:11px;font-weight:700;background:rgba(248,113,113,0.1);border:1px solid rgba(248,113,113,0.25);border-radius:8px;padding:8px 10px;margin:0;"></p>
-
+ 
                 <button type="submit" id="login-btn"
                         style="margin-top:6px;padding:11px;background:linear-gradient(135deg,#f59e0b,#d97706);color:#1c1917;font-weight:900;font-size:13px;border:none;border-radius:10px;cursor:pointer;">
                     Ingresar
@@ -46,18 +46,42 @@
             </form>
         </div>
     </div>
-
-        <!-- Barra superior: sesión activa -->
-        <div style="display:flex;justify-content:flex-end;align-items:center;padding:0 4px 10px;">
-            <button onclick="cerrarSesion()"
-                    style="display:flex;align-items:center;gap:6px;background:rgba(255,255,255,0.12);backdrop-filter:blur(8px);color:white;font-size:11px;font-weight:700;padding:6px 12px;border-radius:999px;border:1px solid rgba(255,255,255,0.2);cursor:pointer;">
-                🔒 Cerrar sesión
-            </button>
-        </div>
-
+ 
+    <div class="max-w-[1560px] mx-auto p-4 lg:p-6">
+ 
+        <!-- Header -->
+        <header class="mb-5 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white px-6 py-4 rounded-2xl shadow-sm border border-slate-200">
+            <div>
+                <h1 class="text-2xl font-black text-slate-900 tracking-tight leading-tight">Mapa Operativo de Cobertura Nacional - Defen Cia. Ltda.</h1>
+                <p class="text-slate-400 font-semibold text-xs mt-0.5">Defen Cia. Ltda. · Control de Recursos y Proyectos Nacionales</p>
+            </div>
+            <div class="flex flex-wrap gap-2 items-center">
+                <div class="flex items-center gap-1.5 bg-blue-50 px-3 py-1.5 rounded-xl border border-blue-100">
+                    <span class="w-2.5 h-2.5 bg-blue-600 rounded-full"></span>
+                    <span class="text-[10px] font-bold text-blue-700">Matriz/Sucursal</span>
+                </div>
+                <div class="flex items-center gap-1.5 bg-green-50 px-3 py-1.5 rounded-xl border border-green-100">
+                    <span class="w-2.5 h-2.5 bg-green-600 rounded-full"></span>
+                    <span class="text-[10px] font-bold text-green-700">Agencia con Proyectos</span>
+                </div>
+                <div class="flex items-center gap-1.5 bg-yellow-50 px-3 py-1.5 rounded-xl border border-yellow-200">
+                    <span class="w-2.5 h-2.5 bg-yellow-500 rounded-full"></span>
+                    <span class="text-[10px] font-bold text-yellow-700">Agencia sin Proyecto</span>
+                </div>
+                <div class="flex items-center gap-1.5 bg-red-50 px-3 py-1.5 rounded-xl border border-red-100">
+                    <span class="w-2.5 h-2.5 bg-red-500 rounded-full"></span>
+                    <span class="text-[10px] font-bold text-red-700">Sin Presencia</span>
+                </div>
+                <button onclick="cerrarSesion()"
+                        class="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-900 px-3 py-1.5 rounded-xl text-white text-[10px] font-bold transition-colors ml-1">
+                    🔒 Cerrar sesión
+                </button>
+            </div>
+        </header>
+ 
         <!-- Main grid: mapa | panel -->
         <div class="grid grid-cols-1 xl:grid-cols-[1fr_380px] gap-5 items-start">
-
+ 
             <!-- ====== MAPA ====== -->
             <div class="p-4 rounded-2xl shadow-sm border border-white/20" style="min-height:0; background: rgba(255,255,255,0.12); backdrop-filter: blur(8px);">
                 <div class="map-wrapper" id="map-container" style="background:transparent;">
@@ -67,16 +91,16 @@
                          id="ecuador-map">
                     <div id="markers-layer"></div>
                 </div>
-
+ 
                 <!-- Panel de detalle (debajo del mapa dentro del mismo blanco) -->
                 <div id="detail-panel" class="mt-5 border-t border-white/20 pt-5">
                     <!-- contenido inyectado por JS -->
                 </div>
             </div>
-
+ 
             <!-- ====== PANEL DERECHO ====== -->
             <div class="flex flex-col gap-4" style="position:sticky;top:16px;">
-
+ 
                 <!-- Resumen ejecutivo -->
                 <div class="bg-slate-900 p-6 rounded-2xl shadow-xl text-white">
                     <h3 class="text-slate-400 font-bold uppercase tracking-widest text-[9px] mb-4">Resumen Ejecutivo Nacional</h3>
@@ -105,7 +129,7 @@
                         </div>
                     </div>
                 </div>
-
+ 
                 <!-- Lista de provincias -->
                 <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex flex-col">
                     <h2 class="text-base font-black text-slate-800 mb-3 px-1">Detalle por Provincia</h2>
@@ -114,7 +138,7 @@
                         <!-- dinámico -->
                     </div>
                 </div>
-
+ 
                 <!-- Resumen Armamento -->
                 <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
                     <h2 class="text-base font-black text-slate-800 mb-3 px-1">Resumen Armamento</h2>
@@ -145,26 +169,27 @@
                         </div>
                     </div>
                 </div>
-
+ 
             </div><!-- /panel derecho -->
         </div><!-- /grid -->
-
+    </div><!-- /max-w-[1560px] -->
+ 
     <!-- Tooltip mapa nacional -->
     <div id="tooltip" class="tooltip"></div>
-
+ 
     <!-- Loading overlay -->
     <div id="loading-overlay" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,0.75);z-index:99999;flex-direction:column;align-items:center;justify-content:center;gap:14px;backdrop-filter:blur(4px);">
         <div style="width:44px;height:44px;border:4px solid rgba(255,255,255,0.15);border-top-color:white;border-radius:50%;animation:spin2 0.8s linear infinite;"></div>
         <p style="color:white;font-size:13px;font-weight:700;font-family:'DM Sans',sans-serif;">Cargando datos desde Google Sheets…</p>
         <style>@keyframes spin2{to{transform:rotate(360deg)}}</style>
     </div>
-
+ 
     <!-- ================================================================
          MODAL — Vista de Provincia con Mapa Interactivo (Responsivo)
     ================================================================ -->
     <div id="prov-modal">
         <div id="prov-modal-inner">
-
+ 
             <!-- Header -->
             <div class="flex items-center justify-between px-4 py-2.5 bg-slate-900 flex-shrink-0">
                 <div class="flex items-center gap-2 min-w-0">
@@ -181,7 +206,7 @@
                 <button onclick="cerrarVistaProvincia()"
                         class="text-slate-400 hover:text-white text-xl leading-none p-1 rounded-lg hover:bg-white/10 transition-colors ml-2">✕</button>
             </div>
-
+ 
             <!-- Barra de filtros + botón PDF -->
             <div id="filtros-bar">
                 <span class="text-[9px] font-bold text-slate-500 uppercase tracking-wider mr-1 hidden sm:inline">Filtrar:</span>
@@ -201,13 +226,13 @@
                     ⬇️ PDF
                 </button>
             </div>
-
+ 
             <!-- Body: mapa + sidebar (responsivo) -->
             <div id="prov-modal-body">
-
+ 
                 <!-- Mapa Leaflet -->
                 <div id="prov-map"></div>
-
+ 
                 <!-- Sidebar -->
                 <div id="prov-sidebar" class="custom-scrollbar">
                     <div class="p-3">
@@ -217,25 +242,25 @@
                         <div id="prov-proyectos" class="flex flex-col gap-2"></div>
                     </div>
                 </div>
-
+ 
             </div>
-
+ 
         </div>
     </div>
-
+ 
     <!-- ================================================================
          BOTÓN FLOTANTE + PANEL GLOBAL DE FILTROS
     ================================================================ -->
-
+ 
     <!-- FAB -->
     <button id="fab-filtros" onclick="togglePanelFiltros()" title="Filtros y reportes globales">
         <span id="fab-icon">⚙️</span>
         <span id="fab-badge">0</span>
     </button>
-
+ 
     <!-- Panel lateral -->
     <div id="panel-filtros-global">
-
+ 
         <!-- Header del panel -->
         <div class="flex items-center justify-between px-5 py-4 flex-shrink-0" style="border-bottom:1px solid rgba(255,255,255,0.08);">
             <div>
@@ -244,10 +269,10 @@
             </div>
             <button onclick="togglePanelFiltros()" style="color:#64748b;font-size:20px;background:none;border:none;cursor:pointer;line-height:1;">✕</button>
         </div>
-
+ 
         <!-- Scroll interior -->
         <div class="custom-scrollbar" style="overflow-y:auto;flex:1;padding-bottom:8px;">
-
+ 
             <!-- ── 1. TIPO DE JORNADA ── -->
             <div class="pfg-section">
                 <p class="pfg-title">⏱ Tipo de jornada</p>
@@ -259,7 +284,7 @@
                     <button class="chip" data-filtro="jornada" data-val="8h"     onclick="toggleChip(this,'green')" >☀️ 8 Horas</button>
                 </div>
             </div>
-
+ 
             <!-- ── 2. ARMAMENTO ── -->
             <div class="pfg-section">
                 <p class="pfg-title">🔫 Armamento</p>
@@ -269,7 +294,7 @@
                     <button class="chip" data-filtro="arma" data-val="desarmado" onclick="toggleChip(this,'green')" >👮 Sin arma</button>
                 </div>
             </div>
-
+ 
             <!-- ── 3. RADIO ── -->
             <div class="pfg-section">
                 <p class="pfg-title">📻 Radio</p>
@@ -279,7 +304,7 @@
                     <button class="chip" data-filtro="radio" data-val="sinradio" onclick="toggleChip(this,'slate')" >🔇 Sin radio</button>
                 </div>
             </div>
-
+ 
             <!-- ── 4. ESTADO DE PROYECTO ── -->
             <div class="pfg-section">
                 <p class="pfg-title">📅 Vencimiento de proyectos</p>
@@ -290,7 +315,7 @@
                     <button class="chip" data-filtro="vence" data-val="ok"       onclick="toggleChip(this,'green')" >🟢 &gt;60 días</button>
                 </div>
             </div>
-
+ 
             <!-- ── 5. TIPO DE PROYECTO ── -->
             <div class="pfg-section">
                 <p class="pfg-title">📑 Tipo de proyecto</p>
@@ -302,7 +327,7 @@
                     <button class="chip" data-filtro="contrato" data-val="cust"  onclick="toggleChip(this,'slate')" >👮 Custodios</button>
                 </div>
             </div>
-
+ 
             <!-- ── 6. PRESENCIA ── -->
             <div class="pfg-section">
                 <p class="pfg-title">📍 Presencia</p>
@@ -313,7 +338,7 @@
                     <button class="chip" data-filtro="cat" data-val="none"         onclick="toggleChip(this,'red')"   >🔴 Sin presencia</button>
                 </div>
             </div>
-
+ 
             <!-- ── RESUMEN FILTRADO ── -->
             <div class="pfg-section">
                 <p class="pfg-title">📊 Resultados del filtro</p>
@@ -340,12 +365,12 @@
                     🔄 Limpiar todos los filtros
                 </button>
             </div>
-
+ 
             <!-- ── GENERADOR PDF GLOBAL ── -->
             <div class="pfg-section">
                 <p class="pfg-title">📄 Generar reporte PDF</p>
                 <p style="font-size:9px;color:#64748b;margin-bottom:10px;">Selecciona las secciones a incluir:</p>
-
+ 
                 <div class="pdf-check-row" onclick="toggleCheck('pdf-resumen')">
                     <input type="checkbox" id="pdf-resumen" checked>
                     <label for="pdf-resumen">Resumen ejecutivo nacional</label>
@@ -383,7 +408,7 @@
                 </div>
             </div>
         </div>
-
+ 
         <!-- Botón generar -->
         <div style="flex-shrink:0;padding:0 0 env(safe-area-inset-bottom);">
             <button id="btn-generar-pdf-global" onclick="generarPDFGlobal()">
@@ -391,11 +416,11 @@
             </button>
         </div>
     </div>
-
+ 
     <!-- Overlay para cerrar al hacer clic fuera -->
     <div id="panel-overlay" onclick="togglePanelFiltros()"
          style="display:none;position:fixed;inset:0;z-index:4998;background:rgba(0,0,0,0.3);backdrop-filter:blur(2px);"></div>
-
+ 
     <!-- ── Módulos JS (orden importa: config → utils → data → map → filters → province → pdf → auth) ── -->
     <script src="js/config.js"></script>
     <script src="js/auth.js"></script>
@@ -405,13 +430,13 @@
     <script src="js/filters.js"></script>
     <script src="js/province.js"></script>
     <script src="js/pdf.js"></script>
-
+ 
     <script>
     // ── Arranque real del dashboard (solo tras login exitoso) ──────
     async function iniciarDashboard() {
         // Fondo de página desde archivo
         document.body.style.backgroundImage = 'url(' + IMG_FONDO + ')';
-
+ 
         // Precargar logo para PDF
         try {
             const logoResp = await fetch(IMG_LOGO);
@@ -425,19 +450,19 @@
         } catch (e) {
             console.warn('⚠️ No se pudo precargar el logo para el PDF:', e.message);
         }
-
+ 
         // Inicializar chips de filtro
         document.querySelectorAll('.chip[data-val="todos"]').forEach(c => c.classList.add('active-blue'));
-
+ 
         // Cargar datos
         await cargarDatos();
     }
-
+ 
     // ── Punto de entrada: primero exige login ──────────────────────
     window.onload = () => {
         inicializarLogin();
     };
     </script>
-
+ 
 </body>
 </html>
