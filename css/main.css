@@ -102,10 +102,15 @@
         .custom-scrollbar::-webkit-scrollbar-track { background: #f8fafc; border-radius: 10px; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
 
-        /* Modal de detalle de provincia */
+        /* Modal de detalle de provincia — fondo sólido propio (no hereda el
+           translúcido del mapa) para que el texto siempre sea legible */
         #detail-panel {
             display: none;
             animation: slideUp 0.28s ease-out;
+            background: #ffffff;
+            border-radius: 1rem;
+            padding: 18px;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.08);
         }
         #detail-panel.visible {
             display: block;
