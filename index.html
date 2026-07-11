@@ -18,30 +18,34 @@
     <!-- ================================================================
          PANTALLA DE LOGIN — bloquea el acceso hasta autenticar
     ================================================================ -->
-    <div id="login-screen" style="position:fixed;inset:0;z-index:99998;background:#0f172a;display:flex;align-items:center;justify-content:center;padding:20px;">
-        <div style="width:100%;max-width:360px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:20px;padding:32px 28px;backdrop-filter:blur(10px);">
+    <div id="login-screen" style="position:fixed;inset:0;z-index:99998;display:flex;align-items:center;justify-content:center;padding:20px;
+                background-size:cover;background-position:center center;background-repeat:no-repeat;transition:background-image 0.4s ease;">
+        <!-- Capa oscura semitransparente sobre el fondo para legibilidad -->
+        <div style="position:absolute;inset:0;background:rgba(15,23,42,0.82);"></div>
+ 
+        <div style="position:relative;width:100%;max-width:360px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:20px;padding:32px 28px;backdrop-filter:blur(14px);box-shadow:0 24px 60px rgba(0,0,0,0.5);">
             <div style="text-align:center;margin-bottom:24px;">
-                <div style="width:56px;height:56px;background:linear-gradient(135deg,#f59e0b,#d97706);border-radius:16px;display:flex;align-items:center;justify-content:center;margin:0 auto 14px;font-size:26px;">🔒</div>
-                <h1 style="color:white;font-weight:900;font-size:16px;margin:0;">DEFEN CIA. LTDA.</h1>
-                <p style="color:#64748b;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;margin-top:2px;">Acceso restringido — Mapa operativo</p>
+                <img src="img/logo.png" alt="DEFEN CIA. LTDA." style="width:78px;margin:0 auto 16px;display:block;filter:drop-shadow(0 4px 12px rgba(0,0,0,0.4));">
+                <h1 style="color:white;font-weight:900;font-size:16px;margin:0;letter-spacing:0.02em;">DEFEN CIA. LTDA.</h1>
+                <p style="color:#94a3b8;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;margin-top:3px;">Acceso restringido — Mapa operativo</p>
             </div>
  
             <form id="login-form" style="display:flex;flex-direction:column;gap:12px;">
                 <div>
                     <label style="color:#94a3b8;font-size:10px;font-weight:700;text-transform:uppercase;display:block;margin-bottom:5px;">Usuario</label>
                     <input type="text" id="login-usuario" autocomplete="username" required
-                           style="width:100%;padding:10px 12px;background:rgba(255,255,255,0.06);border:1.5px solid rgba(255,255,255,0.12);border-radius:10px;color:white;font-size:13px;font-weight:600;outline:none;">
+                           style="width:100%;padding:10px 12px;background:rgba(255,255,255,0.07);border:1.5px solid rgba(255,255,255,0.14);border-radius:10px;color:white;font-size:13px;font-weight:600;outline:none;">
                 </div>
                 <div>
                     <label style="color:#94a3b8;font-size:10px;font-weight:700;text-transform:uppercase;display:block;margin-bottom:5px;">Contraseña</label>
                     <input type="password" id="login-password" autocomplete="current-password" required
-                           style="width:100%;padding:10px 12px;background:rgba(255,255,255,0.06);border:1.5px solid rgba(255,255,255,0.12);border-radius:10px;color:white;font-size:13px;font-weight:600;outline:none;">
+                           style="width:100%;padding:10px 12px;background:rgba(255,255,255,0.07);border:1.5px solid rgba(255,255,255,0.14);border-radius:10px;color:white;font-size:13px;font-weight:600;outline:none;">
                 </div>
  
-                <p id="login-error" style="display:none;color:#f87171;font-size:11px;font-weight:700;background:rgba(248,113,113,0.1);border:1px solid rgba(248,113,113,0.25);border-radius:8px;padding:8px 10px;margin:0;"></p>
+                <p id="login-error" style="display:none;color:#f87171;font-size:11px;font-weight:700;background:rgba(248,113,113,0.12);border:1px solid rgba(248,113,113,0.3);border-radius:8px;padding:8px 10px;margin:0;"></p>
  
                 <button type="submit" id="login-btn"
-                        style="margin-top:6px;padding:11px;background:linear-gradient(135deg,#f59e0b,#d97706);color:#1c1917;font-weight:900;font-size:13px;border:none;border-radius:10px;cursor:pointer;">
+                        style="margin-top:6px;padding:11px;background:linear-gradient(135deg,#f59e0b,#d97706);color:#1c1917;font-weight:900;font-size:13px;border:none;border-radius:10px;cursor:pointer;box-shadow:0 6px 18px rgba(245,158,11,0.35);">
                     Ingresar
                 </button>
             </form>
@@ -142,29 +146,35 @@
  
                 <!-- Resumen Armamento -->
                 <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200">
-                    <h2 class="text-base font-black text-slate-800 mb-3 px-1">Resumen Armamento</h2>
+                    <div class="flex items-center justify-between mb-3 px-1">
+                        <h2 class="text-base font-black text-slate-800">Resumen Armamento</h2>
+                        <div class="flex gap-1.5">
+                            <button onclick="abrirModalArmamento()" class="text-[9px] font-black bg-slate-800 hover:bg-slate-900 text-white px-2.5 py-1 rounded-full transition-colors">📋 Detalle</button>
+                            <button onclick="abrirModalRadios()" class="text-[9px] font-black bg-purple-600 hover:bg-purple-700 text-white px-2.5 py-1 rounded-full transition-colors">📻 Radios</button>
+                        </div>
+                    </div>
                     <div class="flex flex-col gap-2">
-                        <div class="flex justify-between items-center bg-green-50 px-3 py-2.5 rounded-xl border border-green-100">
+                        <div onclick="abrirModalArmamento('activo')" class="flex justify-between items-center bg-green-50 px-3 py-2.5 rounded-xl border border-green-100 cursor-pointer hover:bg-green-100 transition-colors">
                             <span class="text-[11px] font-bold text-green-700 uppercase tracking-wide">En Campo</span>
                             <span class="font-black text-green-600 text-base" id="armas-operativas-tbl">0</span>
                         </div>
-                        <div class="flex justify-between items-center bg-blue-50 px-3 py-2.5 rounded-xl border border-blue-100">
+                        <div onclick="abrirModalArmamento('transito')" class="flex justify-between items-center bg-blue-50 px-3 py-2.5 rounded-xl border border-blue-100 cursor-pointer hover:bg-blue-100 transition-colors">
                             <span class="text-[11px] font-bold text-blue-700 uppercase tracking-wide">🚚 En Tránsito</span>
                             <span class="font-black text-blue-600 text-base" id="armas-transito">—</span>
                         </div>
-                        <div class="flex justify-between items-center bg-slate-50 px-3 py-2.5 rounded-xl border border-slate-200">
+                        <div onclick="abrirModalArmamento('rastrillo')" class="flex justify-between items-center bg-slate-50 px-3 py-2.5 rounded-xl border border-slate-200 cursor-pointer hover:bg-slate-100 transition-colors">
                             <span class="text-[11px] font-bold text-slate-600 uppercase tracking-wide">Rastrillo</span>
                             <span class="font-black text-slate-700 text-base" id="armas-rastrillo">—</span>
                         </div>
-                        <div class="flex justify-between items-center bg-red-50 px-3 py-2.5 rounded-xl border border-red-100">
+                        <div onclick="abrirModalArmamento('perdida')" class="flex justify-between items-center bg-red-50 px-3 py-2.5 rounded-xl border border-red-100 cursor-pointer hover:bg-red-100 transition-colors">
                             <span class="text-[11px] font-bold text-red-700 uppercase tracking-wide">Pérdida/Robada</span>
                             <span class="font-black text-red-600 text-base" id="armas-perdida">—</span>
                         </div>
-                        <div class="flex justify-between items-center bg-orange-50 px-3 py-2.5 rounded-xl border border-orange-100">
+                        <div onclick="abrirModalArmamento('confiscada')" class="flex justify-between items-center bg-orange-50 px-3 py-2.5 rounded-xl border border-orange-100 cursor-pointer hover:bg-orange-100 transition-colors">
                             <span class="text-[11px] font-bold text-orange-700 uppercase tracking-wide">Confiscada COSP/CCFF</span>
                             <span class="font-black text-orange-600 text-base" id="armas-confiscada">—</span>
                         </div>
-                        <div class="flex justify-between items-center bg-slate-900 px-4 py-3 rounded-xl mt-1">
+                        <div onclick="abrirModalArmamento()" class="flex justify-between items-center bg-slate-900 px-4 py-3 rounded-xl mt-1 cursor-pointer hover:bg-slate-800 transition-colors">
                             <span class="text-[11px] font-black text-white uppercase tracking-wider">Global</span>
                             <span class="font-black text-white text-lg" id="armas-global">—</span>
                         </div>
@@ -408,6 +418,24 @@
                     <span>Con coordenadas</span>
                 </div>
             </div>
+ 
+            <!-- ── REPORTE DE NOVEDADES DE PERSONAL ── -->
+            <div class="pfg-section">
+                <p class="pfg-title">👤 Novedades de personal</p>
+                <p style="font-size:9px;color:#64748b;margin-bottom:10px;">Ingresos · Salidas · Faltas (F/PM) · Llamados de atención</p>
+ 
+                <label style="font-size:9px;font-weight:700;color:#94a3b8;text-transform:uppercase;display:block;margin-bottom:5px;">Periodo del reporte</label>
+                <select id="novedades-periodo"
+                        style="width:100%;padding:8px 10px;background:rgba(255,255,255,0.06);border:1.5px solid rgba(255,255,255,0.12);border-radius:10px;color:white;font-size:12px;font-weight:600;outline:none;margin-bottom:10px;">
+                    <option value="semanal">Semanal (últimos 7 días)</option>
+                    <option value="mensual">Mensual (mes en curso)</option>
+                </select>
+ 
+                <button onclick="generarReporteNovedades()"
+                        style="width:100%;padding:9px;background:linear-gradient(135deg,#7c3aed,#6d28d9);color:white;font-weight:900;font-size:11px;border:none;border-radius:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;">
+                    ⬇️ Generar Reporte de Novedades
+                </button>
+            </div>
         </div>
  
         <!-- Botón generar -->
@@ -422,6 +450,75 @@
     <div id="panel-overlay" onclick="togglePanelFiltros()"
          style="display:none;position:fixed;inset:0;z-index:4998;background:rgba(0,0,0,0.3);backdrop-filter:blur(2px);"></div>
  
+    <!-- ================================================================
+         MODAL — Inventario detallado de Armamento
+    ================================================================ -->
+    <div id="armamento-modal" style="display:none;position:fixed;inset:0;z-index:10500;background:rgba(15,23,42,0.7);backdrop-filter:blur(4px);align-items:center;justify-content:center;padding:16px;">
+        <div style="width:100%;max-width:1200px;height:90vh;background:#f1f5f9;border-radius:20px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 32px 80px rgba(0,0,0,0.5);">
+ 
+            <div style="background:#0f172a;padding:14px 20px;display:flex;align-items:center;justify-content:between;gap:12px;">
+                <div style="flex:1;">
+                    <h2 style="color:white;font-weight:900;font-size:15px;margin:0;">🔫 Inventario de Armamento</h2>
+                    <p style="color:#94a3b8;font-size:10px;font-weight:700;" id="armamento-modal-contador">0 armas</p>
+                </div>
+                <button onclick="cerrarModalArmamento()" style="background:rgba(255,255,255,0.1);color:white;border:none;border-radius:10px;padding:7px 12px;font-size:12px;font-weight:800;cursor:pointer;">✕ Cerrar</button>
+            </div>
+ 
+            <div id="armamento-filtros-bar" style="background:white;padding:10px 16px;border-bottom:1px solid #e2e8f0;display:flex;flex-wrap:wrap;gap:6px;align-items:center;"></div>
+ 
+            <div style="flex:1;overflow:auto;padding:0 16px;">
+                <table style="width:100%;border-collapse:collapse;font-size:11px;">
+                    <thead style="position:sticky;top:0;background:#1e293b;color:white;z-index:10;">
+                        <tr id="armamento-thead-row"></tr>
+                    </thead>
+                    <tbody id="armamento-tbody"></tbody>
+                </table>
+            </div>
+ 
+            <div style="padding:12px 16px;background:white;border-top:1px solid #e2e8f0;">
+                <button onclick="exportarPDFArmamento()" style="width:100%;padding:10px;background:linear-gradient(135deg,#f59e0b,#d97706);color:#1c1917;font-weight:900;font-size:12px;border:none;border-radius:10px;cursor:pointer;">⬇️ Generar PDF de esta selección</button>
+            </div>
+        </div>
+    </div>
+ 
+    <!-- ================================================================
+         MODAL — Inventario de Radios
+    ================================================================ -->
+    <div id="radios-modal" style="display:none;position:fixed;inset:0;z-index:10500;background:rgba(15,23,42,0.7);backdrop-filter:blur(4px);align-items:center;justify-content:center;padding:16px;">
+        <div style="width:100%;max-width:900px;height:85vh;background:#f1f5f9;border-radius:20px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 32px 80px rgba(0,0,0,0.5);">
+ 
+            <div style="background:#0f172a;padding:14px 20px;display:flex;align-items:center;gap:12px;">
+                <div style="flex:1;">
+                    <h2 style="color:white;font-weight:900;font-size:15px;margin:0;">📻 Inventario de Radios</h2>
+                    <p style="color:#94a3b8;font-size:10px;font-weight:700;" id="radios-modal-contador">0 radios</p>
+                </div>
+                <button onclick="cerrarModalRadios()" style="background:rgba(255,255,255,0.1);color:white;border:none;border-radius:10px;padding:7px 12px;font-size:12px;font-weight:800;cursor:pointer;">✕ Cerrar</button>
+            </div>
+ 
+            <div id="radios-filtros-bar" style="background:white;padding:10px 16px;border-bottom:1px solid #e2e8f0;display:flex;flex-wrap:wrap;gap:6px;"></div>
+ 
+            <div style="flex:1;overflow:auto;padding:0 16px;">
+                <table style="width:100%;border-collapse:collapse;font-size:12px;">
+                    <thead style="position:sticky;top:0;background:#1e293b;color:white;z-index:10;">
+                        <tr>
+                            <th style="padding:8px;text-align:center;">N°</th>
+                            <th style="padding:8px;text-align:left;">Provincia</th>
+                            <th style="padding:8px;text-align:left;">Proyecto</th>
+                            <th style="padding:8px;text-align:left;">Puesto</th>
+                            <th style="padding:8px;text-align:left;">Modelo</th>
+                            <th style="padding:8px;text-align:left;">Serie</th>
+                        </tr>
+                    </thead>
+                    <tbody id="radios-tbody"></tbody>
+                </table>
+            </div>
+ 
+            <div style="padding:12px 16px;background:white;border-top:1px solid #e2e8f0;">
+                <button onclick="exportarPDFRadios()" style="width:100%;padding:10px;background:linear-gradient(135deg,#7c3aed,#6d28d9);color:white;font-weight:900;font-size:12px;border:none;border-radius:10px;cursor:pointer;">⬇️ Generar PDF de Radios</button>
+            </div>
+        </div>
+    </div>
+ 
     <!-- ── Módulos JS (orden importa: config → utils → data → map → filters → province → pdf → auth) ── -->
     <script src="js/config.js"></script>
     <script src="js/auth.js"></script>
@@ -430,6 +527,8 @@
     <script src="js/map.js"></script>
     <script src="js/filters.js"></script>
     <script src="js/province.js"></script>
+    <script src="js/armamento.js"></script>
+    <script src="js/novedades.js"></script>
     <script src="js/pdf.js"></script>
  
     <script>
@@ -467,4 +566,3 @@
  
 </body>
 </html>
- 
