@@ -706,7 +706,11 @@ const MARGEN_PDF = 25; // 2.5 cm en mm (header y footer)
 
 // Dibuja el membrete (encabezado 2.5cm) y el pie de página (2.5cm) en la página actual
 function dibujarMembretePDF(doc, subtitulo, fechaHoy) {
-    const W = 210, H = 297;
+    // Usar el tamaño REAL de la página actual (vertical u horizontal),
+    // en vez de asumir siempre 210x297 — así el membrete se ve completo
+    // también en reportes horizontales como el de Armamento.
+    const W = doc.internal.pageSize.getWidth();
+    const H = doc.internal.pageSize.getHeight();
     const DARK = [15,15,15], ORANGE = [245,158,11];
     const LOGO_B64 = window._LOGO_B64 || '';
 
