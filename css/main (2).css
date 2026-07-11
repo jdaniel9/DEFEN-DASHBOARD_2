@@ -1,0 +1,253 @@
+/* main.css — Estilos globales del dashboard */
+
+        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,600;0,9..40,700;0,9..40,800;0,9..40,900;1,9..40,400&family=DM+Mono:wght@400;500&display=swap');
+
+        * { font-family: 'DM Sans', sans-serif; }
+
+        body {
+            background-color: #0f172a;
+            background-image: url('../img/fondo1.png');
+            background-size: cover;
+            background-position: center center;
+            background-attachment: fixed;
+            background-repeat: no-repeat;
+        }
+
+        /* Capa semitransparente sobre el fondo para que el contenido sea legible */
+        body::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.72);
+            z-index: 0;
+            pointer-events: none;
+        }
+
+        /* El contenido principal debe estar sobre la capa */
+        .max-w-\[1560px\] { position: relative; z-index: 1; }
+
+        /* Cards con efecto cristal sobre el fondo oscuro */
+        header,
+        .bg-white {
+            background: rgba(255, 255, 255, 0.96) !important;
+            backdrop-filter: blur(12px);
+        }
+
+        .map-wrapper {
+            position: relative;
+            display: inline-block;
+            width: 100%;
+            background: transparent;
+            border-radius: 1.5rem;
+            overflow: hidden;
+        }
+        .map-image {
+            width: 100%;
+            height: auto;
+            display: block;
+            mix-blend-mode: multiply;   /* el blanco desaparece, los bordes quedan */
+            opacity: 0.88;
+        }
+        .marker {
+            position: absolute;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            cursor: pointer;
+            transform: translate(-50%, -50%);
+            transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            border: 2px solid white;
+            box-shadow: 0 3px 10px rgba(0,0,0,0.28);
+            z-index: 10;
+        }
+        .marker:hover {
+            transform: translate(-50%, -50%) scale(1.7);
+            z-index: 50;
+        }
+        .marker-pulse {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+            pointer-events: none;
+        }
+        @keyframes pulse {
+            0% { transform: translate(-50%, -50%) scale(1); opacity: 0.7; }
+            100% { transform: translate(-50%, -50%) scale(3.2); opacity: 0; }
+        }
+        @keyframes pulseGreen {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+        .tooltip {
+            position: fixed;
+            pointer-events: none;
+            background: rgba(15, 23, 42, 0.97);
+            color: white;
+            padding: 14px 18px;
+            border-radius: 12px;
+            font-size: 12px;
+            z-index: 9999;
+            display: none;
+            box-shadow: 0 12px 28px rgba(0,0,0,0.45);
+            border: 1px solid rgba(255,255,255,0.08);
+            min-width: 220px;
+            backdrop-filter: blur(8px);
+        }
+        .custom-scrollbar::-webkit-scrollbar { width: 5px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #f8fafc; border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+
+        /* Modal de detalle de provincia */
+        #detail-panel {
+            display: none;
+            animation: slideUp 0.28s ease-out;
+        }
+        #detail-panel.visible {
+            display: block;
+        }
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(16px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Badge de alerta de proyecto */
+        .badge-ok      { background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; }
+        .badge-warn    { background: #fef9c3; color: #a16207; border: 1px solid #fef08a; }
+        .badge-danger  { background: #fee2e2; color: #b91c1c; border: 1px solid #fecaca; }
+
+        .project-row {
+            border-radius: 12px;
+            padding: 12px 14px;
+            border: 1px solid #e2e8f0;
+            transition: box-shadow 0.2s;
+        }
+        .project-row:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+
+        /* Dias restantes de trámite */
+        .dias-ok   { color: #15803d; }
+        .dias-warn { color: #a16207; }
+        .dias-danger { color: #b91c1c; }
+
+        /* Card seleccionada */
+        .card-selected {
+            ring: 4px;
+            ring-color: rgba(59,130,246,0.4);
+            box-shadow: 0 0 0 3px rgba(59,130,246,0.35);
+        }
+
+        /* ── PANEL GLOBAL DE FILTROS ──────────────────────────── */
+        #fab-filtros {
+            position: fixed;
+            bottom: 28px; right: 28px;
+            z-index: 5000;
+            width: 54px; height: 54px;
+            background: linear-gradient(135deg,#f59e0b,#d97706);
+            border-radius: 50%;
+            border: none; cursor: pointer;
+            box-shadow: 0 6px 24px rgba(245,158,11,0.55);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 22px;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        #fab-filtros:hover { transform: scale(1.1); box-shadow: 0 8px 32px rgba(245,158,11,0.7); }
+        #fab-filtros.open  { background: linear-gradient(135deg,#ef4444,#b91c1c); }
+
+        #panel-filtros-global {
+            position: fixed;
+            top: 0; right: -420px;
+            width: 400px; height: 100dvh;
+            background: #0f172a;
+            z-index: 4999;
+            display: flex; flex-direction: column;
+            box-shadow: -12px 0 48px rgba(0,0,0,0.5);
+            transition: right 0.32s cubic-bezier(0.16,1,0.3,1);
+            overflow: hidden;
+        }
+        #panel-filtros-global.open { right: 0; }
+
+        @media(max-width:440px){
+            #panel-filtros-global { width: 100vw; }
+        }
+
+        .pfg-section {
+            border-bottom: 1px solid rgba(255,255,255,0.07);
+            padding: 14px 18px;
+        }
+        .pfg-title {
+            font-size: 9px; font-weight: 900;
+            color: #64748b; letter-spacing: 0.1em;
+            text-transform: uppercase; margin-bottom: 10px;
+        }
+        .pfg-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+
+        /* Chips de filtro */
+        .chip {
+            font-size: 10px; font-weight: 700;
+            padding: 5px 11px; border-radius: 999px;
+            border: 1.5px solid rgba(255,255,255,0.1);
+            background: rgba(255,255,255,0.05);
+            color: #94a3b8; cursor: pointer;
+            transition: all 0.15s; user-select: none;
+        }
+        .chip:hover { background: rgba(255,255,255,0.12); color: white; }
+        .chip.active-blue   { background:#3b82f6; color:white; border-color:#2563eb; }
+        .chip.active-red    { background:#dc2626; color:white; border-color:#b91c1c; }
+        .chip.active-green  { background:#16a34a; color:white; border-color:#15803d; }
+        .chip.active-purple { background:#7c3aed; color:white; border-color:#6d28d9; }
+        .chip.active-amber  { background:#d97706; color:white; border-color:#b45309; }
+        .chip.active-slate  { background:#475569; color:white; border-color:#334155; }
+
+        /* Checkboxes PDF */
+        .pdf-check-row {
+            display: flex; align-items: center; gap: 10px;
+            padding: 7px 10px; border-radius: 10px;
+            cursor: pointer; transition: background 0.15s;
+        }
+        .pdf-check-row:hover { background: rgba(255,255,255,0.05); }
+        .pdf-check-row input[type=checkbox] {
+            width:15px; height:15px; accent-color:#f59e0b;
+            cursor:pointer; flex-shrink:0;
+        }
+        .pdf-check-row label {
+            font-size:11px; font-weight:700; color:#cbd5e1; cursor:pointer;
+        }
+        .pdf-check-row span {
+            font-size:9px; color:#64748b; margin-left:auto;
+        }
+
+        /* Botón generar PDF */
+        #btn-generar-pdf-global {
+            margin: 14px 18px;
+            padding: 11px;
+            background: linear-gradient(135deg,#f59e0b,#d97706);
+            color: #1c1917; font-weight: 900; font-size: 12px;
+            border: none; border-radius: 12px; cursor: pointer;
+            transition: all 0.15s; display: flex;
+            align-items: center; justify-content: center; gap: 8px;
+        }
+        #btn-generar-pdf-global:hover { filter: brightness(1.08); transform: scale(1.01); }
+
+        /* Badge activos */
+        #fab-badge {
+            position: absolute; top:-4px; right:-4px;
+            background:#ef4444; color:white;
+            font-size:8px; font-weight:900;
+            min-width:16px; height:16px;
+            border-radius:999px; display:none;
+            align-items:center; justify-content:center;
+            border:2px solid #0f172a; padding:0 3px;
+        }
+
+        /* Contador filtro activo en resumen */
+        .filtro-activo-badge {
+            display:inline-block;
+            font-size:8px; font-weight:900;
+            background:#f59e0b; color:#1c1917;
+            padding:1px 5px; border-radius:999px;
+            margin-left:4px; vertical-align:middle;
+        }
