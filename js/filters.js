@@ -195,17 +195,14 @@ function actualizarResumenFiltro() {
     if (elPuestosTot) elPuestosTot.innerText = puestosTot;
 
     const elCampo = document.getElementById('armas-operativas-tbl');
-    if (elCampo) elCampo.innerText = armas;
+    // "En Campo" sí depende del filtro (son armas asignadas a proyectos/puestos filtrados)
+    if (elCampo) elCampo.innerText = todosNeutros ? (armamento.enCampo ?? armas) : armas;
 
-    if (!todosNeutros) {
-        const rastrilloDin = (armamento.global||0) - armas - (armamento.enTransito||0) - (armamento.perdida||0) - (armamento.confiscada||0);
-        const elRas = document.getElementById('armas-rastrillo');
-        if (elRas) elRas.innerText = rastrilloDin;
-    } else {
-        const elRas = document.getElementById('armas-rastrillo');
-        if (elRas) elRas.innerText = armamento.rastrillo ?? '—';
-        if (elCampo) elCampo.innerText = armamento.enCampo ?? armas;
-    }
+    // Rastrillo, Tránsito, Pérdida y Confiscada NO dependen de qué proyectos estén
+    // filtrados — esas armas no pertenecen a ningún proyecto en particular, así que
+    // siempre muestran su valor real y fijo (nunca se recalculan para "cuadrar" el total)
+    const elRas = document.getElementById('armas-rastrillo');
+    if (elRas) elRas.innerText = armamento.rastrillo ?? '—';
 }
 
 function actualizarBadgeFab() {
