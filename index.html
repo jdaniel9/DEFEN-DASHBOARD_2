@@ -4,6 +4,17 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>DEFEN CIA. LTDA. — Mapa Operativo Nacional</title>
+
+    <!-- Conexión anticipada al servidor de datos (Apps Script) — acelera
+         el login y la primera carga de datos porque el DNS/TLS ya está listo -->
+    <link rel="preconnect" href="https://script.google.com">
+    <link rel="dns-prefetch" href="https://script.google.com">
+
+    <!-- Precarga con máxima prioridad de la imagen de fondo del login,
+         para que empiece a descargar de inmediato, en paralelo con todo
+         lo demás, en vez de esperar a que cargue el resto de la página -->
+    <link rel="preload" as="image" href="img/fondo1.png" fetchpriority="high">
+
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="css/main.css">
@@ -93,7 +104,9 @@
                     <img src="img/mapa.png"
                          alt="Mapa de Ecuador"
                          class="map-image"
-                         id="ecuador-map">
+                         id="ecuador-map"
+                         loading="lazy"
+                         fetchpriority="low">
                     <div id="markers-layer"></div>
                 </div>
 
@@ -537,31 +550,36 @@
         // Fondo de página — varía cada vez, nunca repite el anterior
         document.body.style.backgroundImage = 'url(' + elegirFondoAleatorio() + ')';
 
-        // Precargar logo para PDF
-        try {
-            const logoResp = await fetch(IMG_LOGO);
-            const logoBuf  = await logoResp.arrayBuffer();
-            const logoArr  = new Uint8Array(logoBuf);
-            let binary = '';
-            for (let i = 0; i < logoArr.byteLength; i++) {
-                binary += String.fromCharCode(logoArr[i]);
-            }
-            window._LOGO_B64 = 'data:image/png;base64,' + btoa(binary);
-        } catch (e) {
-            console.warn('⚠️ No se pudo precargar el logo para el PDF:', e.message);
-        }
-
-        // Inicializar chips de filtro
+        // Inicializar chips de filtro (instantáneo, no depende de red)
         document.querySelectorAll('.chip[data-val="todos"]').forEach(c => c.classList.add('active-blue'));
 
-        // Cargar datos
-        await cargarDatos();
+        // Precargar logo (para PDF) y cargar los datos de Sheets EN PARALELO
+        // — antes se hacían uno tras otro, duplicando el tiempo de espera
+        const precargarLogo = (async () => {
+            try {
+                const logoResp = await fetch(IMG_LOGO);
+                const logoBuf  = await logoResp.arrayBuffer();
+                const logoArr  = new Uint8Array(logoBuf);
+                let binary = '';
+                for (let i = 0; i < logoArr.byteLength; i++) {
+                    binary += String.fromCharCode(logoArr[i]);
+                }
+                window._LOGO_B64 = 'data:image/png;base64,' + btoa(binary);
+            } catch (e) {
+                console.warn('⚠️ No se pudo precargar el logo para el PDF:', e.message);
+            }
+        })();
+
+        await Promise.all([precargarLogo, cargarDatos()]);
     }
 
     // ── Punto de entrada: primero exige login ──────────────────────
-    window.onload = () => {
+    // Se dispara con DOMContentLoaded (apenas el HTML está listo) en vez
+    // de window.onload (que espera a que TODAS las imágenes terminen de
+    // cargar) — así el login y su fondo aparecen mucho más rápido.
+    document.addEventListener('DOMContentLoaded', () => {
         inicializarLogin();
-    };
+    });
     </script>
 
 </body>
