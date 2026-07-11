@@ -23,6 +23,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 </head>
 <body class="min-h-screen text-slate-900">
 
@@ -488,8 +489,9 @@
                 </table>
             </div>
 
-            <div style="padding:12px 16px;background:white;border-top:1px solid #e2e8f0;">
-                <button onclick="exportarPDFArmamento()" style="width:100%;padding:10px;background:linear-gradient(135deg,#f59e0b,#d97706);color:#1c1917;font-weight:900;font-size:12px;border:none;border-radius:10px;cursor:pointer;">⬇️ Generar PDF de esta selección</button>
+            <div style="padding:12px 16px;background:white;border-top:1px solid #e2e8f0;display:flex;gap:8px;">
+                <button onclick="exportarPDFArmamento()" style="flex:1;padding:10px;background:linear-gradient(135deg,#f59e0b,#d97706);color:#1c1917;font-weight:900;font-size:12px;border:none;border-radius:10px;cursor:pointer;">⬇️ PDF</button>
+                <button onclick="exportarExcelArmamento()" style="flex:1;padding:10px;background:linear-gradient(135deg,#16a34a,#15803d);color:white;font-weight:900;font-size:12px;border:none;border-radius:10px;cursor:pointer;">📊 Excel</button>
             </div>
         </div>
     </div>
@@ -526,8 +528,9 @@
                 </table>
             </div>
 
-            <div style="padding:12px 16px;background:white;border-top:1px solid #e2e8f0;">
-                <button onclick="exportarPDFRadios()" style="width:100%;padding:10px;background:linear-gradient(135deg,#7c3aed,#6d28d9);color:white;font-weight:900;font-size:12px;border:none;border-radius:10px;cursor:pointer;">⬇️ Generar PDF de Radios</button>
+            <div style="padding:12px 16px;background:white;border-top:1px solid #e2e8f0;display:flex;gap:8px;">
+                <button onclick="exportarPDFRadios()" style="flex:1;padding:10px;background:linear-gradient(135deg,#7c3aed,#6d28d9);color:white;font-weight:900;font-size:12px;border:none;border-radius:10px;cursor:pointer;">⬇️ PDF</button>
+                <button onclick="exportarExcelRadios()" style="flex:1;padding:10px;background:linear-gradient(135deg,#16a34a,#15803d);color:white;font-weight:900;font-size:12px;border:none;border-radius:10px;cursor:pointer;">📊 Excel</button>
             </div>
         </div>
     </div>
