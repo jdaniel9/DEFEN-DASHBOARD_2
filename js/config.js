@@ -3,7 +3,7 @@
 // ================================================================
 
 // ► CONFIGURACIÓN — pega aquí tu URL de Apps Script
-const APPS_SCRIPT_URL = "PEGA_AQUI_TU_URL";
+const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzsQ-GMfOMFIq9T13cjrFY7nCtEa-YGVA1R6-aF2rgKkTOWo-TnP9mMGZlivjJKGS8/exec";
 
 // Rutas de imágenes (archivos locales en /img/)
 const IMG_MAPA  = 'img/mapa.png';
