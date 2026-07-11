@@ -131,7 +131,40 @@ function renderTablaArmamento() {
     `).join('') || `<tr><td colspan="${ARM_COLUMNAS.length+1}" style="padding:20px;text-align:center;color:#94a3b8;">Sin resultados para este filtro.</td></tr>`;
 }
 
-// ── PDF del inventario filtrado ──
+// ── Excel del inventario filtrado ──
+function exportarExcelArmamento() {
+    const filtradas = obtenerArmasFiltradas();
+    if (filtradas.length === 0) { alert('No hay armas para exportar con este filtro.'); return; }
+
+    const filas = filtradas.map((a, i) => ({
+        'N°':            i + 1,
+        'Código':        a.codigoArma || '',
+        'N° Documento':  a.nDocumento || '',
+        'Nombre/Razón':  a.nombreRazon || '',
+        'Serie':         a.serie || '',
+        'Clase':         a.clase || '',
+        'Tipo':          a.tipo || '',
+        'Marca':         a.marca || '',
+        'Calibre':       a.calibre || '',
+        'Categoría':     a.categoria || '',
+        'Fecha Emisión':    a.fechaEmision    ? formatFecha(a.fechaEmision)    : '',
+        'Fecha Expiración': a.fechaExpiracion ? formatFecha(a.fechaExpiracion) : '',
+        'Estado':        a.estado || '',
+        'Proyecto':      a.proyecto || '',
+        'Provincia':     a.provincia || '',
+        'Ubicación':     a.ubicacion || ''
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(filas);
+    ws['!cols'] = Object.keys(filas[0]).map(k => ({ wch: Math.max(k.length + 2, 12) }));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Armamento');
+
+    const hoy = new Date();
+    const fechaHoy = `${String(hoy.getDate()).padStart(2,'0')}-${String(hoy.getMonth()+1).padStart(2,'0')}-${hoy.getFullYear()}`;
+    XLSX.writeFile(wb, `Inventario_Armamento_${fechaHoy}.xlsx`);
+}
+
 async function exportarPDFArmamento() {
     const filtradas = obtenerArmasFiltradas();
     const { jsPDF } = window.jspdf;
@@ -248,6 +281,30 @@ function renderTablaRadios() {
             <td style="padding:7px 8px;">${r.serie||'—'}</td>
         </tr>
     `).join('');
+}
+
+// ── Excel de radios filtrados ──
+function exportarExcelRadios() {
+    const filtrados = obtenerRadiosFiltrados();
+    if (filtrados.length === 0) { alert('No hay radios para exportar con este filtro.'); return; }
+
+    const filas = filtrados.map((r, i) => ({
+        'N°':        i + 1,
+        'Provincia': r.provincia,
+        'Proyecto':  r.proyecto,
+        'Puesto':    r.puesto || '',
+        'Modelo':    r.modelo || '',
+        'Serie':     r.serie || ''
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(filas);
+    ws['!cols'] = Object.keys(filas[0]).map(k => ({ wch: Math.max(k.length + 2, 14) }));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Radios');
+
+    const hoy = new Date();
+    const fechaHoy = `${String(hoy.getDate()).padStart(2,'0')}-${String(hoy.getMonth()+1).padStart(2,'0')}-${hoy.getFullYear()}`;
+    XLSX.writeFile(wb, `Inventario_Radios_${fechaHoy}.xlsx`);
 }
 
 async function exportarPDFRadios() {
