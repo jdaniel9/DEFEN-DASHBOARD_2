@@ -81,16 +81,30 @@ function renderDetailPanel(nombre) {
             const puestosListHTML = puestosProy.length > 0
                 ? puestosProy.map(pu => {
                     const gs = Array.isArray(pu.guardias) ? pu.guardias : (pu.guardia||'').split(',').map(g=>g.trim()).filter(Boolean);
+                    const agentesHTML = gs.length > 0
+                        ? gs.map(g => `<span class="block text-[9px] text-slate-500 font-semibold">👤 ${g}</span>`).join('')
+                        : `<span class="block text-[9px] text-slate-400 italic">Sin agentes asignados</span>`;
+
                     return `
-                    <div class="flex items-center justify-between gap-2 bg-slate-50 rounded-lg px-3 py-2 border border-slate-100">
-                        <div class="min-w-0">
-                            <p class="text-[11px] font-bold text-slate-700 truncate">${pu.nombre}</p>
-                            <p class="text-[9px] text-slate-400 truncate">${gs.length > 0 ? gs.join(', ') : '—'}</p>
+                    <div class="flex flex-col gap-1.5 bg-slate-50 rounded-lg px-3 py-2.5 border border-slate-100">
+                        <div class="flex items-start justify-between gap-2">
+                            <p class="text-[11px] font-black text-slate-700">${pu.nombre}</p>
+                            <span class="text-[8px] font-black px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 flex-shrink-0">${pu.tipo || '—'}</span>
                         </div>
-                        <div class="flex gap-1 flex-shrink-0">
-                            <span class="text-[8px] font-black px-1.5 py-0.5 rounded-full ${pu.armado ? 'bg-red-100 text-red-700' : 'bg-slate-100 text-slate-500'}">${pu.armado ? '🔫 Armado' : 'Sin arma'}</span>
-                            <span class="text-[8px] font-black px-1.5 py-0.5 rounded-full ${pu.radio ? 'bg-purple-100 text-purple-700' : 'bg-slate-100 text-slate-500'}">${pu.radio ? '📻 Radio' : 'Sin radio'}</span>
-                            <span class="text-[8px] font-black px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700">${pu.tipo || '—'}</span>
+                        <div class="flex flex-col gap-0.5">${agentesHTML}</div>
+                        <div class="flex flex-col gap-1 mt-0.5">
+                            ${pu.armado
+                                ? `<div class="flex items-center gap-1.5 bg-red-50 border border-red-100 rounded-md px-2 py-1">
+                                       <span class="text-[8px] font-black text-red-700">🔫 ARMADO</span>
+                                       <span class="text-[9px] text-red-600 font-medium truncate">${pu.arma || 'Sin serie registrada'}</span>
+                                   </div>`
+                                : `<div class="flex items-center gap-1.5"><span class="text-[8px] font-black px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500">Sin arma</span></div>`}
+                            ${pu.radio
+                                ? `<div class="flex items-center gap-1.5 bg-purple-50 border border-purple-100 rounded-md px-2 py-1">
+                                       <span class="text-[8px] font-black text-purple-700">📻 RADIO</span>
+                                       <span class="text-[9px] text-purple-600 font-medium truncate">${pu.radio_info || 'Sin modelo registrado'}</span>
+                                   </div>`
+                                : `<div class="flex items-center gap-1.5"><span class="text-[8px] font-black px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500">Sin radio</span></div>`}
                         </div>
                     </div>`;
                 }).join('')
@@ -308,13 +322,13 @@ function createListItem(name, info) {
         </div>
         ${info.proyectos > 0 ? `
         <div class="grid grid-cols-2 gap-2 mt-2 text-[10px]">
-            <div class="flex justify-between border-b border-slate-100 pb-1">
-                <span class="text-slate-400 font-bold uppercase">Arma(s)</span>
-                <span class="font-black text-slate-700 card-armas-${cleanId}">${info.armas}</span>
+            <div class="flex items-center justify-between gap-1 bg-red-50 border border-red-100 rounded-lg px-2 py-1.5">
+                <span class="text-red-600 font-bold uppercase flex items-center gap-1">🔫 Arma(s)</span>
+                <span class="font-black text-red-700 card-armas-${cleanId}">${info.armas}</span>
             </div>
-            <div class="flex justify-between border-b border-slate-100 pb-1">
-                <span class="text-slate-400 font-bold uppercase">Guardia(s)</span>
-                <span class="font-black text-blue-600 card-guardias-${cleanId}">${info.guardias}</span>
+            <div class="flex items-center justify-between gap-1 bg-blue-50 border border-blue-100 rounded-lg px-2 py-1.5">
+                <span class="text-blue-600 font-bold uppercase flex items-center gap-1">👮 Guardia(s)</span>
+                <span class="font-black text-blue-700 card-guardias-${cleanId}">${info.guardias}</span>
             </div>
         </div>` : `<p class="text-[9px] text-slate-400 mt-1 font-medium">→ Ver trámite</p>`}
     `;
