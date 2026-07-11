@@ -5,9 +5,24 @@
 // ================================================================
 
 const AUTH_SESSION_KEY = 'defen_auth_ok';
+const FONDOS_DISPONIBLES = ['img/fondo1.png', 'img/fondo2.png', 'img/fondo3.png', 'img/fondo4.png'];
+const ULTIMO_FONDO_KEY = 'defen_ultimo_fondo';
 
 function estaAutenticado() {
     return sessionStorage.getItem(AUTH_SESSION_KEY) === '1';
+}
+
+// Elige un fondo al azar EXCLUYENDO el último mostrado (guardado en localStorage,
+// que persiste entre pestañas/recargas) — así nunca se repite dos veces seguidas.
+function elegirFondoAleatorio() {
+    const ultimo = localStorage.getItem(ULTIMO_FONDO_KEY);
+    let candidatos = FONDOS_DISPONIBLES;
+    if (ultimo && FONDOS_DISPONIBLES.length > 1) {
+        candidatos = FONDOS_DISPONIBLES.filter(f => f !== ultimo);
+    }
+    const elegido = candidatos[Math.floor(Math.random() * candidatos.length)];
+    localStorage.setItem(ULTIMO_FONDO_KEY, elegido);
+    return elegido;
 }
 
 function mostrarLogin() {
@@ -15,12 +30,9 @@ function mostrarLogin() {
     aplicarFondoAleatorio();
 }
 
-// Elige una de las 4 imágenes de fondo al azar cada vez que se muestra el login
-// (nueva persona entrando, o la misma recargando/cerrando sesión y volviendo)
+// Elige una de las 4 imágenes de fondo (nunca repite la anterior) para el login
 function aplicarFondoAleatorio() {
-    const fondos = ['img/fondo1.png', 'img/fondo2.png', 'img/fondo3.png', 'img/fondo4.png'];
-    const elegido = fondos[Math.floor(Math.random() * fondos.length)];
-    document.getElementById('login-screen').style.backgroundImage = `url('${elegido}')`;
+    document.getElementById('login-screen').style.backgroundImage = `url('${elegirFondoAleatorio()}')`;
 }
 
 function ocultarLogin() {
