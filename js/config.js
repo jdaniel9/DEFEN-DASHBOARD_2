@@ -19,6 +19,7 @@ let radiosDetalle     = [];
 let asistenciaHoy     = {};
 let novedadesPersonal = { ingresos: [], salidas: [], faltas: [] };
 let llamadosAtencion  = [];
+let vacantesNacional  = 0;
 let puestosData       = {};
 
 // ── Estado del panel de filtros globales (arrays = multi-selección) ──
