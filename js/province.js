@@ -197,7 +197,7 @@ function crearAcordeonProyecto(provincia, proyecto, idx) {
     const puestos = puestosFiltrados(provincia, proyecto.nombre);
 
     const wrap   = document.createElement('div');
-    wrap.className = 'acord-proyecto';
+    wrap.className = 'acord-proyecto' + (proyecto.vacantes > 0 ? ' ring-2 ring-red-300' : '');
 
     const header = document.createElement('div');
     header.className = 'acord-header';
@@ -207,6 +207,7 @@ function crearAcordeonProyecto(provincia, proyecto, idx) {
             <div class="flex gap-1.5 mt-0.5 flex-wrap items-center">
                 <span class="text-[9px] text-slate-500 font-semibold">👮${proyecto.guardias} 🔫${proyecto.armas} 🏢${proyecto.puestos ?? '—'}</span>
                 <span class="text-[9px] font-bold px-1.5 py-0.5 rounded-full ${al.cls}">${al.label}</span>
+                ${proyecto.vacantes > 0 ? `<span class="text-[9px] font-black px-1.5 py-0.5 rounded-full bg-red-100 text-red-700">⚠️ ${proyecto.vacantes} VACANTE${proyecto.vacantes > 1 ? 'S' : ''}</span>` : ''}
             </div>
         </div>
         <div class="flex items-center gap-1.5 flex-shrink-0">
