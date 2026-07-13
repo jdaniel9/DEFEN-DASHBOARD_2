@@ -122,7 +122,14 @@
 
                 <!-- Resumen ejecutivo -->
                 <div class="bg-slate-900 p-6 rounded-2xl shadow-xl text-white">
-                    <h3 class="text-slate-400 font-bold uppercase tracking-widest text-[9px] mb-4">Resumen Ejecutivo Nacional</h3>
+                    <div class="flex items-center justify-between mb-4">
+                        <h3 class="text-slate-400 font-bold uppercase tracking-widest text-[9px]">Resumen Ejecutivo Nacional</h3>
+                        <div id="alerta-vacantes-nacional" style="display:none;" class="flex items-center gap-1 bg-red-500 px-2 py-0.5 rounded-full">
+                            <span class="w-1.5 h-1.5 rounded-full bg-white inline-block" style="animation:pulseGreen 1.5s infinite;"></span>
+                            <span class="text-[9px] font-black text-white" id="total-vacantes-nacional">0</span>
+                            <span class="text-[8px] font-bold text-white">VACANTE(S)</span>
+                        </div>
+                    </div>
                     <div class="grid grid-cols-2 gap-3 mb-3">
                         <div class="bg-white/5 p-3 rounded-xl border border-white/10">
                             <p class="text-2xl font-black text-blue-400" id="total-guardias">0</p>
@@ -478,6 +485,11 @@
                 <button onclick="cerrarModalArmamento()" style="background:rgba(255,255,255,0.1);color:white;border:none;border-radius:10px;padding:7px 12px;font-size:12px;font-weight:800;cursor:pointer;">✕ Cerrar</button>
             </div>
 
+            <div style="background:white;padding:10px 16px 0;">
+                <input type="text" id="armamento-buscador" oninput="buscarArmamento(this.value)"
+                       placeholder="🔎 Buscar por código, serie, puesto, provincia, proyecto..."
+                       style="width:100%;padding:9px 12px;border:1.5px solid #e2e8f0;border-radius:10px;font-size:12px;font-weight:600;outline:none;">
+            </div>
             <div id="armamento-filtros-bar" style="background:white;padding:10px 16px;border-bottom:1px solid #e2e8f0;display:flex;flex-wrap:wrap;gap:6px;align-items:center;"></div>
 
             <div style="flex:1;overflow:auto;padding:0 16px;">
@@ -510,6 +522,11 @@
                 <button onclick="cerrarModalRadios()" style="background:rgba(255,255,255,0.1);color:white;border:none;border-radius:10px;padding:7px 12px;font-size:12px;font-weight:800;cursor:pointer;">✕ Cerrar</button>
             </div>
 
+            <div style="background:white;padding:10px 16px 0;">
+                <input type="text" id="radios-buscador" oninput="buscarRadios(this.value)"
+                       placeholder="🔎 Buscar por modelo, serie, puesto, provincia, proyecto..."
+                       style="width:100%;padding:9px 12px;border:1.5px solid #e2e8f0;border-radius:10px;font-size:12px;font-weight:600;outline:none;">
+            </div>
             <div id="radios-filtros-bar" style="background:white;padding:10px 16px;border-bottom:1px solid #e2e8f0;display:flex;flex-wrap:wrap;gap:6px;"></div>
 
             <div style="flex:1;overflow:auto;padding:0 16px;">
