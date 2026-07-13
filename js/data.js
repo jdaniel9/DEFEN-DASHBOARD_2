@@ -90,6 +90,12 @@ function procesarDatosAPI(json) {
         delete json.__llamados__;
     }
 
+    // ── Vacantes a nivel nacional ──
+    if (json.__vacantes_nacional__ !== undefined) {
+        vacantesNacional = Number(json.__vacantes_nacional__) || 0;
+        delete json.__vacantes_nacional__;
+    }
+
     // ── Puestos: indexar por provincia → proyecto → array ──
     if (json.__puestos__) {
         json.__puestos__.forEach(p => {
