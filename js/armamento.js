@@ -6,6 +6,8 @@
 // ── Estado de filtros del modal de armamento (multi-select) ──
 let filtrosArmamento = { estado: [], tipo: [], clase: [], categoria: [], provincia: [] };
 let filtrosRadios    = { provincia: [], proyecto: [] };
+let busquedaArmamento = '';
+let busquedaRadios    = '';
 
 const ARM_COLUMNAS = [
     { key:'codigoArma',      label:'Código' },
@@ -27,9 +29,12 @@ const ARM_COLUMNAS = [
 // ── Abrir modal de armamento, opcionalmente pre-filtrado por estado ──
 function abrirModalArmamento(estadoPreseleccionado) {
     filtrosArmamento = { estado: [], tipo: [], clase: [], categoria: [], provincia: [] };
+    busquedaArmamento = '';
     if (estadoPreseleccionado) filtrosArmamento.estado = [estadoPreseleccionado];
 
     document.getElementById('armamento-modal').style.display = 'flex';
+    const buscador = document.getElementById('armamento-buscador');
+    if (buscador) buscador.value = '';
     renderFiltrosArmamento();
     renderTablaArmamento();
 }
@@ -85,7 +90,19 @@ function armaPasaFiltros(a) {
         const valorArma = normalizarTexto(a[grupo]);
         if (!filtrosArmamento[grupo].includes(valorArma)) return false;
     }
+    if (busquedaArmamento) {
+        const texto = normalizarTexto(busquedaArmamento);
+        const campos = [a.codigoArma, a.serie, a.nDocumento, a.nombreRazon, a.marca, a.calibre,
+                         a.categoria, a.proyecto, a.provincia, a.ubicacion, a.tipo, a.clase];
+        const coincide = campos.some(c => normalizarTexto(c).includes(texto));
+        if (!coincide) return false;
+    }
     return true;
+}
+
+function buscarArmamento(valor) {
+    busquedaArmamento = valor;
+    renderTablaArmamento();
 }
 
 function obtenerArmasFiltradas() {
@@ -216,7 +233,10 @@ async function exportarPDFArmamento() {
 // ================================================================
 function abrirModalRadios() {
     filtrosRadios = { provincia: [], proyecto: [] };
+    busquedaRadios = '';
     document.getElementById('radios-modal').style.display = 'flex';
+    const buscador = document.getElementById('radios-buscador');
+    if (buscador) buscador.value = '';
     renderFiltrosRadios();
     renderTablaRadios();
 }
@@ -255,7 +275,18 @@ function radioPasaFiltros(r) {
         if (filtrosRadios[grupo].length === 0) continue;
         if (!filtrosRadios[grupo].includes(r[grupo])) return false;
     }
+    if (busquedaRadios) {
+        const texto = normalizarTexto(busquedaRadios);
+        const campos = [r.provincia, r.proyecto, r.puesto, r.modelo, r.serie];
+        const coincide = campos.some(c => normalizarTexto(c).includes(texto));
+        if (!coincide) return false;
+    }
     return true;
+}
+
+function buscarRadios(valor) {
+    busquedaRadios = valor;
+    renderTablaRadios();
 }
 
 function obtenerRadiosFiltrados() { return radiosDetalle.filter(radioPasaFiltros); }
