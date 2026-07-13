@@ -111,7 +111,7 @@ function renderDetailPanel(nombre) {
                 : `<p class="text-[10px] text-slate-400 italic px-1">Sin puestos con coordenadas registradas para este proyecto.</p>`;
 
             return `
-            <div class="project-row bg-white flex flex-col gap-2">
+            <div class="project-row bg-white flex flex-col gap-2 ${p.vacantes > 0 ? 'ring-2 ring-red-300' : ''}">
                 <div class="flex items-start justify-between gap-2 cursor-pointer" onclick="document.getElementById('${idSafe}').classList.toggle('hidden'); this.querySelector('.chev-puestos').classList.toggle('rotate-180')">
                     <span class="text-sm font-black text-slate-800 leading-tight">${p.nombre}</span>
                     <div class="flex items-center gap-1.5 flex-shrink-0">
@@ -125,6 +125,11 @@ function renderDetailPanel(nombre) {
                         <span class="chev-puestos text-[10px] text-slate-400 transition-transform">▾</span>
                     </div>
                 </div>
+                ${p.vacantes > 0 ? `
+                <div class="flex items-center gap-1.5 bg-red-50 border border-red-200 rounded-lg px-2.5 py-1.5">
+                    <span class="w-1.5 h-1.5 rounded-full bg-red-500 inline-block" style="animation:pulseGreen 1.5s infinite;"></span>
+                    <span class="text-[10px] font-black text-red-700">⚠️ ${p.vacantes} VACANTE${p.vacantes > 1 ? 'S' : ''} SIN CUBRIR</span>
+                </div>` : ''}
                 <div class="flex flex-wrap gap-3 text-[11px] text-slate-500 font-semibold">
                     <span>👮 ${p.guardias} guardia(s)</span>
                     <span>🔫 ${p.armas} arma(s)</span>
@@ -244,6 +249,17 @@ function init() {
     document.getElementById('total-puestos').innerText    = totals.Pu;
     document.getElementById('total-proyectos').innerText  = totals.Pr;
     document.getElementById('total-provincias').innerText = totals.Prov;
+
+    // Alerta nacional de vacantes — solo se muestra si hay al menos 1
+    const alertaVac = document.getElementById('alerta-vacantes-nacional');
+    if (alertaVac) {
+        if (vacantesNacional > 0) {
+            alertaVac.style.display = 'flex';
+            document.getElementById('total-vacantes-nacional').textContent = vacantesNacional;
+        } else {
+            alertaVac.style.display = 'none';
+        }
+    }
 
     // Resumen armamento — todos los valores calculados automáticamente
     const set = (id, val) => { const el = document.getElementById(id); if (el) el.innerText = val !== null && val !== undefined ? val : '—'; };
