@@ -160,11 +160,28 @@ function verImagen(url, titulo) {
     document.getElementById('lightbox-error').style.display = 'none';
     const img = document.getElementById('lightbox-img');
     img.style.display = 'block';
+
+    // Si el formato principal falla, intenta un formato alternativo antes
+    // de darse por vencido — algunos archivos responden mejor a uno u otro
+    const match  = url.match(/\/d\/([a-zA-Z0-9_-]+)/) || url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+    const fileId = match ? match[1] : null;
+    let intento  = 0;
+    const formatos = fileId ? [
+        `https://lh3.googleusercontent.com/d/${fileId}`,
+        `https://drive.google.com/thumbnail?id=${fileId}&sz=w1600`,
+        `https://drive.google.com/uc?export=view&id=${fileId}`
+    ] : [url];
+
     img.onerror = () => {
-        img.style.display = 'none';
-        document.getElementById('lightbox-error').style.display = 'block';
+        intento++;
+        if (intento < formatos.length) {
+            img.src = formatos[intento];
+        } else {
+            img.style.display = 'none';
+            document.getElementById('lightbox-error').style.display = 'block';
+        }
     };
-    img.src = url;
+    img.src = formatos[0];
     document.getElementById('imagen-lightbox').style.display = 'flex';
 }
 
