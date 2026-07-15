@@ -4,11 +4,12 @@
 // ================================================================
 
 // ── Estado de filtros del modal de armamento (multi-select) ──
-let filtrosArmamento = { estado: [], tipo: [], clase: [], categoria: [], provincia: [] };
+let filtrosArmamento = { estado: [], tipo: [], clase: [], categoria: [], provincia: [], proyecto: [] };
 let filtrosRadios    = { provincia: [], proyecto: [] };
 let busquedaArmamento = '';
 let busquedaRadios    = '';
 
+// Columnas "sueltas" (sin grupo) — el grupo Fotos/Guías se arma aparte en el thead
 const ARM_COLUMNAS = [
     { key:'codigoArma',      label:'Código' },
     { key:'serie',           label:'Serie' },
@@ -22,14 +23,12 @@ const ARM_COLUMNAS = [
     { key:'estado',          label:'Estado' },
     { key:'proyecto',        label:'Proyecto' },
     { key:'provincia',       label:'Provincia' },
-    { key:'ubicacion',       label:'Ubicación' },
-    { key:'fotos',           label:'Fotos' },
-    { key:'guias',           label:'Guías' }
+    { key:'ubicacion',       label:'Ubicación' }
 ];
 
 // ── Abrir modal de armamento, opcionalmente pre-filtrado por estado ──
 function abrirModalArmamento(estadoPreseleccionado) {
-    filtrosArmamento = { estado: [], tipo: [], clase: [], categoria: [], provincia: [] };
+    filtrosArmamento = { estado: [], tipo: [], clase: [], categoria: [], provincia: [], proyecto: [] };
     busquedaArmamento = '';
     if (estadoPreseleccionado) filtrosArmamento.estado = [estadoPreseleccionado];
 
@@ -44,29 +43,46 @@ function cerrarModalArmamento() {
     document.getElementById('armamento-modal').style.display = 'none';
 }
 
-// Construye los chips de filtro dinámicamente a partir de los valores únicos presentes
+// Construye los chips de filtro dinámicamente a partir de los valores únicos presentes.
+// El filtro de PROYECTO es dependiente: si hay provincia(s) seleccionada(s), solo
+// muestra los proyectos que existen dentro de esas provincias (filtro en cascada)
 function renderFiltrosArmamento() {
     const bar = document.getElementById('armamento-filtros-bar');
     const valoresUnicos = (campo) => [...new Set(armamentoDetalle.map(a => a[campo]).filter(Boolean))].sort();
 
+    // Proyectos disponibles según la(s) provincia(s) ya elegidas (si hay alguna)
+    const provinciasElegidas = filtrosArmamento.provincia;
+    const proyectosDisponibles = [...new Set(
+        armamentoDetalle
+            .filter(a => provinciasElegidas.length === 0 || provinciasElegidas.includes(normalizarTexto(a.provincia)))
+            .map(a => a.proyecto)
+            .filter(Boolean)
+    )].sort();
+
+    // Si cambiaron las provincias y algún proyecto seleccionado ya no aplica, lo quitamos
+    filtrosArmamento.proyecto = filtrosArmamento.proyecto.filter(p =>
+        proyectosDisponibles.some(pd => normalizarTexto(pd) === p)
+    );
+
     const grupos = [
         { key:'estado',     label:'Estado',     valores:['activo','transito','rastrillo','perdida','confiscada'], colores:{activo:'active-green',transito:'active-blue',rastrillo:'active-slate',perdida:'active-red',confiscada:'active-amber'} },
+        { key:'provincia',  label:'Provincia',  valores: valoresUnicos('provincia') },
+        { key:'proyecto',   label:'Proyecto' + (provinciasElegidas.length > 0 ? ' (de la provincia elegida)' : ''), valores: proyectosDisponibles },
         { key:'tipo',       label:'Tipo',       valores: valoresUnicos('tipo') },
         { key:'clase',      label:'Clase',      valores: valoresUnicos('clase') },
         { key:'categoria',  label:'Categoría',  valores: valoresUnicos('categoria') },
-        { key:'provincia',  label:'Provincia',  valores: valoresUnicos('provincia') },
     ];
 
     bar.innerHTML = grupos.map(g => `
         <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;">
             <span style="font-size:9px;font-weight:800;color:#94a3b8;text-transform:uppercase;margin-right:2px;">${g.label}:</span>
-            ${g.valores.map(v => {
+            ${g.valores.length > 0 ? g.valores.map(v => {
                 const valNorm = normalizarTexto(v);
                 const activo = filtrosArmamento[g.key].includes(valNorm);
                 const colorClass = g.colores && g.colores[valNorm] ? g.colores[valNorm] : 'active-blue';
                 return `<button onclick="toggleFiltroArmamento('${g.key}','${valNorm}',this)"
                         class="chip ${activo ? colorClass : ''}" style="font-size:9px;padding:3px 9px;">${v}</button>`;
-            }).join('')}
+            }).join('') : `<span style="font-size:9px;color:#cbd5e1;font-style:italic;">— elige una provincia primero —</span>`}
         </div>
     `).join('<div style="width:100%;height:1px;background:#f1f5f9;margin:2px 0;"></div>');
 }
@@ -114,8 +130,24 @@ function renderTablaArmamento() {
     const filtradas = obtenerArmasFiltradas();
     document.getElementById('armamento-modal-contador').textContent = `${filtradas.length} de ${armamentoDetalle.length} arma(s)`;
 
+    // ── Fila 1 del thead: grupos (Fotos / GDLT) ──
+    const theadGrupos = document.getElementById('armamento-thead-grupos');
+    theadGrupos.innerHTML =
+        `<th style="padding:4px 8px;"></th>` +
+        ARM_COLUMNAS.map(() => `<th style="padding:4px 8px;"></th>`).join('') +
+        `<th colspan="2" style="padding:4px 8px;text-align:center;background:#312e81;font-size:9px;letter-spacing:0.06em;">FOTOS</th>` +
+        `<th colspan="2" style="padding:4px 8px;text-align:center;background:#3730a3;font-size:9px;letter-spacing:0.06em;">GDLT</th>` +
+        `<th style="padding:4px 8px;"></th>`;
+
+    // ── Fila 2 del thead: columnas reales ──
     const thead = document.getElementById('armamento-thead-row');
-    thead.innerHTML = '<th style="padding:8px;">N°</th>' + ARM_COLUMNAS.map(c => `<th style="padding:8px;text-align:left;white-space:nowrap;">${c.label}</th>`).join('');
+    thead.innerHTML = '<th style="padding:8px;">N°</th>'
+        + ARM_COLUMNAS.map(c => `<th style="padding:8px;text-align:left;white-space:nowrap;">${c.label}</th>`).join('')
+        + `<th style="padding:8px;white-space:nowrap;">Credencial</th>`
+        + `<th style="padding:8px;white-space:nowrap;">Arma</th>`
+        + `<th style="padding:8px;white-space:nowrap;">Envío</th>`
+        + `<th style="padding:8px;white-space:nowrap;">Retorno</th>`
+        + `<th style="padding:8px;white-space:nowrap;">Mapa</th>`;
 
     const tbody = document.getElementById('armamento-tbody');
     const badgeEstado = (e) => {
@@ -125,7 +157,13 @@ function renderTablaArmamento() {
         return `<span style="background:${style.split(';')[0]};color:${style.split(';')[1].replace('color:','')};font-size:9px;font-weight:800;padding:2px 8px;border-radius:999px;">${e||'—'}</span>`;
     };
 
-    tbody.innerHTML = filtradas.map((a, i) => `
+    tbody.innerHTML = filtradas.map((a, i) => {
+        const esActiva = normalizarTexto(a.estado) === 'activo';
+        const tieneUbicacion = esActiva && a.puesto && a.provincia && a.proyecto;
+        const puestoSeguro = (a.puesto||'').replace(/'/g,"\\'");
+        const proyectoSeguro = (a.proyecto||'').replace(/'/g,"\\'");
+
+        return `
         <tr style="border-bottom:1px solid #f1f5f9;${i%2===0?'background:#f8fafc;':''}">
             <td style="padding:6px 8px;text-align:center;color:#94a3b8;">${i+1}</td>
             <td style="padding:6px 8px;font-weight:700;">${a.codigoArma||'—'}</td>
@@ -142,15 +180,27 @@ function renderTablaArmamento() {
             <td style="padding:6px 8px;">${a.provincia||'—'}</td>
             <td style="padding:6px 8px;">${a.ubicacion||'—'}</td>
             <td style="padding:6px 8px;white-space:nowrap;">
-                ${a.urlCredencial ? `<button onclick="verImagen('${a.urlCredencial}','Credencial · Serie ${a.serie||''}')" style="font-size:8px;font-weight:800;background:#ede9fe;color:#6d28d9;padding:2px 6px;border-radius:5px;border:none;cursor:pointer;margin-right:3px;">📇 Credencial</button>` : '<span style="font-size:8px;color:#cbd5e1;">Sin credencial</span>'}
-                ${a.urlImagenArma ? `<button onclick="verImagen('${a.urlImagenArma}','Foto del arma · Serie ${a.serie||''}')" style="font-size:8px;font-weight:800;background:#e0f2fe;color:#0369a1;padding:2px 6px;border-radius:5px;border:none;cursor:pointer;">📷 Foto</button>` : ''}
+                ${a.urlCredencial ? `<button onclick="verImagen('${a.urlCredencial}','Credencial · Serie ${a.serie||''}')" style="font-size:8px;font-weight:800;background:#ede9fe;color:#6d28d9;padding:2px 6px;border-radius:5px;border:none;cursor:pointer;">📇</button>` : '<span style="color:#e2e8f0;">—</span>'}
             </td>
             <td style="padding:6px 8px;white-space:nowrap;">
-                ${a.urlGuiaEnvio   ? `<a href="${a.urlGuiaEnvio}" target="_blank" style="font-size:8px;font-weight:800;background:#dbeafe;color:#1d4ed8;padding:2px 6px;border-radius:5px;text-decoration:none;margin-right:3px;">Envío</a>` : ''}
-                ${a.urlGuiaRetorno ? `<a href="${a.urlGuiaRetorno}" target="_blank" style="font-size:8px;font-weight:800;background:#fef3c7;color:#92400e;padding:2px 6px;border-radius:5px;text-decoration:none;">Retorno</a>` : ''}
+                ${a.urlImagenArma ? `<button onclick="verImagen('${a.urlImagenArma}','Foto del arma · Serie ${a.serie||''}')" style="font-size:8px;font-weight:800;background:#e0f2fe;color:#0369a1;padding:2px 6px;border-radius:5px;border:none;cursor:pointer;">📷</button>` : '<span style="color:#e2e8f0;">—</span>'}
             </td>
-        </tr>
-    `).join('') || `<tr><td colspan="${ARM_COLUMNAS.length+1}" style="padding:20px;text-align:center;color:#94a3b8;">Sin resultados para este filtro.</td></tr>`;
+            <td style="padding:6px 8px;white-space:nowrap;">
+                ${a.urlGuiaEnvio ? `<a href="${a.urlGuiaEnvio}" target="_blank" style="font-size:8px;font-weight:800;background:#dbeafe;color:#1d4ed8;padding:2px 6px;border-radius:5px;text-decoration:none;">📄</a>` : '<span style="color:#e2e8f0;">—</span>'}
+            </td>
+            <td style="padding:6px 8px;white-space:nowrap;">
+                ${a.urlGuiaRetorno ? `<a href="${a.urlGuiaRetorno}" target="_blank" style="font-size:8px;font-weight:800;background:#fef3c7;color:#92400e;padding:2px 6px;border-radius:5px;text-decoration:none;">📄</a>` : '<span style="color:#e2e8f0;">—</span>'}
+            </td>
+            <td style="padding:6px 8px;white-space:nowrap;">
+                ${tieneUbicacion
+                    ? `<button onclick="cerrarModalArmamento(); mostrarArmaEnMapa('${a.provincia}','${proyectoSeguro}','${puestoSeguro}')"
+                         style="font-size:8px;font-weight:800;background:#16a34a;color:white;padding:3px 7px;border-radius:5px;border:none;cursor:pointer;" title="Ver dónde está ubicada esta arma">
+                         📍 Ver
+                       </button>`
+                    : '<span style="color:#e2e8f0;">—</span>'}
+            </td>
+        </tr>`;
+    }).join('') || `<tr><td colspan="${ARM_COLUMNAS.length+6}" style="padding:20px;text-align:center;color:#94a3b8;">Sin resultados para este filtro.</td></tr>`;
 }
 
 // ── Lightbox de imágenes (credencial / foto del arma) ──
