@@ -622,6 +622,58 @@ function limpiarMarcadores() {
     marcadoresMapa = [];
 }
 
+// =====================================================================
+// ACCESO DIRECTO — desde la tabla de armamento, un clic en "📍 Ver"
+// abre el mapa de la provincia, expande el proyecto correspondiente y
+// vuela directo al puesto exacto donde está esa arma, con su popup abierto.
+// =====================================================================
+function mostrarArmaEnMapa(provincia, nombreProyecto, nombrePuesto) {
+    abrirVistaProvincia(provincia);
+
+    // Esperar a que el sidebar term ine de construirse (es síncrono, pero
+    // damos un pequeño margen por si el navegador aún está pintando el DOM)
+    setTimeout(() => {
+        const headers = document.querySelectorAll('#prov-proyectos .acord-header');
+        let headerEncontrado = null;
+        headers.forEach(h => {
+            const nombreEl = h.querySelector('p');
+            if (nombreEl && normalizarTextoLocal(nombreEl.textContent) === normalizarTextoLocal(nombreProyecto)) {
+                headerEncontrado = h;
+            }
+        });
+
+        if (!headerEncontrado) {
+            alert(`No se encontró el proyecto "${nombreProyecto}" en el mapa de ${provincia}.`);
+            return;
+        }
+        headerEncontrado.click(); // abre el acordeón y llama a seleccionarProyectoActual()
+
+        // Esperar a que el acordeón termine de abrir y renderizar los puestos
+        setTimeout(() => {
+            const puesto = (puestosActuales || []).find(p =>
+                normalizarTextoLocal(p.nombre) === normalizarTextoLocal(nombrePuesto)
+            );
+            if (!puesto || !puesto.lat || !puesto.lng) {
+                alert(`El puesto "${nombrePuesto}" no tiene coordenadas registradas todavía.`);
+                return;
+            }
+            colocarMarcador(puesto, true);
+            if (provMap) provMap.flyTo([puesto.lat, puesto.lng], 16, { duration: 1 });
+
+            // Resaltar la tarjeta del puesto en el sidebar, si ya está renderizada
+            document.querySelectorAll('.puesto-card').forEach(c => {
+                c.classList.toggle('active', c.textContent.includes(puesto.nombre));
+            });
+        }, 450);
+    }, 350);
+}
+
+// Normalización local simple (evita depender del orden de carga de otros archivos)
+function normalizarTextoLocal(s) {
+    return String(s||'').trim().toLowerCase()
+        .normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+}
+
 // Inserta una imagen de mapa en el PDF respetando su proporción real
 // (contain-fit dentro de una caja máxima, centrada horizontalmente).
 // Evita el estiramiento/distorsión que ocurre al forzar ancho y alto fijos.
