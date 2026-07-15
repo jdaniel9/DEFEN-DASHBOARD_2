@@ -509,6 +509,21 @@
     </div>
 
     <!-- ================================================================
+         LIGHTBOX — Visualizador de imágenes (credencial / foto del arma)
+    ================================================================ -->
+    <div id="imagen-lightbox" style="display:none;position:fixed;inset:0;z-index:20000;background:rgba(0,0,0,0.88);align-items:center;justify-content:center;padding:24px;cursor:zoom-out;" onclick="cerrarImagenLightbox()">
+        <div style="position:relative;max-width:90vw;max-height:90vh;" onclick="event.stopPropagation()">
+            <p id="lightbox-titulo" style="color:white;font-size:13px;font-weight:800;text-align:center;margin-bottom:10px;"></p>
+            <img id="lightbox-img" src="" alt="Imagen"
+                 style="max-width:90vw;max-height:80vh;border-radius:10px;box-shadow:0 20px 60px rgba(0,0,0,0.6);display:block;margin:0 auto;">
+            <p id="lightbox-error" style="display:none;color:#f87171;font-size:12px;font-weight:700;text-align:center;margin-top:12px;">
+                No se pudo cargar la imagen. Verifica que la carpeta de Drive esté compartida como "Cualquier persona con el enlace".
+            </p>
+            <button onclick="cerrarImagenLightbox()" style="position:absolute;top:-40px;right:0;background:rgba(255,255,255,0.15);color:white;border:none;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:800;cursor:pointer;">✕ Cerrar</button>
+        </div>
+    </div>
+
+    <!-- ================================================================
          MODAL — Inventario de Radios
     ================================================================ -->
     <div id="radios-modal" style="display:none;position:fixed;inset:0;z-index:10500;background:rgba(15,23,42,0.7);backdrop-filter:blur(4px);align-items:center;justify-content:center;padding:16px;">
