@@ -23,6 +23,7 @@ const ARM_COLUMNAS = [
     { key:'proyecto',        label:'Proyecto' },
     { key:'provincia',       label:'Provincia' },
     { key:'ubicacion',       label:'Ubicación' },
+    { key:'fotos',           label:'Fotos' },
     { key:'guias',           label:'Guías' }
 ];
 
@@ -141,11 +142,35 @@ function renderTablaArmamento() {
             <td style="padding:6px 8px;">${a.provincia||'—'}</td>
             <td style="padding:6px 8px;">${a.ubicacion||'—'}</td>
             <td style="padding:6px 8px;white-space:nowrap;">
+                ${a.urlCredencial ? `<button onclick="verImagen('${a.urlCredencial}','Credencial · Serie ${a.serie||''}')" style="font-size:8px;font-weight:800;background:#ede9fe;color:#6d28d9;padding:2px 6px;border-radius:5px;border:none;cursor:pointer;margin-right:3px;">📇 Credencial</button>` : '<span style="font-size:8px;color:#cbd5e1;">Sin credencial</span>'}
+                ${a.urlImagenArma ? `<button onclick="verImagen('${a.urlImagenArma}','Foto del arma · Serie ${a.serie||''}')" style="font-size:8px;font-weight:800;background:#e0f2fe;color:#0369a1;padding:2px 6px;border-radius:5px;border:none;cursor:pointer;">📷 Foto</button>` : ''}
+            </td>
+            <td style="padding:6px 8px;white-space:nowrap;">
                 ${a.urlGuiaEnvio   ? `<a href="${a.urlGuiaEnvio}" target="_blank" style="font-size:8px;font-weight:800;background:#dbeafe;color:#1d4ed8;padding:2px 6px;border-radius:5px;text-decoration:none;margin-right:3px;">Envío</a>` : ''}
                 ${a.urlGuiaRetorno ? `<a href="${a.urlGuiaRetorno}" target="_blank" style="font-size:8px;font-weight:800;background:#fef3c7;color:#92400e;padding:2px 6px;border-radius:5px;text-decoration:none;">Retorno</a>` : ''}
             </td>
         </tr>
     `).join('') || `<tr><td colspan="${ARM_COLUMNAS.length+1}" style="padding:20px;text-align:center;color:#94a3b8;">Sin resultados para este filtro.</td></tr>`;
+}
+
+// ── Lightbox de imágenes (credencial / foto del arma) ──
+function verImagen(url, titulo) {
+    if (!url) return;
+    document.getElementById('lightbox-titulo').textContent = titulo || '';
+    document.getElementById('lightbox-error').style.display = 'none';
+    const img = document.getElementById('lightbox-img');
+    img.style.display = 'block';
+    img.onerror = () => {
+        img.style.display = 'none';
+        document.getElementById('lightbox-error').style.display = 'block';
+    };
+    img.src = url;
+    document.getElementById('imagen-lightbox').style.display = 'flex';
+}
+
+function cerrarImagenLightbox() {
+    document.getElementById('imagen-lightbox').style.display = 'none';
+    document.getElementById('lightbox-img').src = '';
 }
 
 // ── Excel del inventario filtrado ──
@@ -169,7 +194,9 @@ function exportarExcelArmamento() {
         'Estado':        a.estado || '',
         'Proyecto':      a.proyecto || '',
         'Provincia':     a.provincia || '',
-        'Ubicación':     a.ubicacion || ''
+        'Ubicación':     a.ubicacion || '',
+        'Credencial':    a.urlCredencial || '',
+        'Foto Arma':     a.urlImagenArma || ''
     }));
 
     const ws = XLSX.utils.json_to_sheet(filas);
@@ -206,16 +233,17 @@ async function exportarPDFArmamento() {
         startY: y,
         margin: { left:10, right:10, top:MARGEN_PDF+4, bottom:MARGEN_PDF+4 },
         didDrawPage: () => dibujarMembretePDF(doc, `Inventario de Armamento — ${filtrosTexto}`, fechaHoy),
-        head: [['N°','Código','Serie','Clase','Tipo','Marca','Calibre','Categoría','Emisión','Expiración','Estado','Proyecto','Provincia','Ubicación']],
+        head: [['N°','Código','Serie','Clase','Tipo','Marca','Calibre','Categoría','Emisión','Expiración','Estado','Proyecto','Provincia','Ubicación','Cred.','Foto']],
         body: numerarFilas(filtradas.map(a => [
             a.codigoArma||'—', a.serie||'—', a.clase||'—', a.tipo||'—', a.marca||'—', a.calibre||'—',
             a.categoria||'—', a.fechaEmision?formatFecha(a.fechaEmision):'—', a.fechaExpiracion?formatFecha(a.fechaExpiracion):'—',
-            a.estado||'—', a.proyecto||'—', a.provincia||'—', a.ubicacion||'—'
+            a.estado||'—', a.proyecto||'—', a.provincia||'—', a.ubicacion||'—',
+            a.urlCredencial ? 'Sí' : '—', a.urlImagenArma ? 'Sí' : '—'
         ])),
         headStyles: { fillColor:DARK, textColor:[255,255,255], fontSize:6.5, cellPadding:2 },
         bodyStyles: { fontSize:6.5, cellPadding:1.8 },
         alternateRowStyles: { fillColor:[248,250,252] },
-        columnStyles: { 0:{halign:'center'} }
+        columnStyles: { 0:{halign:'center'}, 14:{halign:'center'}, 15:{halign:'center'} }
     });
 
     const totalPag = doc.getNumberOfPages();
