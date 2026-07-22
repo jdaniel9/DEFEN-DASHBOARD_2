@@ -408,6 +408,11 @@
                     <label for="pdf-resumen">Resumen ejecutivo nacional</label>
                     <span>Totales</span>
                 </div>
+                <div class="pdf-check-row" onclick="toggleCheck('pdf-contrato')">
+                    <input type="checkbox" id="pdf-contrato" checked>
+                    <label for="pdf-contrato">Resumen por tipo de contrato</label>
+                    <span>ODC/CT/BROW/CUST</span>
+                </div>
                 <div class="pdf-check-row" onclick="toggleCheck('pdf-armamento')">
                     <input type="checkbox" id="pdf-armamento" checked>
                     <label for="pdf-armamento">Inventario de armamento</label>
@@ -435,8 +440,8 @@
                 </div>
                 <div class="pdf-check-row" onclick="toggleCheck('pdf-puestos')">
                     <input type="checkbox" id="pdf-puestos">
-                    <label for="pdf-puestos">Detalle de puestos operativos</label>
-                    <span>Con coordenadas</span>
+                    <label for="pdf-puestos">Detalle de puestos por provincia</label>
+                    <span>Con mapa · pesado</span>
                 </div>
             </div>
 
