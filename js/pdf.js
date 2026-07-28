@@ -51,8 +51,6 @@ async function generarPDFGlobal() {
     const inc = {
         resumen:    document.getElementById('pdf-resumen')?.checked,
         contrato:   document.getElementById('pdf-contrato')?.checked ?? true,
-        armamento:  document.getElementById('pdf-armamento')?.checked,
-        radios:     document.getElementById('pdf-radios')?.checked,
         personal:   document.getElementById('pdf-personal')?.checked,
         proyectos:  document.getElementById('pdf-proyectos')?.checked,
         tramites:   document.getElementById('pdf-tramites')?.checked,
@@ -87,33 +85,6 @@ async function generarPDFGlobal() {
         const yFooter = H - MARGEN_PDF;
         doc.setDrawColor(...ORANGE);
         doc.setLineWidth(0.8);
-        doc.line(14, yFooter+4, W-14, yFooter+4);
-        doc.setFontSize(7); doc.setFont('helvetica','normal'); doc.setTextColor(71,85,105);
-        doc.text('Dirección: Cdla. Álamos II Mz K Solar 09', W/2, yFooter+9, {align:'center'});
-        doc.text('Correo Electrónico: info@defen.com.ec  ·  Guayaquil - Ecuador', W/2, yFooter+14, {align:'center'});
-    };
-
-    // Cambia de orientación de página (para la sección de Armamento, más ancha)
-    const encabezadoOrientado = (titulo, orientacion) => {
-        doc.addPage('a4', orientacion);
-        paginaUsada = true;
-        const W = doc.internal.pageSize.getWidth();
-        const H = doc.internal.pageSize.getHeight();
-        doc.setFillColor(209,213,219);
-        doc.rect(0, 0, W, MARGEN_PDF, 'F');
-        doc.setFillColor(15,15,15);
-        doc.triangle(60, MARGEN_PDF, W, 5, W, MARGEN_PDF, 'F');
-        try { doc.addImage(LOGO_B64, 'PNG', W-34, 5, 22, 16); } catch(e) {}
-        doc.setTextColor(30,30,30);
-        doc.setFontSize(12); doc.setFont('helvetica','bold');
-        doc.text('DEFEN CIA. LTDA.', 8, 12);
-        doc.setFontSize(7.5); doc.setFont('helvetica','normal');
-        doc.setTextColor(71,85,105);
-        doc.text(titulo, 8, 18);
-        doc.setFontSize(6.5);
-        doc.text(`Generado: ${fh}`, 8, 23);
-        const yFooter = H - MARGEN_PDF;
-        doc.setDrawColor(...ORANGE); doc.setLineWidth(0.8);
         doc.line(14, yFooter+4, W-14, yFooter+4);
         doc.setFontSize(7); doc.setFont('helvetica','normal'); doc.setTextColor(71,85,105);
         doc.text('Dirección: Cdla. Álamos II Mz K Solar 09', W/2, yFooter+9, {align:'center'});
@@ -279,99 +250,6 @@ async function generarPDFGlobal() {
     }
 
     // ════════════════════════════════════════════════
-    // SECCIÓN 2 — ARMAMENTO GLOBAL (mismo formato que el módulo de Armamento)
-    // ════════════════════════════════════════════════
-    if (inc.armamento) {
-        encabezadoOrientado('Inventario de Armamento — Nacional', 'landscape');
-        const Wl = doc.internal.pageSize.getWidth();
-        y = 33;
-
-        const armObj = armamento || {};
-        const kpisArm = [
-            ['Global',      armObj.global||0,      DARK],
-            ['En Campo',    armObj.enCampo||0,     RED],
-            ['En Tránsito', armObj.enTransito||0,  BLUE],
-            ['Rastrillo',   armObj.rastrillo||0,   [71,85,105]],
-            ['Pérdida/Rob.',armObj.perdida||0,     [220,38,38]],
-            ['Confiscada',  armObj.confiscada||0,  AMB],
-        ];
-        const bwA = (Wl-28)/6 - 2;
-        kpisArm.forEach(([lbl,val,col],i) => {
-            const x = 14 + i*(bwA+2.4);
-            doc.setFillColor(...GRAY); doc.roundedRect(x,y,bwA,16,2,2,'F');
-            doc.setFontSize(13); doc.setFont('helvetica','bold'); doc.setTextColor(...col);
-            doc.text(String(val), x+bwA/2, y+10, {align:'center'});
-            doc.setFontSize(5); doc.setFont('helvetica','normal'); doc.setTextColor(100,116,139);
-            doc.text(lbl.toUpperCase(), x+bwA/2, y+14.5, {align:'center'});
-        });
-        y += 22;
-
-        // Recortar armamentoDetalle según provincias y puestos que pasan el filtro
-        const armamentoFiltrado = (armamentoDetalle || []).filter(a => {
-            if (!provsActivas.includes(a.provincia)) return false;
-            const puestosOk = puestosQuePasanFiltro(a.provincia);
-            if (a.puesto && puestosOk.size >= 0) {
-                return puestosOk.has((a.puesto||'').toUpperCase().trim());
-            }
-            return true;
-        });
-
-        if (armamentoFiltrado.length > 0) {
-            doc.setFontSize(9); doc.setFont('helvetica','bold'); doc.setTextColor(...DARK);
-            doc.text(`Inventario detallado (${armamentoFiltrado.length} arma(s))`, 14, y); y += 5;
-
-            doc.autoTable({
-                startY: y, margin:{left:10,right:10,bottom:29,top:19}, didDrawPage: didDrawPageHook,
-                head: [['N°','Código','Serie','Clase','Tipo','Marca','Calibre','Categoría','Emisión','Expiración','Estado','Proyecto','Provincia','Ubicación']],
-                body: numerarFilas(armamentoFiltrado.map(a => [
-                    a.codigoArma||'—', a.serie||'—', a.clase||'—', a.tipo||'—', a.marca||'—', a.calibre||'—',
-                    a.categoria||'—', a.fechaEmision?formatFecha(a.fechaEmision):'—', a.fechaExpiracion?formatFecha(a.fechaExpiracion):'—',
-                    a.estado||'—', a.proyecto||'—', a.provincia||'—', a.ubicacion||'—'
-                ])),
-                headStyles:{fillColor:RED,textColor:[255,255,255],fontSize:6.5,fontStyle:'bold',cellPadding:2},
-                bodyStyles:{fontSize:6.5,cellPadding:1.8}, alternateRowStyles:{fillColor:LGRAY},
-                columnStyles:{0:{halign:'center'}}
-            });
-        } else {
-            doc.setFontSize(9); doc.setTextColor(100,116,139);
-            doc.text('No hay armas registradas para los filtros activos.', 14, y);
-        }
-    }
-
-    // ════════════════════════════════════════════════
-    // SECCIÓN 3 — RADIOS GLOBAL (mismo formato que el módulo de Radios)
-    // ════════════════════════════════════════════════
-    if (inc.radios) {
-        encabezado('Inventario de Radios — Nacional'); y = 33;
-
-        const radiosFiltrados = (radiosDetalle || []).filter(r => {
-            if (!provsActivas.includes(r.provincia)) return false;
-            const puestosOk = puestosQuePasanFiltro(r.provincia);
-            if (r.puesto) return puestosOk.has((r.puesto||'').toUpperCase().trim());
-            return true;
-        });
-
-        doc.setFillColor(...GRAY); doc.roundedRect(14,y,W210-28,14,2,2,'F');
-        doc.setFontSize(10); doc.setFont('helvetica','bold'); doc.setTextColor(...PURPLE);
-        doc.text(`Total radios registrados: ${radiosFiltrados.length}`, W210/2, y+9, {align:'center'});
-        y += 18;
-
-        if (radiosFiltrados.length > 0) {
-            doc.autoTable({
-                startY:y, margin:{left:14,right:14,bottom:29,top:19}, didDrawPage: didDrawPageHook,
-                head:[['N°','Provincia','Proyecto','Puesto','Modelo','Serie']],
-                body: numerarFilas(radiosFiltrados.map(r => [r.provincia, r.proyecto, r.puesto||'—', r.modelo||'—', r.serie||'—'])),
-                headStyles:{fillColor:PURPLE,textColor:[255,255,255],fontSize:7.5,fontStyle:'bold',cellPadding:2.5},
-                bodyStyles:{fontSize:7.5,cellPadding:2.2}, alternateRowStyles:{fillColor:LGRAY},
-                columnStyles:{0:{halign:'center'}}
-            });
-        } else {
-            doc.setFontSize(9); doc.setTextColor(100,116,139);
-            doc.text('No hay radios registrados para los filtros activos.', 14, y+8);
-        }
-    }
-
-    // ════════════════════════════════════════════════
     // SECCIÓN 4 — PERSONAL / NÓMINA GLOBAL
     // ════════════════════════════════════════════════
     if (inc.personal) {
@@ -432,7 +310,7 @@ async function generarPDFGlobal() {
             doc.setFillColor(...DARK);
             doc.roundedRect(14, y, W210-28, 10, 2, 2, 'F');
             doc.setTextColor(255,255,255); doc.setFontSize(10); doc.setFont('helvetica','bold');
-            doc.text(`📍 ${n}`, 18, y+6.5);
+            doc.text(n, 18, y+6.5);
             let gT=0,aT=0; proys.forEach(p=>{gT+=Number(p.guardias)||0;aT+=Number(p.armas)||0;});
             doc.setFontSize(7.5); doc.setFont('helvetica','normal');
             doc.text(`${proys.length} proyecto(s) · ${gT} guardia(s) · ${aT} arma(s)`, W210-18, y+6.5, {align:'right'});
@@ -504,8 +382,18 @@ async function generarPDFGlobal() {
 
         y = doc.lastAutoTable.finalY + 8;
         if (y > 260) { doc.addPage(); encabezadoMini(); y = MARGEN_PDF*0.6 + 8; }
-        doc.setFontSize(7.5); doc.setFont('helvetica','normal'); doc.setTextColor(100,116,139);
-        doc.text('🟢 Vigente     🟡 Por vencer (menos de 90 días)     🔴 Vencida', 14, y);
+
+        // Leyenda con círculos de color reales (nada de emoji, que se rompen en PDF)
+        const leyenda = [['Vigente', GREEN], ['Por vencer (menos de 90 días)', AMB], ['Vencida', RED]];
+        let xLeg = 14;
+        doc.setFontSize(7.5); doc.setFont('helvetica','normal');
+        leyenda.forEach(([texto, color]) => {
+            doc.setFillColor(...color);
+            doc.circle(xLeg+1.2, y-1, 1.2, 'F');
+            doc.setTextColor(71,85,105);
+            doc.text(texto, xLeg+4, y);
+            xLeg += doc.getTextWidth(texto) + 14;
+        });
     }
 
     // ════════════════════════════════════════════════
@@ -595,14 +483,6 @@ async function generarPDFGlobal() {
                     });
                     y = doc.lastAutoTable.finalY + 6;
                 });
-            }
-
-            // ── Mapa esquemático de la provincia ──
-            if (Object.keys(puestosPorProyectoFiltrados).length > 0) {
-                if (y > 175) { doc.addPage(); encabezadoMini(); y = MARGEN_PDF*0.6 + 8; }
-                doc.setFontSize(10); doc.setFont('helvetica','bold'); doc.setTextColor(...DARK);
-                doc.text('MAPA DE PUESTOS', 14, y); y += 5;
-                dibujarMapaEsquematico(doc, y, puestosPorProyectoFiltrados, W210);
             }
         });
 
