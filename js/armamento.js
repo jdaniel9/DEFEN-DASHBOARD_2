@@ -50,11 +50,13 @@ function renderFiltrosArmamento() {
     const bar = document.getElementById('armamento-filtros-bar');
     const valoresUnicos = (campo) => [...new Set(armamentoDetalle.map(a => a[campo]).filter(Boolean))].sort();
 
-    // Proyectos disponibles según la(s) provincia(s) ya elegidas (si hay alguna)
+    // Proyectos disponibles: SOLO se muestran una vez elegida al menos una
+    // provincia — evita la lista larga y desordenada de todos los proyectos
+    // del país cuando no hay ningún filtro aplicado todavía
     const provinciasElegidas = filtrosArmamento.provincia;
-    const proyectosDisponibles = [...new Set(
+    const proyectosDisponibles = provinciasElegidas.length === 0 ? [] : [...new Set(
         armamentoDetalle
-            .filter(a => provinciasElegidas.length === 0 || provinciasElegidas.includes(normalizarTexto(a.provincia)))
+            .filter(a => provinciasElegidas.includes(normalizarTexto(a.provincia)))
             .map(a => a.proyecto)
             .filter(Boolean)
     )].sort();
@@ -67,7 +69,7 @@ function renderFiltrosArmamento() {
     const grupos = [
         { key:'estado',     label:'Estado',     valores:['activo','transito','rastrillo','perdida','confiscada'], colores:{activo:'active-green',transito:'active-blue',rastrillo:'active-slate',perdida:'active-red',confiscada:'active-amber'} },
         { key:'provincia',  label:'Provincia',  valores: valoresUnicos('provincia') },
-        { key:'proyecto',   label:'Proyecto' + (provinciasElegidas.length > 0 ? ' (de la provincia elegida)' : ''), valores: proyectosDisponibles },
+        { key:'proyecto',   label:'Proyecto' + (provinciasElegidas.length > 0 ? ' (de la provincia elegida)' : ' — elige provincia primero'), valores: proyectosDisponibles },
         { key:'tipo',       label:'Tipo',       valores: valoresUnicos('tipo') },
         { key:'clase',      label:'Clase',      valores: valoresUnicos('clase') },
         { key:'categoria',  label:'Categoría',  valores: valoresUnicos('categoria') },
