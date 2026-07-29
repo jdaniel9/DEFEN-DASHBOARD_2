@@ -45,15 +45,15 @@
             <form id="login-form" style="display:flex;flex-direction:column;gap:12px;">
                 <div>
                     <label style="color:#94a3b8;font-size:10px;font-weight:700;text-transform:uppercase;display:block;margin-bottom:5px;">Departamento</label>
-                    <select id="login-departamento" onchange="autocompletarUsuarioPorDepartamento()"
-                            style="width:100%;padding:10px 12px;background:rgba(255,255,255,0.07);border:1.5px solid rgba(255,255,255,0.14);border-radius:10px;color:white;font-size:13px;font-weight:600;outline:none;">
-                        <option value="" style="background:#1e293b;color:white;">— Selecciona tu departamento —</option>
-                        <option value="inventario" style="background:#1e293b;color:white;">Inventario</option>
-                        <option value="sistemas" style="background:#1e293b;color:white;">Sistemas</option>
-                        <option value="financiero" style="background:#1e293b;color:white;">Financiero</option>
-                        <option value="operaciones" style="background:#1e293b;color:white;">Operaciones</option>
+                    <select id="login-departamento" required onchange="autocompletarUsuarioPorDepartamento()"
+                            style="width:100%;padding:10px 12px;background:rgba(255,255,255,0.07);border:1.5px solid rgba(255,255,255,0.14);border-radius:10px;color:white;font-size:13px;font-weight:600;outline:none;text-transform:uppercase;">
+                        <option value="" style="background:#1e293b;color:white;">— SELECCIONA TU DEPARTAMENTO —</option>
+                        <option value="inventario" style="background:#1e293b;color:white;">INVENTARIO</option>
+                        <option value="sistemas" style="background:#1e293b;color:white;">SISTEMAS</option>
+                        <option value="financiero" style="background:#1e293b;color:white;">FINANCIERO</option>
+                        <option value="operaciones" style="background:#1e293b;color:white;">OPERACIONES</option>
                         <option value="gdp" style="background:#1e293b;color:white;">GDP</option>
-                        <option value="admin" style="background:#1e293b;color:white;">Gerencia / Admin</option>
+                        <option value="admin" style="background:#1e293b;color:white;">GERENCIA / ADMIN</option>
                     </select>
                 </div>
                 <div>
@@ -192,18 +192,22 @@
                         </div>
                     </div>
                     <div class="flex flex-col gap-2">
-                        <div onclick="abrirModalArmamento('activo')" class="flex justify-between items-center bg-green-50 px-3 py-2.5 rounded-xl border border-green-100 cursor-pointer hover:bg-green-100 transition-colors">
+                        <div onclick="toggleDesgloseEnCampo()" class="flex justify-between items-center bg-green-50 px-3 py-2.5 rounded-xl border border-green-100 cursor-pointer hover:bg-green-100 transition-colors">
                             <span class="text-[11px] font-bold text-green-700 uppercase tracking-wide">En Campo</span>
                             <span class="font-black text-green-600 text-base" id="armas-operativas-tbl">0</span>
                         </div>
+                        <div id="desglose-en-campo" style="display:none;"></div>
+
                         <div onclick="abrirModalArmamento('transito')" class="flex justify-between items-center bg-blue-50 px-3 py-2.5 rounded-xl border border-blue-100 cursor-pointer hover:bg-blue-100 transition-colors">
                             <span class="text-[11px] font-bold text-blue-700 uppercase tracking-wide">🚚 En Tránsito</span>
                             <span class="font-black text-blue-600 text-base" id="armas-transito">—</span>
                         </div>
-                        <div onclick="abrirModalArmamento('rastrillo')" class="flex justify-between items-center bg-slate-50 px-3 py-2.5 rounded-xl border border-slate-200 cursor-pointer hover:bg-slate-100 transition-colors">
+                        <div onclick="toggleDesgloseRastrillo()" class="flex justify-between items-center bg-slate-50 px-3 py-2.5 rounded-xl border border-slate-200 cursor-pointer hover:bg-slate-100 transition-colors">
                             <span class="text-[11px] font-bold text-slate-600 uppercase tracking-wide">Rastrillo</span>
                             <span class="font-black text-slate-700 text-base" id="armas-rastrillo">—</span>
                         </div>
+                        <div id="desglose-rastrillo" style="display:none;"></div>
+
                         <div onclick="abrirModalArmamento('perdida')" class="flex justify-between items-center bg-red-50 px-3 py-2.5 rounded-xl border border-red-100 cursor-pointer hover:bg-red-100 transition-colors">
                             <span class="text-[11px] font-bold text-red-700 uppercase tracking-wide">Pérdida/Robada</span>
                             <span class="font-black text-red-600 text-base" id="armas-perdida">—</span>
