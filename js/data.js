@@ -117,6 +117,8 @@ function procesarDatosAPI(json) {
                 guardia:    p.guardia       || '',
                 armado:     (p.armado || '').toLowerCase() === 'si' || p.armado === true,
                 arma:       p.arma          || null,
+                tieneLetal:   p.tieneLetal   === true,
+                tieneNoLetal: p.tieneNoLetal === true,
                 radio:      (p.radio  || '').toLowerCase() === 'si' || p.radio  === true,
                 radio_info: p.radio_info    || '',
                 turno:      p.turno         || '',
