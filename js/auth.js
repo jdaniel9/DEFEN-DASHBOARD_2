@@ -113,7 +113,7 @@ function mostrarErrorLogin(msg) {
     el.style.display = 'block';
 }
 
-async function intentarLogin(usuario, password) {
+async function intentarLogin(usuario, password, departamento) {
     const btn = document.getElementById('login-btn');
     btn.disabled = true;
     btn.textContent = 'Verificando…';
@@ -122,7 +122,7 @@ async function intentarLogin(usuario, password) {
     try {
         const res = await fetch(APPS_SCRIPT_URL, {
             method: 'POST',
-            body: JSON.stringify({ usuario, password })
+            body: JSON.stringify({ usuario, password, departamento })
         });
         const json = await res.json();
 
@@ -155,10 +155,15 @@ function inicializarLogin() {
 
     document.getElementById('login-form').addEventListener('submit', (e) => {
         e.preventDefault();
+        const departamento = document.getElementById('login-departamento').value;
         const usuario  = document.getElementById('login-usuario').value.trim();
         const password = document.getElementById('login-password').value;
+        if (!departamento) {
+            mostrarErrorLogin('Selecciona tu departamento antes de ingresar.');
+            return;
+        }
         if (!usuario || !password) return;
-        intentarLogin(usuario, password);
+        intentarLogin(usuario, password, departamento);
     });
 }
 
