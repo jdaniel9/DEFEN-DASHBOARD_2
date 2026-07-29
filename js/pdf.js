@@ -304,7 +304,7 @@ async function generarPDFGlobal() {
             const proys = proyectosFiltradosProvincia(n);
             if (proys.length === 0) return;
 
-            if (y > 250) { doc.addPage(); encabezadoMini(); y = MARGEN_PDF*0.6 + 8; }
+            if (y > 250) { encabezadoMini(); y = MARGEN_PDF*0.6 + 8; }
 
             // Encabezado de provincia (mini stat box a modo de "ficha")
             doc.setFillColor(...DARK);
@@ -320,10 +320,13 @@ async function generarPDFGlobal() {
                 startY: y, margin:{left:14,right:14,bottom:29,top:19}, didDrawPage: didDrawPageHook,
                 head: [['N°','Proyecto','G.','A.','Pu.','Fin','Días','Estado']],
                 body: numerarFilas(proys.map(p => {
+                    if (!p.fin) {
+                        return [p.nombre, p.guardias, p.armas, p.puestos??'—', '—', '—', 'SIN FECHA'];
+                    }
                     const d   = diasRestantes(p.fin);
                     const est = d <= 30 ? 'CRÍTICO' : d <= 60 ? 'ALERTA' : 'OK';
                     return [p.nombre, p.guardias, p.armas, p.puestos??'—',
-                        p.fin ? formatFecha(p.fin) : '—', `${d < 0 ? 'VENCIDO' : d+'d'}`, est];
+                        formatFecha(p.fin), `${d < 0 ? 'VENCIDO' : d+'d'}`, est];
                 })),
                 headStyles:{fillColor:[71,85,105],textColor:[255,255,255],fontSize:7,fontStyle:'bold',cellPadding:2.5},
                 bodyStyles:{fontSize:7,cellPadding:2}, alternateRowStyles:{fillColor:LGRAY},
@@ -334,6 +337,7 @@ async function generarPDFGlobal() {
                         if (v === 'CRÍTICO') d.cell.styles.textColor = RED;
                         else if (v === 'ALERTA') d.cell.styles.textColor = AMB;
                         else if (v === 'OK') d.cell.styles.textColor = GREEN;
+                        else if (v === 'SIN FECHA') d.cell.styles.textColor = [148,163,184];
                     }
                 }
             });
@@ -381,7 +385,7 @@ async function generarPDFGlobal() {
         });
 
         y = doc.lastAutoTable.finalY + 8;
-        if (y > 260) { doc.addPage(); encabezadoMini(); y = MARGEN_PDF*0.6 + 8; }
+        if (y > 260) { encabezadoMini(); y = MARGEN_PDF*0.6 + 8; }
 
         // Leyenda con círculos de color reales (nada de emoji, que se rompen en PDF)
         const leyenda = [['Vigente', GREEN], ['Por vencer (menos de 90 días)', AMB], ['Vencida', RED]];
@@ -453,14 +457,14 @@ async function generarPDFGlobal() {
             });
 
             if (Object.keys(puestosPorProyectoFiltrados).length > 0) {
-                if (y > 245) { doc.addPage(); encabezadoMini(); y = MARGEN_PDF*0.6 + 8; }
+                if (y > 245) { encabezadoMini(); y = MARGEN_PDF*0.6 + 8; }
                 doc.setFontSize(10); doc.setFont('helvetica','bold'); doc.setTextColor(...DARK);
                 doc.text('DETALLE POR PUESTO', 14, y); y += 6;
 
                 proys.forEach(p => {
                     const puestos = puestosPorProyectoFiltrados[p.nombre] || [];
                     if (puestos.length === 0) return;
-                    if (y > 250) { doc.addPage(); encabezadoMini(); y = MARGEN_PDF*0.6 + 8; }
+                    if (y > 250) { encabezadoMini(); y = MARGEN_PDF*0.6 + 8; }
 
                     doc.setFillColor(71,85,105);
                     doc.roundedRect(14, y, W210-28, 7, 2, 2, 'F');
