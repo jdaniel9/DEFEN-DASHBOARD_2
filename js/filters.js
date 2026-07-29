@@ -81,7 +81,7 @@ function provinciaPassaFiltros(nombre) {
         if (!pasaContrato) return false;
     }
 
-    const hayFiltrosPuesto = grupoActivo('jornada') || grupoActivo('arma') || grupoActivo('radio');
+    const hayFiltrosPuesto = grupoActivo('jornada') || grupoActivo('arma') || grupoActivo('claseArma') || grupoActivo('radio');
 
     if (hayFiltrosPuesto) {
         const puestosP = Object.values(puestosData[nombre] || {}).flat();
@@ -97,6 +97,12 @@ function provinciaPassaFiltros(nombre) {
                 const armado = p.armado === true || String(p.armado).toLowerCase() === 'si';
                 const cumple = filtrosActivos.arma.some(v =>
                     (v === 'armado' && armado) || (v === 'desarmado' && !armado)
+                );
+                if (!cumple) return false;
+            }
+            if (grupoActivo('claseArma')) {
+                const cumple = filtrosActivos.claseArma.some(v =>
+                    (v === 'letal' && p.tieneLetal) || (v === 'noletal' && p.tieneNoLetal)
                 );
                 if (!cumple) return false;
             }
@@ -223,4 +229,33 @@ function resetearFiltros() {
 
 function initChips() {
     document.querySelectorAll('.chip[data-val="todos"]').forEach(c => c.classList.add('active-blue'));
+}
+
+// Genera los chips de "Tipo de proyecto" a partir de los valores REALES
+// que existan en tus datos (tipo_contrato de la hoja 'proyectos') — ya no
+// depende de una lista fija de ODC/CT/BROW/CUST
+const COLORES_CHIP = ['amber','green','purple','slate','red','blue'];
+function renderChipsContrato() {
+    const cont = document.getElementById('chips-contrato');
+    if (!cont) return;
+
+    const valores = new Set();
+    Object.values(detalleProvincias || {}).forEach(det => {
+        (det.proyectosList || []).forEach(p => {
+            if (p.tipoContrato) valores.add(p.tipoContrato.toUpperCase().trim());
+        });
+    });
+    const lista = [...valores].sort();
+
+    // Conservar selección previa si algún valor sigue existiendo
+    const seleccionPrevia = new Set(filtrosActivos.contrato);
+    filtrosActivos.contrato = filtrosActivos.contrato.filter(v => lista.some(l => l.toLowerCase() === v));
+
+    cont.innerHTML = `<button class="chip${filtrosActivos.contrato.length===0?' active-blue':''}" data-filtro="contrato" data-val="todos" onclick="toggleChip(this,'blue')">◉ Todos</button>`
+        + lista.map((v, i) => {
+            const val = v.toLowerCase();
+            const color = COLORES_CHIP[i % COLORES_CHIP.length];
+            const activo = seleccionPrevia.has(val);
+            return `<button class="chip${activo ? ' active-'+color : ''}" data-filtro="contrato" data-val="${val}" onclick="toggleChip(this,'${color}')">${v}</button>`;
+        }).join('');
 }
