@@ -219,6 +219,8 @@ function crearAcordeonProyecto(provincia, proyecto, idx) {
             </div>
         </div>
         <div class="flex items-center gap-1.5 flex-shrink-0">
+            ${proyecto.urlDocumento ? `<a href="${proyecto.urlDocumento}" target="_blank" rel="noopener" onclick="event.stopPropagation()" class="text-[8px] font-black bg-slate-700 hover:bg-slate-800 text-white px-1.5 py-0.5 rounded-full" title="Descargar OC / Contrato">⬇️ OC/CT</a>` : ''}
+            ${proyecto.urlKardex ? `<a href="${proyecto.urlKardex}" target="_blank" rel="noopener" onclick="event.stopPropagation()" class="text-[8px] font-black bg-green-700 hover:bg-green-800 text-white px-1.5 py-0.5 rounded-full" title="Descargar Kardex (Excel)">📊 Kardex</a>` : ''}
             ${puestos.length > 0 ? `<span class="text-[9px] font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded-full">${puestos.length} pts</span>` : ''}
             <span class="acord-chevron">▼</span>
         </div>`;
@@ -269,6 +271,16 @@ function crearAcordeonProyecto(provincia, proyecto, idx) {
             exportarPDFProyecto(proyecto.nombre);
         };
         filaBtns.appendChild(btnPdfProy);
+
+        const btnExcelProy = document.createElement('button');
+        btnExcelProy.className = 'flex items-center gap-1 text-[10px] font-black px-3 py-1.5 rounded-xl transition-colors bg-green-600 hover:bg-green-700 text-white';
+        btnExcelProy.title = 'Descargar reporte Excel de este proyecto';
+        btnExcelProy.innerHTML = '📊 Excel';
+        btnExcelProy.onclick = (e) => {
+            e.stopPropagation();
+            exportarExcelProyecto(proyecto.nombre);
+        };
+        filaBtns.appendChild(btnExcelProy);
 
         body.appendChild(filaBtns);
 
@@ -879,6 +891,53 @@ function dibujarMapaEsquematico(doc, y, puestosPorProyecto, W) {
 // =====================================================================
 // REPORTE POR PROVINCIA — Resumen → Proyectos → Puestos → Mapa esquemático
 // =====================================================================
+// =====================================================================
+// EXCEL — Reporte por provincia (mismo alcance/filtros que el PDF)
+// =====================================================================
+function exportarExcelProvincia() {
+    const prov     = provinciaActual || document.getElementById('prov-nombre').textContent;
+    const detalle  = detalleProvincias[prov] || {};
+    const todosNeutros  = !Object.keys(filtrosActivos).some(g => grupoActivo(g));
+    const proyectosList = todosNeutros ? (detalle.proyectosList || []) : calcTotalesFiltrados(prov).proyectosList;
+
+    if (proyectosList.length === 0) { alert('No hay proyectos para exportar con el filtro actual.'); return; }
+
+    const wb = XLSX.utils.book_new();
+
+    // ── Hoja 1: Proyectos ──
+    const filasProy = proyectosList.map((p, i) => ({
+        'N°': i+1, 'Proyecto': p.nombre, 'Guardias': p.guardias, 'Armas': p.armas,
+        'Puestos': p.puestos ?? '', 'Finaliza': p.fin ? formatFecha(p.fin) : '',
+        'Vacantes': p.vacantes || 0,
+        'Supervisor(es)': (p.supervisores||[]).join(', ')
+    }));
+    const wsProy = XLSX.utils.json_to_sheet(filasProy);
+    wsProy['!cols'] = Object.keys(filasProy[0]).map(k => ({ wch: Math.max(k.length+2, 14) }));
+    XLSX.utils.book_append_sheet(wb, wsProy, 'Proyectos');
+
+    // ── Hoja 2: Detalle por puesto ──
+    const filasPuestos = [];
+    proyectosList.forEach(p => {
+        puestosFiltrados(prov, p.nombre).forEach(pu => {
+            const gs = Array.isArray(pu.guardias) ? pu.guardias : (pu.guardia||'').split(',').map(g=>g.trim()).filter(Boolean);
+            filasPuestos.push({
+                'Proyecto': p.nombre, 'Puesto': pu.nombre, 'Guardia(s)': gs.join(', '),
+                'Tipo': pu.tipo||'', 'Armado': pu.armado?'Sí':'No', 'Clase Arma': pu.tieneLetal?'AL':pu.tieneNoLetal?'ANL':'',
+                'Arma': pu.arma||'', 'Radio': pu.radio?'Sí':'No', 'Radio Info': pu.radio_info||''
+            });
+        });
+    });
+    if (filasPuestos.length > 0) {
+        const wsPu = XLSX.utils.json_to_sheet(filasPuestos);
+        wsPu['!cols'] = Object.keys(filasPuestos[0]).map(k => ({ wch: Math.max(k.length+2, 14) }));
+        XLSX.utils.book_append_sheet(wb, wsPu, 'Detalle por Puesto');
+    }
+
+    const hoy = new Date();
+    const fechaHoy = `${String(hoy.getDate()).padStart(2,'0')}-${String(hoy.getMonth()+1).padStart(2,'0')}-${hoy.getFullYear()}`;
+    XLSX.writeFile(wb, `Reporte_${prov}_${fechaHoy}.xlsx`);
+}
+
 async function exportarPDF() {
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
@@ -1071,6 +1130,37 @@ async function exportarPDF() {
 // =====================================================================
 // REPORTE POR PROYECTO/PUESTO — Resumen → Agentes/Armas/Radios/Puestos → Mapa
 // =====================================================================
+// =====================================================================
+// EXCEL — Reporte por proyecto (mismo alcance/filtros que el PDF)
+// =====================================================================
+function exportarExcelProyecto(nombreProyecto) {
+    const prov     = provinciaActual;
+    const detalle  = detalleProvincias[prov] || {};
+    const proyecto = (detalle.proyectosList || []).find(p => p.nombre === nombreProyecto);
+    const puestos  = puestosFiltrados(prov, nombreProyecto);
+
+    if (puestos.length === 0) { alert('No hay puestos para exportar con el filtro actual.'); return; }
+
+    const filas = puestos.map((pu, i) => {
+        const gs = Array.isArray(pu.guardias) ? pu.guardias : (pu.guardia||'').split(',').map(g=>g.trim()).filter(Boolean);
+        return {
+            'N°': i+1, 'Puesto': pu.nombre, 'Guardia(s)': gs.join(', '), 'Tipo': pu.tipo||'',
+            'Armado': pu.armado?'Sí':'No', 'Clase Arma': pu.tieneLetal?'AL':pu.tieneNoLetal?'ANL':'',
+            'Arma': pu.arma||'', 'Radio': pu.radio?'Sí':'No', 'Radio Info': pu.radio_info||'',
+            'Turno': pu.turno||'', 'Días': pu.dias||''
+        };
+    });
+
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(filas);
+    ws['!cols'] = Object.keys(filas[0]).map(k => ({ wch: Math.max(k.length+2, 14) }));
+    XLSX.utils.book_append_sheet(wb, ws, nombreProyecto.substring(0,31));
+
+    const hoy = new Date();
+    const fechaHoy = `${String(hoy.getDate()).padStart(2,'0')}-${String(hoy.getMonth()+1).padStart(2,'0')}-${hoy.getFullYear()}`;
+    XLSX.writeFile(wb, `Reporte_${nombreProyecto.replace(/[^\w]+/g,'_')}_${fechaHoy}.xlsx`);
+}
+
 async function exportarPDFProyecto(nombreProyecto) {
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF({ orientation:'portrait', unit:'mm', format:'a4' });
