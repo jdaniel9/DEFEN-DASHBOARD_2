@@ -81,14 +81,17 @@ function toggleDesgloseRastrillo() {
     const provincias = Object.keys(porProvincia).sort();
     cont.innerHTML = provincias.length === 0
         ? `<p style="font-size:10px;color:#94a3b8;font-style:italic;padding:6px 12px;">Sin armas en rastrillo registradas.</p>`
-        : provincias.map(p => `
+        : provincias.map(p => {
+            const tipoSede = (data[p] && data[p].tipo) ? data[p].tipo.toUpperCase() : '';
+            const etiqueta = tipoSede ? `${p} - ${tipoSede}` : p;
+            return `
             <div onclick="event.stopPropagation(); abrirModalArmamento({estado:'rastrillo', provincia:'${normalizarTexto(p)}'})"
                  style="display:flex;justify-content:space-between;align-items:center;padding:6px 12px;margin-left:12px;border-left:2px solid #cbd5e1;cursor:pointer;border-radius:0 8px 8px 0;"
                  onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='transparent'">
-                <span style="font-size:10px;font-weight:700;color:#475569;">🏢 ${p}</span>
+                <span style="font-size:10px;font-weight:700;color:#475569;">🏢 ${etiqueta}</span>
                 <span style="font-size:11px;font-weight:900;color:#1e293b;">${porProvincia[p]}</span>
-            </div>
-        `).join('');
+            </div>`;
+        }).join('');
     cont.style.display = 'block';
 }
 
@@ -139,23 +142,31 @@ function toggleDesgloseEnCampoClase(clase) {
         return clase === 'letal' ? (c.includes('letal') && !c.includes('noletal')) : c.includes('noletal');
     });
 
+    // Por cada tipo, guardamos el valor de 'clase' EXACTO como aparece en tus
+    // datos (ej. "No Letal") normalizado igual que lo hacen los chips del
+    // filtro (con espacio incluido) — así el preset coincide de verdad
     const porTipo = {};
+    const claseRealPorTipo = {};
     activas.forEach(a => {
         const t = a.tipo || 'Sin tipo';
         porTipo[t] = (porTipo[t] || 0) + 1;
+        if (!claseRealPorTipo[t]) claseRealPorTipo[t] = normalizarTexto(a.clase);
     });
 
     const tipos = Object.keys(porTipo).sort();
     cont.innerHTML = tipos.length === 0
         ? `<p style="font-size:9px;color:#94a3b8;font-style:italic;padding:4px 12px 4px 24px;">Sin datos.</p>`
-        : tipos.map(t => `
-            <div onclick="event.stopPropagation(); abrirModalArmamento({estado:'activo', clase:'${clase}', tipo:'${normalizarTexto(t)}'})"
+        : tipos.map(t => {
+            const claseValor = (claseRealPorTipo[t] || '').replace(/'/g,"\\'");
+            const tipoValor  = normalizarTexto(t).replace(/'/g,"\\'");
+            return `
+            <div onclick="event.stopPropagation(); abrirModalArmamento({estado:'activo', clase:'${claseValor}', tipo:'${tipoValor}'})"
                  style="display:flex;justify-content:space-between;align-items:center;padding:4px 12px 4px 24px;cursor:pointer;border-radius:8px;"
                  onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background='transparent'">
                 <span style="font-size:9px;font-weight:600;color:#64748b;">🔫 ${t}</span>
                 <span style="font-size:10px;font-weight:800;color:#334155;">${porTipo[t]}</span>
-            </div>
-        `).join('');
+            </div>`;
+        }).join('');
     cont.style.display = 'block';
 }
 
