@@ -25,12 +25,13 @@ let puestosData       = {};
 // ── Estado del panel de filtros globales (arrays = multi-selección) ──
 // Array vacío = sin restricción en ese grupo ("todos")
 const filtrosActivos = {
-    jornada:  [],
-    arma:     [],
-    radio:    [],
-    vence:    [],
-    contrato: [],
-    cat:      []
+    jornada:   [],
+    arma:      [],
+    claseArma: [],
+    radio:     [],
+    vence:     [],
+    contrato:  [],
+    cat:       []
 };
 
 // ── Estado del mapa de provincia (Leaflet) ───────────────────────
