@@ -28,19 +28,13 @@ function parseFechaISO(str) {
     return isNaN(d) ? null : d;
 }
 
-async function generarReporteNovedades() {
-    const periodo = document.getElementById('novedades-periodo')?.value || 'semanal';
+// Filtra ingresos/salidas/faltas/llamados según el periodo elegido —
+// compartido entre el generador de PDF y el de Excel
+function obtenerNovedadesFiltradas(periodo) {
     const { diaInicio, diaFin, hoy } = calcularRangoNovedades(periodo);
-
-    // Rango de fechas reales (para filtrar ingresos/salidas/llamados por fecha)
     const anio = hoy.getFullYear(), mes = hoy.getMonth();
     const fechaDesde = new Date(anio, mes, diaInicio);
     const fechaHasta = new Date(anio, mes, diaFin, 23, 59, 59);
-
-    const { jsPDF } = window.jspdf;
-    const doc = new jsPDF({ orientation:'portrait', unit:'mm', format:'a4' });
-    const W = 210, H = 297;
-    const DARK=[15,23,42], RED=[220,38,38], AMB=[217,119,6], GREEN=[22,163,74], LGRAY=[248,250,252];
 
     const fechaHoyStr = `${String(hoy.getDate()).padStart(2,'0')}/${String(hoy.getMonth()+1).padStart(2,'0')}/${hoy.getFullYear()}`;
     const nombresMes = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
@@ -48,17 +42,6 @@ async function generarReporteNovedades() {
         ? `Semanal — ${String(diaInicio).padStart(2,'0')} al ${String(diaFin).padStart(2,'0')} de ${nombresMes[mes]} ${anio}`
         : `Mensual — ${nombresMes[mes]} ${anio} (hasta el ${String(diaFin).padStart(2,'0')})`;
 
-    const subt = `Reporte de Novedades de Personal — ${etiquetaPeriodo}`;
-    dibujarMembretePDF(doc, subt, fechaHoyStr);
-    const didDrawPageNov = () => dibujarMembretePDF(doc, subt, fechaHoyStr);
-
-    let y = MARGEN_PDF + 8;
-    doc.setTextColor(...DARK); doc.setFontSize(14); doc.setFont('helvetica','bold');
-    doc.text('Novedades de Personal', 14, y); y += 6;
-    doc.setFontSize(9); doc.setFont('helvetica','normal'); doc.setTextColor(100,116,139);
-    doc.text(etiquetaPeriodo, 14, y); y += 10;
-
-    // ── Filtrar por rango de fechas ──
     const ingresosPeriodo = (novedadesPersonal.ingresos || []).filter(r => {
         const f = parseFechaISO(r.fecha);
         return f && f >= fechaDesde && f <= fechaHasta;
@@ -76,6 +59,28 @@ async function generarReporteNovedades() {
         const f = parseFechaISO(r.fecha);
         return f && f >= fechaDesde && f <= fechaHasta;
     });
+
+    return { ingresosPeriodo, salidasPeriodo, faltasPeriodo, llamadosPeriodo, etiquetaPeriodo, fechaHoyStr, hoy };
+}
+
+async function generarReporteNovedades() {
+    const periodo = document.getElementById('novedades-periodo')?.value || 'semanal';
+    const { ingresosPeriodo, salidasPeriodo, faltasPeriodo, llamadosPeriodo, etiquetaPeriodo, fechaHoyStr } = obtenerNovedadesFiltradas(periodo);
+
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ orientation:'portrait', unit:'mm', format:'a4' });
+    const W = 210, H = 297;
+    const DARK=[15,23,42], RED=[220,38,38], AMB=[217,119,6], GREEN=[22,163,74], LGRAY=[248,250,252];
+
+    const subt = `Reporte de Novedades de Personal — ${etiquetaPeriodo}`;
+    dibujarMembretePDF(doc, subt, fechaHoyStr);
+    const didDrawPageNov = () => dibujarMembretePDF(doc, subt, fechaHoyStr);
+
+    let y = MARGEN_PDF + 8;
+    doc.setTextColor(...DARK); doc.setFontSize(14); doc.setFont('helvetica','bold');
+    doc.text('Novedades de Personal', 14, y); y += 6;
+    doc.setFontSize(9); doc.setFont('helvetica','normal'); doc.setTextColor(100,116,139);
+    doc.text(etiquetaPeriodo, 14, y); y += 10;
 
     // ── KPIs resumen ──
     const kpis = [
@@ -182,4 +187,54 @@ async function generarReporteNovedades() {
     }
 
     doc.save(`Novedades_Personal_${periodo}_${fechaHoyStr.replace(/\//g,'-')}.pdf`);
+}
+
+// =====================================================================
+// EXCEL — Novedades de Personal (mismas secciones que el PDF, en hojas separadas)
+// =====================================================================
+function generarExcelNovedades() {
+    const periodo = document.getElementById('novedades-periodo')?.value || 'semanal';
+    const { ingresosPeriodo, salidasPeriodo, faltasPeriodo, llamadosPeriodo, fechaHoyStr } = obtenerNovedadesFiltradas(periodo);
+
+    if (!ingresosPeriodo.length && !salidasPeriodo.length && !faltasPeriodo.length && !llamadosPeriodo.length) {
+        alert('No hay novedades registradas en el periodo seleccionado.');
+        return;
+    }
+
+    const wb = XLSX.utils.book_new();
+    const agregarHoja = (nombre, filas) => {
+        if (filas.length === 0) return;
+        const ws = XLSX.utils.json_to_sheet(filas);
+        ws['!cols'] = Object.keys(filas[0]).map(k => ({ wch: Math.max(k.length+2, 14) }));
+        XLSX.utils.book_append_sheet(wb, ws, nombre);
+    };
+
+    agregarHoja('Ingresos', ingresosPeriodo.map((r,i) => ({
+        'N°': i+1, 'Fecha': formatFecha(r.fecha), 'Nombre': r.nombre, 'Cédula': r.cedula||'',
+        'Puesto': r.puesto, 'Proyecto': r.proyecto||'', 'Provincia': r.provincia||''
+    })));
+
+    agregarHoja('Salidas', salidasPeriodo.map((r,i) => ({
+        'N°': i+1, 'Fecha': formatFecha(r.fecha), 'Nombre': r.nombre, 'Cédula': r.cedula||'',
+        'Puesto': r.puesto, 'Proyecto': r.proyecto||'', 'Provincia': r.provincia||''
+    })));
+
+    agregarHoja('Faltas Injustificadas', faltasPeriodo.filter(r=>r.diasInjustificados.length>0).map((r,i) => ({
+        'N°': i+1, 'Nombre': r.nombre, 'Cédula': r.cedula||'', 'Puesto': r.puesto,
+        'Proyecto': r.proyecto||'', 'Provincia': r.provincia||'',
+        'N° Faltas': r.diasInjustificados.length, 'Días': r.diasInjustificados.join(', ')
+    })));
+
+    agregarHoja('Faltas Justificadas', faltasPeriodo.filter(r=>r.diasJustificados.length>0).map((r,i) => ({
+        'N°': i+1, 'Nombre': r.nombre, 'Cédula': r.cedula||'', 'Puesto': r.puesto,
+        'Proyecto': r.proyecto||'', 'Provincia': r.provincia||'',
+        'N° Faltas': r.diasJustificados.length, 'Días': r.diasJustificados.join(', ')
+    })));
+
+    agregarHoja('Llamados de Atención', llamadosPeriodo.map((r,i) => ({
+        'N°': i+1, 'Fecha': formatFecha(r.fecha), 'Guardia': r.nombre_guardia||'', 'Puesto': r.puesto||'',
+        'Proyecto': r.proyecto||'', 'Motivo': r.motivo||'', 'Tipo': r.tipo_llamado||'', 'Registrado por': r.registrado_por||''
+    })));
+
+    XLSX.writeFile(wb, `Novedades_Personal_${periodo}_${fechaHoyStr.replace(/\//g,'-')}.xlsx`);
 }
