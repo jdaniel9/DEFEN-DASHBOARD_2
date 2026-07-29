@@ -221,6 +221,7 @@ function crearAcordeonProyecto(provincia, proyecto, idx) {
         <div class="flex items-center gap-1.5 flex-shrink-0">
             ${proyecto.urlDocumento ? `<a href="${proyecto.urlDocumento}" target="_blank" rel="noopener" onclick="event.stopPropagation()" class="text-[8px] font-black bg-slate-700 hover:bg-slate-800 text-white px-1.5 py-0.5 rounded-full" title="Descargar OC / Contrato">⬇️ OC/CT</a>` : ''}
             ${proyecto.urlKardex ? `<a href="${proyecto.urlKardex}" target="_blank" rel="noopener" onclick="event.stopPropagation()" class="text-[8px] font-black bg-green-700 hover:bg-green-800 text-white px-1.5 py-0.5 rounded-full" title="Descargar Kardex (Excel)">📊 Kardex</a>` : ''}
+            <button onclick="event.stopPropagation(); archivarProyectoActivo('${provincia}','${proyecto.nombre.replace(/'/g,"\\'")}')" class="text-[8px] font-black bg-amber-600 hover:bg-amber-700 text-white px-1.5 py-0.5 rounded-full" title="Archivar este proyecto (mover al histórico)">🗄️</button>
             ${puestos.length > 0 ? `<span class="text-[9px] font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded-full">${puestos.length} pts</span>` : ''}
             <span class="acord-chevron">▼</span>
         </div>`;
