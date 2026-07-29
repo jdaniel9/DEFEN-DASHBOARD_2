@@ -28,6 +28,10 @@ const ARM_COLUMNAS = [
 
 // ── Abrir modal de armamento, opcionalmente pre-filtrado por estado ──
 function abrirModalArmamento(estadoPreseleccionado) {
+    if (typeof usuarioPuedeVerArmamentoDetalle === 'function' && !usuarioPuedeVerArmamentoDetalle()) {
+        alert('Tu perfil no tiene permiso para ver el detalle de armamento.');
+        return;
+    }
     filtrosArmamento = { estado: [], tipo: [], clase: [], categoria: [], provincia: [], proyecto: [] };
     busquedaArmamento = '';
     if (estadoPreseleccionado) filtrosArmamento.estado = [estadoPreseleccionado];
@@ -329,6 +333,10 @@ async function exportarPDFArmamento() {
 // RADIOS
 // ================================================================
 function abrirModalRadios() {
+    if (typeof usuarioPuedeVerRadiosDetalle === 'function' && !usuarioPuedeVerRadiosDetalle()) {
+        alert('Tu perfil no tiene permiso para ver el detalle de radios.');
+        return;
+    }
     filtrosRadios = { provincia: [], proyecto: [] };
     busquedaRadios = '';
     document.getElementById('radios-modal').style.display = 'flex';
