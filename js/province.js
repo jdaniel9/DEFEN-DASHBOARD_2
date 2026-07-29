@@ -21,9 +21,9 @@ function calcTotalesFiltrados(nombre) {
         );
     }
 
-    // Si hay filtros de puesto (jornada/arma/radio), filtrar proyectos que tengan
+    // Si hay filtros de puesto (jornada/arma/claseArma/radio), filtrar proyectos que tengan
     // al menos un puesto que los cumpla, Y recalcular armas reales de esos puestos
-    const hayFiltroPuesto = grupoActivo('jornada') || grupoActivo('arma') || grupoActivo('radio');
+    const hayFiltroPuesto = grupoActivo('jornada') || grupoActivo('arma') || grupoActivo('claseArma') || grupoActivo('radio');
     if (hayFiltroPuesto) {
         const puestosP = Object.entries(puestosData[nombre] || {});
         proysFiltrados = proysFiltrados
@@ -39,6 +39,10 @@ function calcTotalesFiltrados(nombre) {
                     const conRadio = pu.radio  === true || String(pu.radio).toLowerCase()  === 'si';
                     if (grupoActivo('arma')) {
                         const cumple = filtrosActivos.arma.some(v => (v==='armado'&&armado)||(v==='desarmado'&&!armado));
+                        if (!cumple) return false;
+                    }
+                    if (grupoActivo('claseArma')) {
+                        const cumple = filtrosActivos.claseArma.some(v => (v==='letal'&&pu.tieneLetal)||(v==='noletal'&&pu.tieneNoLetal));
                         if (!cumple) return false;
                     }
                     if (grupoActivo('radio')) {
@@ -71,7 +75,7 @@ function calcTotalesFiltrados(nombre) {
 // =====================================================================
 function puestosFiltrados(nombre, proyectoNombre) {
     const todos = (puestosData[nombre] || {})[proyectoNombre] || [];
-    if (!grupoActivo('jornada') && !grupoActivo('arma') && !grupoActivo('radio')) return todos;
+    if (!grupoActivo('jornada') && !grupoActivo('arma') && !grupoActivo('claseArma') && !grupoActivo('radio')) return todos;
     return todos.filter(pu => {
         if (grupoActivo('jornada')) {
             const tipo = (pu.tipo||'').toLowerCase().replace(/\s/g,'');
@@ -81,6 +85,10 @@ function puestosFiltrados(nombre, proyectoNombre) {
         const conRadio = pu.radio  === true || String(pu.radio).toLowerCase()  === 'si';
         if (grupoActivo('arma')) {
             const cumple = filtrosActivos.arma.some(v => (v==='armado'&&armado)||(v==='desarmado'&&!armado));
+            if (!cumple) return false;
+        }
+        if (grupoActivo('claseArma')) {
+            const cumple = filtrosActivos.claseArma.some(v => (v==='letal'&&pu.tieneLetal)||(v==='noletal'&&pu.tieneNoLetal));
             if (!cumple) return false;
         }
         if (grupoActivo('radio')) {
@@ -478,7 +486,11 @@ function colocarMarcador(puesto, abrirPopup) {
                     : guardiasPopup}
                 <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #f1f5f9;padding-bottom:6px;">
                     <span style="font-size:9px;font-weight:700;color:#94a3b8;text-transform:uppercase;">Armado</span>
-                    <span style="font-size:11px;font-weight:800;color:${puesto.armado?'#dc2626':'#16a34a'};">${puesto.armado ? '✅ SÍ · '+(puesto.arma||'') : '❌ NO'}</span>
+                    <span style="font-size:11px;font-weight:800;color:${puesto.armado?'#dc2626':'#16a34a'};">
+                        ${puesto.armado ? '✅ SÍ · '+(puesto.arma||'') : '❌ NO'}
+                        ${puesto.tieneLetal   ? ` <span style="font-size:8px;font-weight:900;background:#dc2626;color:white;padding:1px 4px;border-radius:4px;">AL</span>` : ''}
+                        ${puesto.tieneNoLetal ? ` <span style="font-size:8px;font-weight:900;background:#f59e0b;color:white;padding:1px 4px;border-radius:4px;">ANL</span>` : ''}
+                    </span>
                 </div>
                 <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #f1f5f9;padding-bottom:6px;">
                     <span style="font-size:9px;font-weight:700;color:#94a3b8;text-transform:uppercase;">Radio</span>
@@ -931,6 +943,7 @@ async function exportarPDF() {
         const chips = [];
         if (grupoActivo('jornada'))  chips.push(`Jornada: ${filtrosActivos.jornada.join('/')}`);
         if (grupoActivo('arma'))     chips.push(`Arma: ${filtrosActivos.arma.join('/')}`);
+        if (grupoActivo('claseArma'))chips.push(`Clase: ${filtrosActivos.claseArma.join('/')}`);
         if (grupoActivo('radio'))    chips.push(`Radio: ${filtrosActivos.radio.join('/')}`);
         if (grupoActivo('vence'))    chips.push(`Vencimiento: ${filtrosActivos.vence.join('/')}`);
         if (grupoActivo('contrato')) chips.push(`Contrato: ${filtrosActivos.contrato.join('/')}`);
@@ -1083,13 +1096,14 @@ async function exportarPDFProyecto(nombreProyecto) {
 
     const puestosTodos = (puestosData[prov] || {})[nombreProyecto] || [];
     const puestos       = puestosFiltrados(prov, nombreProyecto);
-    const hayFiltroPuesto = grupoActivo('jornada') || grupoActivo('arma') || grupoActivo('radio');
+    const hayFiltroPuesto = grupoActivo('jornada') || grupoActivo('arma') || grupoActivo('claseArma') || grupoActivo('radio');
     const dias    = proyecto && proyecto.fin ? Math.round((new Date(proyecto.fin) - hoy)/86400000) : null;
 
     if (hayFiltroPuesto) {
         const chips = [];
         if (grupoActivo('jornada')) chips.push(`Jornada: ${filtrosActivos.jornada.join('/')}`);
         if (grupoActivo('arma'))    chips.push(`Arma: ${filtrosActivos.arma.join('/')}`);
+        if (grupoActivo('claseArma'))chips.push(`Clase: ${filtrosActivos.claseArma.join('/')}`);
         if (grupoActivo('radio'))   chips.push(`Radio: ${filtrosActivos.radio.join('/')}`);
         doc.setFillColor(254,243,199);
         doc.roundedRect(14, y, W-28, 8, 2, 2, 'F');
