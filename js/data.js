@@ -96,6 +96,12 @@ function procesarDatosAPI(json) {
         delete json.__vacantes_nacional__;
     }
 
+    // ── Proyectos históricos (archivados) ──
+    if (json.__historico__) {
+        historicoProyectos = Array.isArray(json.__historico__) ? json.__historico__ : [];
+        delete json.__historico__;
+    }
+
     // ── Puestos: indexar por provincia → proyecto → array ──
     if (json.__puestos__) {
         json.__puestos__.forEach(p => {
@@ -145,7 +151,8 @@ function procesarDatosAPI(json) {
             guardias:  Number(p.guardias)  || 0,
             armas:     Number(p.armas)     || 0,
             puestos:   Number(p.puestos)   || 0,
-            proyectos: Number(p.proyectos) || 0
+            proyectos: Number(p.proyectos) || 0,
+            rastrilloSede: Number(p.rastrilloSede) || 0
         };
         const ti = p.tramiteInfo || {};
         detalleProvincias[nombre] = {
