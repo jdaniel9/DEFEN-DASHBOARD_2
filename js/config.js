@@ -9,7 +9,7 @@ const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwnBgAAvMqpP9fP
 const IMG_MAPA  = 'img/mapa.png';
 const IMG_FONDO = 'img/fondo1.png';
 const IMG_LOGO  = 'img/logo.png';
-
+ 
 // ── Estado global de la aplicación ──────────────────────────────
 let data              = {};
 let detalleProvincias = {};
@@ -20,8 +20,9 @@ let asistenciaHoy     = {};
 let novedadesPersonal = { ingresos: [], salidas: [], faltas: [] };
 let llamadosAtencion  = [];
 let vacantesNacional  = 0;
+let historicoProyectos = [];
 let puestosData       = {};
-
+ 
 // ── Estado del panel de filtros globales (arrays = multi-selección) ──
 // Array vacío = sin restricción en ese grupo ("todos")
 const filtrosActivos = {
@@ -33,7 +34,7 @@ const filtrosActivos = {
     contrato:  [],
     cat:       []
 };
-
+ 
 // ── Estado del mapa de provincia (Leaflet) ───────────────────────
 let provMap         = null;
 let marcadoresMapa  = [];
@@ -43,7 +44,7 @@ let mostrandoTodos  = false;
 let provinciaActual = null;
 let puestosActuales = [];
 let filtroActivo    = 'todos';
-
+ 
 // Datos locales de respaldo para puestos (con coordenadas reales de Pichincha)
 const PUESTOS_LOCALES = {
     "PICHINCHA": {
@@ -81,3 +82,4 @@ const PUESTOS_LOCALES = {
         ]
     }
 };
+ 
