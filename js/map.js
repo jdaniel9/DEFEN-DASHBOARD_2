@@ -123,6 +123,12 @@ function renderDetailPanel(nombre) {
                            title="Descargar OC / Contrato">
                             ⬇️ OC/CT
                         </a>` : ''}
+                        ${p.urlKardex ? `
+                        <a href="${p.urlKardex}" target="_blank" rel="noopener" onclick="event.stopPropagation()"
+                           class="flex items-center gap-1 bg-green-700 hover:bg-green-800 text-white text-[9px] font-black px-2 py-1 rounded-full transition-colors"
+                           title="Descargar Kardex de Inventario (Excel)">
+                            📊 Kardex
+                        </a>` : ''}
                         <span class="text-[10px] font-bold px-2.5 py-1 rounded-full whitespace-nowrap ${al.cls}">${al.label}</span>
                         <span class="chev-puestos text-[10px] text-slate-400 transition-transform">▾</span>
                     </div>
@@ -185,6 +191,16 @@ function renderDetailPanel(nombre) {
                 ${supsProv.length > 0 ? `<p class="text-[9px] text-slate-400 font-medium mt-1">${supsProv.length} asignado(s)</p>` : ''}
             </div>
         </div>
+
+        ${(detalle.urlPermisoOperaciones || detalle.urlTenenciaArmas || detalle.urlPermisoUniforme) ? `
+        <div class="bg-indigo-50 border border-indigo-200 rounded-xl p-3 mb-4">
+            <p class="text-[9px] font-bold text-indigo-700 uppercase tracking-wider mb-2">📋 Documentos Habilitantes</p>
+            <div class="flex flex-wrap gap-2">
+                ${detalle.urlPermisoOperaciones ? `<a href="${detalle.urlPermisoOperaciones}" target="_blank" rel="noopener" class="flex items-center gap-1.5 bg-white border border-indigo-200 hover:bg-indigo-100 text-indigo-700 text-[10px] font-black px-3 py-1.5 rounded-lg transition-colors">⬇️ Permiso de Operaciones</a>` : ''}
+                ${detalle.urlTenenciaArmas ? `<a href="${detalle.urlTenenciaArmas}" target="_blank" rel="noopener" class="flex items-center gap-1.5 bg-white border border-indigo-200 hover:bg-indigo-100 text-indigo-700 text-[10px] font-black px-3 py-1.5 rounded-lg transition-colors">⬇️ Tenencia de Armas</a>` : ''}
+                ${detalle.urlPermisoUniforme ? `<a href="${detalle.urlPermisoUniforme}" target="_blank" rel="noopener" class="flex items-center gap-1.5 bg-white border border-indigo-200 hover:bg-indigo-100 text-indigo-700 text-[10px] font-black px-3 py-1.5 rounded-lg transition-colors">⬇️ Permiso de Uniforme</a>` : ''}
+            </div>
+        </div>` : ''}
 
         <div>
             <div class="flex items-center gap-2 mb-2">
