@@ -327,6 +327,16 @@
                 </div>
             </div>
 
+            <!-- ── 2B. CLASE DE ARMA ── -->
+            <div class="pfg-section">
+                <p class="pfg-title">☠️ Clase de arma</p>
+                <div class="pfg-chips">
+                    <button class="chip" data-filtro="claseArma" data-val="todos"   onclick="toggleChip(this,'blue')" >◉ Todos</button>
+                    <button class="chip" data-filtro="claseArma" data-val="letal"   onclick="toggleChip(this,'red')"  >☠️ Letal (AL)</button>
+                    <button class="chip" data-filtro="claseArma" data-val="noletal" onclick="toggleChip(this,'amber')">🛡️ No Letal (ANL)</button>
+                </div>
+            </div>
+
             <!-- ── 3. RADIO ── -->
             <div class="pfg-section">
                 <p class="pfg-title">📻 Radio</p>
@@ -348,15 +358,11 @@
                 </div>
             </div>
 
-            <!-- ── 5. TIPO DE PROYECTO ── -->
+            <!-- ── 5. TIPO DE PROYECTO (dinámico — se llena con lo que exista en tus datos) ── -->
             <div class="pfg-section">
                 <p class="pfg-title">📑 Tipo de proyecto</p>
-                <div class="pfg-chips">
-                    <button class="chip" data-filtro="contrato" data-val="todos" onclick="toggleChip(this,'blue')"  >◉ Todos</button>
-                    <button class="chip" data-filtro="contrato" data-val="odc"   onclick="toggleChip(this,'amber')" >📦 ODC</button>
-                    <button class="chip" data-filtro="contrato" data-val="ct"    onclick="toggleChip(this,'green')" >📄 Contrato</button>
-                    <button class="chip" data-filtro="contrato" data-val="brow"  onclick="toggleChip(this,'purple')">🤝 Brow</button>
-                    <button class="chip" data-filtro="contrato" data-val="cust"  onclick="toggleChip(this,'slate')" >👮 Custodios</button>
+                <div class="pfg-chips" id="chips-contrato">
+                    <button class="chip active-blue" data-filtro="contrato" data-val="todos" onclick="toggleChip(this,'blue')">◉ Todos</button>
                 </div>
             </div>
 
@@ -489,7 +495,7 @@
 
             <div style="flex:1;overflow:auto;padding:0 16px;">
                 <table style="width:100%;border-collapse:collapse;font-size:11px;">
-                    <thead style="position:sticky;top:0;background:#1e293b;color:white;z-index:10;">
+                    <thead style="position:sticky;top:0;background:#1e293b;color:white;z-index:10;text-transform:uppercase;letter-spacing:0.03em;">
                         <tr id="armamento-thead-grupos"></tr>
                         <tr id="armamento-thead-row"></tr>
                     </thead>
