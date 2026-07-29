@@ -129,6 +129,11 @@ function renderDetailPanel(nombre) {
                            title="Descargar Kardex de Inventario (Excel)">
                             📊 Kardex
                         </a>` : ''}
+                        <button onclick="event.stopPropagation(); archivarProyectoActivo('${nombre}','${p.nombre.replace(/'/g,"\\'")}')"
+                           class="flex items-center gap-1 bg-amber-600 hover:bg-amber-700 text-white text-[9px] font-black px-2 py-1 rounded-full transition-colors"
+                           title="Archivar este proyecto (mover al histórico)">
+                            🗄️
+                        </button>
                         <span class="text-[10px] font-bold px-2.5 py-1 rounded-full whitespace-nowrap ${al.cls}">${al.label}</span>
                         <span class="chev-puestos text-[10px] text-slate-400 transition-transform">▾</span>
                     </div>
@@ -200,6 +205,18 @@ function renderDetailPanel(nombre) {
                 ${detalle.urlTenenciaArmas ? `<a href="${detalle.urlTenenciaArmas}" target="_blank" rel="noopener" class="flex items-center gap-1.5 bg-white border border-indigo-200 hover:bg-indigo-100 text-indigo-700 text-[10px] font-black px-3 py-1.5 rounded-lg transition-colors">⬇️ Tenencia de Armas</a>` : ''}
                 ${detalle.urlPermisoUniforme ? `<a href="${detalle.urlPermisoUniforme}" target="_blank" rel="noopener" class="flex items-center gap-1.5 bg-white border border-indigo-200 hover:bg-indigo-100 text-indigo-700 text-[10px] font-black px-3 py-1.5 rounded-lg transition-colors">⬇️ Permiso de Uniforme</a>` : ''}
             </div>
+        </div>` : ''}
+
+        ${prov.rastrilloSede > 0 ? `
+        <div class="bg-slate-100 border border-slate-300 rounded-xl p-3 mb-4 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+                <span class="text-lg">🔫</span>
+                <div>
+                    <p class="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Armas en Rastrillo en esta sede</p>
+                    <p class="text-[10px] text-slate-400 font-medium">Sin asignar a ningún proyecto actualmente</p>
+                </div>
+            </div>
+            <span class="text-2xl font-black text-slate-700">${prov.rastrilloSede}</span>
         </div>` : ''}
 
         <div>
