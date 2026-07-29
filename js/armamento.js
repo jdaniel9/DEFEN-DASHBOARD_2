@@ -344,18 +344,31 @@ function cerrarModalRadios() {
 function renderFiltrosRadios() {
     const bar = document.getElementById('radios-filtros-bar');
     const valoresUnicos = (campo) => [...new Set(radiosDetalle.map(r => r[campo]).filter(Boolean))].sort();
+
+    // Proyectos: solo se muestran una vez elegida al menos una provincia
+    const provinciasElegidas = filtrosRadios.provincia;
+    const proyectosDisponibles = provinciasElegidas.length === 0 ? [] : [...new Set(
+        radiosDetalle
+            .filter(r => provinciasElegidas.includes(r.provincia))
+            .map(r => r.proyecto)
+            .filter(Boolean)
+    )].sort();
+
+    // Si cambió la provincia y el proyecto elegido ya no aplica, lo quitamos
+    filtrosRadios.proyecto = filtrosRadios.proyecto.filter(p => proyectosDisponibles.includes(p));
+
     const grupos = [
         { key:'provincia', label:'Provincia', valores: valoresUnicos('provincia') },
-        { key:'proyecto',  label:'Proyecto',  valores: valoresUnicos('proyecto') },
+        { key:'proyecto',  label:'Proyecto' + (provinciasElegidas.length > 0 ? ' (de la provincia elegida)' : ' — elige provincia primero'), valores: proyectosDisponibles },
     ];
     bar.innerHTML = grupos.map(g => `
         <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;">
             <span style="font-size:9px;font-weight:800;color:#94a3b8;text-transform:uppercase;margin-right:2px;">${g.label}:</span>
-            ${g.valores.map(v => {
+            ${g.valores.length > 0 ? g.valores.map(v => {
                 const activo = filtrosRadios[g.key].includes(v);
                 return `<button onclick="toggleFiltroRadios('${g.key}','${v.replace(/'/g,"\\'")}')"
                         class="chip ${activo?'active-purple':''}" style="font-size:9px;padding:3px 9px;">${v}</button>`;
-            }).join('')}
+            }).join('') : `<span style="font-size:9px;color:#cbd5e1;font-style:italic;">— elige una provincia primero —</span>`}
         </div>
     `).join('<div style="width:100%;height:1px;background:#f1f5f9;margin:2px 0;"></div>');
 }
