@@ -154,6 +154,9 @@ function procesarDatosAPI(json) {
             vigenciaFin:    ti.vigenciaFin    || null,
             estadoTramite:  ti.estadoTramite  || null,
             urlCertificado: ti.urlCertificado || null,
+            urlPermisoOperaciones: p.urlPermisoOperaciones || null,
+            urlTenenciaArmas:      p.urlTenenciaArmas      || null,
+            urlPermisoUniforme:    p.urlPermisoUniforme    || null,
             supervisores:   Array.isArray(p.supervisores)  ? p.supervisores  : [],
             proyectosList:  Array.isArray(p.proyectosList) ? p.proyectosList : []
         };
