@@ -102,6 +102,10 @@
                     <span class="w-2.5 h-2.5 bg-red-500 rounded-full"></span>
                     <span class="text-[10px] font-bold text-red-700">Sin Presencia</span>
                 </div>
+                <button onclick="abrirModalHistorico()"
+                        class="flex items-center gap-1.5 bg-amber-600 hover:bg-amber-700 px-3 py-1.5 rounded-xl text-white text-[10px] font-bold transition-colors ml-1">
+                    📁 Histórico
+                </button>
                 <button onclick="cerrarSesion()"
                         class="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-900 px-3 py-1.5 rounded-xl text-white text-[10px] font-bold transition-colors ml-1">
                     🔒 Cerrar sesión
@@ -592,6 +596,41 @@
         </div>
     </div>
 
+    <!-- ================================================================
+         MODAL — Histórico de Proyectos Finalizados (archivo, no se
+         mezcla con lo activo)
+    ================================================================ -->
+    <div id="historico-modal" style="display:none;position:fixed;inset:0;z-index:10500;background:rgba(15,23,42,0.7);backdrop-filter:blur(4px);align-items:center;justify-content:center;padding:16px;">
+        <div style="width:100%;max-width:900px;height:85vh;background:#f1f5f9;border-radius:20px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 32px 80px rgba(0,0,0,0.5);">
+
+            <div style="background:#78350f;padding:14px 20px;display:flex;align-items:center;gap:12px;">
+                <div style="flex:1;">
+                    <h2 style="color:white;font-weight:900;font-size:15px;margin:0;">📁 Histórico de Proyectos</h2>
+                    <p style="color:#fde68a;font-size:10px;font-weight:700;" id="historico-modal-contador">0 proyectos finalizados</p>
+                </div>
+                <button onclick="cerrarModalHistorico()" style="background:rgba(255,255,255,0.15);color:white;border:none;border-radius:10px;padding:7px 12px;font-size:12px;font-weight:800;cursor:pointer;">✕ Cerrar</button>
+            </div>
+
+            <div id="historico-filtros-bar" style="background:white;padding:10px 16px;border-bottom:1px solid #e2e8f0;display:flex;flex-wrap:wrap;gap:6px;"></div>
+
+            <div id="historico-lista" style="flex:1;overflow:auto;padding:12px 16px;display:flex;flex-direction:column;gap:10px;"></div>
+        </div>
+    </div>
+
+    <!-- Sub-modal: detalle de puestos de un proyecto histórico -->
+    <div id="historico-detalle-modal" style="display:none;position:fixed;inset:0;z-index:10600;background:rgba(15,23,42,0.85);backdrop-filter:blur(4px);align-items:center;justify-content:center;padding:16px;">
+        <div style="width:100%;max-width:800px;max-height:85vh;background:white;border-radius:20px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 32px 80px rgba(0,0,0,0.5);">
+            <div style="background:#78350f;padding:14px 20px;display:flex;align-items:center;gap:12px;">
+                <div style="flex:1;">
+                    <h2 id="historico-detalle-titulo" style="color:white;font-weight:900;font-size:14px;margin:0;"></h2>
+                    <p id="historico-detalle-subtitulo" style="color:#fde68a;font-size:10px;font-weight:700;"></p>
+                </div>
+                <button onclick="cerrarDetalleHistorico()" style="background:rgba(255,255,255,0.15);color:white;border:none;border-radius:10px;padding:7px 12px;font-size:12px;font-weight:800;cursor:pointer;">✕ Cerrar</button>
+            </div>
+            <div id="historico-detalle-cuerpo" style="flex:1;overflow:auto;padding:16px;display:flex;flex-direction:column;gap:8px;"></div>
+        </div>
+    </div>
+
     <!-- ── Módulos JS (orden importa: config → utils → data → map → filters → province → pdf → auth) ── -->
     <script src="js/config.js"></script>
     <script src="js/auth.js"></script>
@@ -601,6 +640,7 @@
     <script src="js/filters.js"></script>
     <script src="js/province.js"></script>
     <script src="js/armamento.js"></script>
+    <script src="js/historico.js"></script>
     <script src="js/novedades.js"></script>
     <script src="js/pdf.js"></script>
 
