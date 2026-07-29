@@ -4,12 +4,80 @@
 // servidor (Apps Script) contra un hash SHA-256 guardado en Sheets.
 // ================================================================
 
-const AUTH_SESSION_KEY = 'defen_auth_ok';
+// ================================================================
+// auth.js — Login contra Apps Script (doPost) con sessionStorage
+// La contraseña nunca se guarda en el código; se valida en el
+// servidor (Apps Script) contra un hash SHA-256 guardado en Sheets.
+//
+// PERMISOS POR ROL (primera fase — se irá ampliando):
+//   admin, operaciones  → ven todo, sin restricciones
+//   sistemas            → ve todo EXCEPTO el detalle de Armamento
+//   gdp, inventario,
+//   financiero          → ven todo EXCEPTO el detalle de Armamento y Radios
+// (los totales del Resumen Armamento SIEMPRE se ven, lo que se
+//  bloquea es abrir el detalle/tabla completa)
+// ================================================================
+
+const AUTH_SESSION_KEY  = 'defen_auth_ok';
+const AUTH_ROL_KEY      = 'defen_auth_rol';
 const FONDOS_DISPONIBLES = ['img/fondo1.png', 'img/fondo2.png', 'img/fondo3.png', 'img/fondo4.png'];
 const ULTIMO_FONDO_KEY = 'defen_ultimo_fondo';
 
+// Roles que NO pueden abrir el detalle de Armamento
+const ROLES_SIN_ARMAMENTO = ['sistemas', 'gdp', 'inventario', 'financiero'];
+// Roles que NO pueden abrir el detalle de Radios
+const ROLES_SIN_RADIOS    = ['gdp', 'inventario', 'financiero'];
+
 function estaAutenticado() {
     return sessionStorage.getItem(AUTH_SESSION_KEY) === '1';
+}
+
+function rolActual() {
+    return (sessionStorage.getItem(AUTH_ROL_KEY) || '').toLowerCase().trim();
+}
+
+function usuarioPuedeVerArmamentoDetalle() {
+    return !ROLES_SIN_ARMAMENTO.includes(rolActual());
+}
+
+function usuarioPuedeVerRadiosDetalle() {
+    return !ROLES_SIN_RADIOS.includes(rolActual());
+}
+
+// Al elegir un departamento en el login, autocompleta el campo Usuario
+// (el usuario sigue teniendo que escribir su contraseña)
+function autocompletarUsuarioPorDepartamento() {
+    const dep = document.getElementById('login-departamento').value;
+    if (dep) document.getElementById('login-usuario').value = dep;
+}
+
+// Oculta/bloquea en la interfaz lo que el rol actual no puede ver.
+// Se llama después de cada login exitoso (fresco o restaurado de sesión).
+function aplicarPermisosUI() {
+    if (!usuarioPuedeVerArmamentoDetalle()) {
+        // Cubre el botón "Detalle" Y las filas clickeables del resumen
+        // (En Campo, En Tránsito, Rastrillo, Pérdida, Confiscada, Global)
+        document.querySelectorAll('[onclick^="abrirModalArmamento"]').forEach(el => {
+            if (el.tagName === 'BUTTON') {
+                el.style.display = 'none';
+            } else {
+                el.removeAttribute('onclick');
+                el.style.cursor = 'default';
+                el.classList.remove('cursor-pointer');
+            }
+        });
+    }
+    if (!usuarioPuedeVerRadiosDetalle()) {
+        document.querySelectorAll('[onclick^="abrirModalRadios"]').forEach(el => {
+            if (el.tagName === 'BUTTON') {
+                el.style.display = 'none';
+            } else {
+                el.removeAttribute('onclick');
+                el.style.cursor = 'default';
+                el.classList.remove('cursor-pointer');
+            }
+        });
+    }
 }
 
 // Elige un fondo al azar EXCLUYENDO el último mostrado (guardado en localStorage,
@@ -61,8 +129,10 @@ async function intentarLogin(usuario, password) {
         if (json.ok) {
             sessionStorage.setItem(AUTH_SESSION_KEY, '1');
             sessionStorage.setItem('defen_auth_nombre', json.nombre || usuario);
+            sessionStorage.setItem(AUTH_ROL_KEY, json.rol || '');
             ocultarLogin();
             iniciarDashboard();
+            aplicarPermisosUI();
         } else {
             mostrarErrorLogin(json.mensaje || 'Usuario o contraseña incorrectos');
         }
@@ -78,6 +148,7 @@ function inicializarLogin() {
     if (estaAutenticado()) {
         ocultarLogin();
         iniciarDashboard();
+        aplicarPermisosUI();
         return;
     }
     mostrarLogin();
@@ -94,5 +165,6 @@ function inicializarLogin() {
 function cerrarSesion() {
     sessionStorage.removeItem(AUTH_SESSION_KEY);
     sessionStorage.removeItem('defen_auth_nombre');
+    sessionStorage.removeItem(AUTH_ROL_KEY);
     location.reload();
 }
