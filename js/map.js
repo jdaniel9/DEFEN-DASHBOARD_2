@@ -96,6 +96,8 @@ function renderDetailPanel(nombre) {
                             ${pu.armado
                                 ? `<div class="flex items-center gap-1.5 bg-red-50 border border-red-100 rounded-md px-2 py-1">
                                        <span class="text-[8px] font-black text-red-700">🔫 ARMADO</span>
+                                       ${pu.tieneLetal   ? `<span class="text-[7px] font-black bg-red-600 text-white px-1 rounded" title="Arma Letal">AL</span>` : ''}
+                                       ${pu.tieneNoLetal ? `<span class="text-[7px] font-black bg-amber-500 text-white px-1 rounded" title="Arma No Letal">ANL</span>` : ''}
                                        <span class="text-[9px] text-red-600 font-medium truncate">${pu.arma || 'Sin serie registrada'}</span>
                                    </div>`
                                 : `<div class="flex items-center gap-1.5"><span class="text-[8px] font-black px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500">Sin arma</span></div>`}
@@ -218,6 +220,9 @@ const listContainer = document.getElementById('province-list');
 function init() {
     document.getElementById('markers-layer').innerHTML = '';
     document.getElementById('province-list').innerHTML = '';
+
+    // Regenerar los chips de "Tipo de proyecto" según los datos reales cargados
+    renderChipsContrato();
 
     // Totales calculados desde proyectosList (fuente de verdad)
     let totals = { G:0, A:0, Pu:0, Pr:0, Prov:0 };
