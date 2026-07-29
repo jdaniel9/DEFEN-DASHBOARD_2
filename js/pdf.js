@@ -15,7 +15,7 @@ function proyectosFiltradosProvincia(n) {
 // Nombres de puesto (en mayúsculas) de una provincia que pasan los
 // filtros de jornada/arma/radio activos — usado para recortar armamento/radios
 function puestosQuePasanFiltro(n) {
-    const hayFiltro = grupoActivo('jornada') || grupoActivo('arma') || grupoActivo('radio');
+    const hayFiltro = grupoActivo('jornada') || grupoActivo('arma') || grupoActivo('claseArma') || grupoActivo('radio');
     const todos = Object.values(puestosData[n] || {}).flat();
     if (!hayFiltro) return new Set(todos.map(p => (p.nombre||'').toUpperCase().trim()));
     return new Set(todos.filter(p => {
@@ -26,6 +26,7 @@ function puestosQuePasanFiltro(n) {
         const armado   = p.armado === true || String(p.armado).toLowerCase() === 'si';
         const conRadio = p.radio  === true || String(p.radio).toLowerCase()  === 'si';
         if (grupoActivo('arma')  && !filtrosActivos.arma.some(v => (v==='armado'&&armado)||(v==='desarmado'&&!armado))) return false;
+        if (grupoActivo('claseArma') && !filtrosActivos.claseArma.some(v => (v==='letal'&&p.tieneLetal)||(v==='noletal'&&p.tieneNoLetal))) return false;
         if (grupoActivo('radio') && !filtrosActivos.radio.some(v => (v==='conradio'&&conRadio)||(v==='sinradio'&&!conRadio))) return false;
         return true;
     }).map(p => (p.nombre||'').toUpperCase().trim()));
