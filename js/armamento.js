@@ -27,14 +27,29 @@ const ARM_COLUMNAS = [
 ];
 
 // ── Abrir modal de armamento, opcionalmente pre-filtrado por estado ──
-function abrirModalArmamento(estadoPreseleccionado) {
+function abrirModalArmamento(preset) {
     if (typeof usuarioPuedeVerArmamentoDetalle === 'function' && !usuarioPuedeVerArmamentoDetalle()) {
         alert('Tu perfil no tiene permiso para ver el detalle de armamento.');
         return;
     }
     filtrosArmamento = { estado: [], tipo: [], clase: [], categoria: [], provincia: [], proyecto: [] };
     busquedaArmamento = '';
-    if (estadoPreseleccionado) filtrosArmamento.estado = [estadoPreseleccionado];
+
+    // Acepta un string simple (compatibilidad: solo estado) o un objeto
+    // con varios filtros preseleccionados a la vez, ej: {estado:'activo', clase:'letal', tipo:'pistola'}
+    if (typeof preset === 'string' && preset) {
+        filtrosArmamento.estado = [preset];
+    } else if (preset && typeof preset === 'object') {
+        Object.keys(preset).forEach(k => {
+            if (filtrosArmamento.hasOwnProperty(k) && preset[k]) filtrosArmamento[k] = [preset[k]];
+        });
+    }
+
+    // Cerrar los desgloses inline si estaban abiertos
+    ['desglose-en-campo','desglose-en-campo-letal','desglose-en-campo-noletal','desglose-rastrillo'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) { el.style.display = 'none'; el.innerHTML = ''; }
+    });
 
     document.getElementById('armamento-modal').style.display = 'flex';
     const buscador = document.getElementById('armamento-buscador');
@@ -45,6 +60,103 @@ function abrirModalArmamento(estadoPreseleccionado) {
 
 function cerrarModalArmamento() {
     document.getElementById('armamento-modal').style.display = 'none';
+}
+
+// =====================================================================
+// DESGLOSES INLINE — resumen numérico antes de abrir el detalle completo
+// =====================================================================
+
+// Rastrillo → desglosado por provincia/sede (Matriz, Sucursales, etc.)
+function toggleDesgloseRastrillo() {
+    const cont = document.getElementById('desglose-rastrillo');
+    if (cont.style.display === 'block') { cont.style.display = 'none'; cont.innerHTML = ''; return; }
+
+    const porProvincia = {};
+    armamentoDetalle.forEach(a => {
+        if (normalizarTexto(a.estado) !== 'rastrillo') return;
+        const prov = a.provincia || 'SIN PROVINCIA';
+        porProvincia[prov] = (porProvincia[prov] || 0) + 1;
+    });
+
+    const provincias = Object.keys(porProvincia).sort();
+    cont.innerHTML = provincias.length === 0
+        ? `<p style="font-size:10px;color:#94a3b8;font-style:italic;padding:6px 12px;">Sin armas en rastrillo registradas.</p>`
+        : provincias.map(p => `
+            <div onclick="event.stopPropagation(); abrirModalArmamento({estado:'rastrillo', provincia:'${normalizarTexto(p)}'})"
+                 style="display:flex;justify-content:space-between;align-items:center;padding:6px 12px;margin-left:12px;border-left:2px solid #cbd5e1;cursor:pointer;border-radius:0 8px 8px 0;"
+                 onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='transparent'">
+                <span style="font-size:10px;font-weight:700;color:#475569;">🏢 ${p}</span>
+                <span style="font-size:11px;font-weight:900;color:#1e293b;">${porProvincia[p]}</span>
+            </div>
+        `).join('');
+    cont.style.display = 'block';
+}
+
+// En Campo → nivel 1: Letal (AL) / No Letal (ANL)
+function toggleDesgloseEnCampo() {
+    const cont = document.getElementById('desglose-en-campo');
+    if (cont.style.display === 'block') { cont.style.display = 'none'; cont.innerHTML = ''; return; }
+
+    const activas = armamentoDetalle.filter(a => normalizarTexto(a.estado) === 'activo');
+    const letales = activas.filter(a => {
+        const c = normalizarTexto(a.clase).replace(/\s/g,'');
+        return c.includes('letal') && !c.includes('noletal');
+    }).length;
+    const noLetales = activas.filter(a => normalizarTexto(a.clase).replace(/\s/g,'').includes('noletal')).length;
+    const sinClasificar = activas.length - letales - noLetales;
+
+    cont.innerHTML = `
+        <div onclick="event.stopPropagation(); toggleDesgloseEnCampoClase('letal')"
+             style="display:flex;justify-content:space-between;align-items:center;padding:6px 12px;margin-left:12px;border-left:2px solid #fca5a5;cursor:pointer;border-radius:0 8px 8px 0;"
+             onmouseover="this.style.background='#fef2f2'" onmouseout="this.style.background='transparent'">
+            <span style="font-size:10px;font-weight:800;color:#b91c1c;">☠️ Letal (AL)</span>
+            <span style="font-size:11px;font-weight:900;color:#991b1b;">${letales}</span>
+        </div>
+        <div id="desglose-en-campo-letal" style="display:none;"></div>
+
+        <div onclick="event.stopPropagation(); toggleDesgloseEnCampoClase('noletal')"
+             style="display:flex;justify-content:space-between;align-items:center;padding:6px 12px;margin-left:12px;border-left:2px solid #fde68a;cursor:pointer;border-radius:0 8px 8px 0;"
+             onmouseover="this.style.background='#fffbeb'" onmouseout="this.style.background='transparent'">
+            <span style="font-size:10px;font-weight:800;color:#92400e;">🛡️ No Letal (ANL)</span>
+            <span style="font-size:11px;font-weight:900;color:#78350f;">${noLetales}</span>
+        </div>
+        <div id="desglose-en-campo-noletal" style="display:none;"></div>
+
+        ${sinClasificar > 0 ? `<p style="font-size:9px;color:#94a3b8;font-style:italic;padding:4px 12px;">${sinClasificar} arma(s) sin clase registrada</p>` : ''}
+    `;
+    cont.style.display = 'block';
+}
+
+// En Campo → nivel 2: desglose por Tipo (Pistola, Revólver, Escopeta...) dentro de Letal/No Letal
+function toggleDesgloseEnCampoClase(clase) {
+    const contId = clase === 'letal' ? 'desglose-en-campo-letal' : 'desglose-en-campo-noletal';
+    const cont = document.getElementById(contId);
+    if (cont.style.display === 'block') { cont.style.display = 'none'; cont.innerHTML = ''; return; }
+
+    const activas = armamentoDetalle.filter(a => {
+        if (normalizarTexto(a.estado) !== 'activo') return false;
+        const c = normalizarTexto(a.clase).replace(/\s/g,'');
+        return clase === 'letal' ? (c.includes('letal') && !c.includes('noletal')) : c.includes('noletal');
+    });
+
+    const porTipo = {};
+    activas.forEach(a => {
+        const t = a.tipo || 'Sin tipo';
+        porTipo[t] = (porTipo[t] || 0) + 1;
+    });
+
+    const tipos = Object.keys(porTipo).sort();
+    cont.innerHTML = tipos.length === 0
+        ? `<p style="font-size:9px;color:#94a3b8;font-style:italic;padding:4px 12px 4px 24px;">Sin datos.</p>`
+        : tipos.map(t => `
+            <div onclick="event.stopPropagation(); abrirModalArmamento({estado:'activo', clase:'${clase}', tipo:'${normalizarTexto(t)}'})"
+                 style="display:flex;justify-content:space-between;align-items:center;padding:4px 12px 4px 24px;cursor:pointer;border-radius:8px;"
+                 onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background='transparent'">
+                <span style="font-size:9px;font-weight:600;color:#64748b;">🔫 ${t}</span>
+                <span style="font-size:10px;font-weight:800;color:#334155;">${porTipo[t]}</span>
+            </div>
+        `).join('');
+    cont.style.display = 'block';
 }
 
 // Construye los chips de filtro dinámicamente a partir de los valores únicos presentes.
