@@ -113,25 +113,44 @@ function verDetalleHistorico(idx) {
     if (puestos.length === 0) {
         cuerpo.innerHTML = `<p style="text-align:center;color:#94a3b8;font-size:12px;padding:20px;">Este proyecto no tenía puestos con detalle registrado al momento de archivarse.</p>`;
     } else {
-        cuerpo.innerHTML = puestos.map(pu => `
+        cuerpo.innerHTML = puestos.map(pu => {
+            const tieneCoords = pu.lat && pu.lng;
+            const armasDet = pu.armasDetalle || [];
+            const radiosDet = pu.radiosDetalle || [];
+            return `
             <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:12px 14px;">
-                <p style="font-size:12px;font-weight:800;color:#1e293b;margin-bottom:4px;">${pu.nombre}</p>
+                <div style="display:flex;items-center;justify-content:space-between;gap:8px;">
+                    <p style="font-size:12px;font-weight:800;color:#1e293b;margin-bottom:4px;">${pu.nombre}</p>
+                    ${tieneCoords ? `<a href="https://www.google.com/maps/search/?api=1&query=${pu.lat},${pu.lng}" target="_blank" rel="noopener" style="font-size:9px;font-weight:800;background:#e0f2fe;color:#0369a1;padding:2px 8px;border-radius:999px;text-decoration:none;white-space:nowrap;">📍 Ver ubicación</a>` : ''}
+                </div>
                 <div style="display:flex;flex-direction:column;gap:2px;margin-bottom:6px;">
                     ${(pu.guardias||[]).length > 0
                         ? pu.guardias.map(g => `<span style="font-size:10px;color:#475569;font-weight:600;">👤 ${g}</span>`).join('')
                         : `<span style="font-size:10px;color:#94a3b8;font-style:italic;">Sin agentes registrados</span>`}
                 </div>
-                <div style="display:flex;flex-wrap:wrap;gap:6px;">
+                <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px;">
                     <span style="font-size:9px;font-weight:800;padding:2px 8px;border-radius:999px;background:#dbeafe;color:#1d4ed8;">${pu.tipo || '—'}</span>
-                    ${pu.armado
-                        ? `<span style="font-size:9px;font-weight:800;padding:2px 8px;border-radius:999px;background:#fee2e2;color:#b91c1c;">🔫 ${pu.arma || 'Armado'}</span>`
-                        : `<span style="font-size:9px;font-weight:800;padding:2px 8px;border-radius:999px;background:#f1f5f9;color:#64748b;">Sin arma</span>`}
-                    ${pu.radio
-                        ? `<span style="font-size:9px;font-weight:800;padding:2px 8px;border-radius:999px;background:#ede9fe;color:#6d28d9;">📻 ${pu.radioInfo || 'Con radio'}</span>`
-                        : `<span style="font-size:9px;font-weight:800;padding:2px 8px;border-radius:999px;background:#f1f5f9;color:#64748b;">Sin radio</span>`}
+                    ${!pu.armado ? `<span style="font-size:9px;font-weight:800;padding:2px 8px;border-radius:999px;background:#f1f5f9;color:#64748b;">Sin arma</span>` : ''}
+                    ${!pu.radio ? `<span style="font-size:9px;font-weight:800;padding:2px 8px;border-radius:999px;background:#f1f5f9;color:#64748b;">Sin radio</span>` : ''}
                 </div>
-            </div>
-        `).join('');
+                ${armasDet.length > 0 ? `
+                <div style="margin-bottom:4px;">
+                    ${armasDet.map(a => `
+                        <div style="font-size:9px;background:#fee2e2;color:#991b1b;border-radius:8px;padding:4px 8px;margin-bottom:3px;">
+                            🔫 <strong>${a.tipo||'—'}</strong> ${a.marca||''} ${a.calibre||''} · Serie: ${a.serie||'—'} · ${a.clase||'—'}
+                        </div>
+                    `).join('')}
+                </div>` : ''}
+                ${radiosDet.length > 0 ? `
+                <div>
+                    ${radiosDet.map(r => `
+                        <div style="font-size:9px;background:#ede9fe;color:#6d28d9;border-radius:8px;padding:4px 8px;margin-bottom:3px;">
+                            📻 <strong>${r.modelo||'—'}</strong> · Serie: ${r.serie||'—'}
+                        </div>
+                    `).join('')}
+                </div>` : ''}
+            </div>`;
+        }).join('');
     }
 
     document.getElementById('historico-detalle-modal').style.display = 'flex';
