@@ -257,6 +257,9 @@
                 <button class="pdf-btn" onclick="exportarPDF()" title="Exportar reporte PDF de esta provincia">
                     ⬇️ PDF
                 </button>
+                <button class="pdf-btn" style="background:#16a34a;" onclick="exportarExcelProvincia()" title="Exportar reporte Excel de esta provincia">
+                    📊 Excel
+                </button>
             </div>
 
             <!-- Body: mapa + sidebar (responsivo) -->
@@ -455,15 +458,22 @@
 
                 <button onclick="generarReporteNovedades()"
                         style="width:100%;padding:9px;background:linear-gradient(135deg,#7c3aed,#6d28d9);color:white;font-weight:900;font-size:11px;border:none;border-radius:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;">
-                    ⬇️ Generar Reporte de Novedades
+                    ⬇️ PDF de Novedades
+                </button>
+                <button onclick="generarExcelNovedades()"
+                        style="width:100%;padding:9px;background:linear-gradient(135deg,#16a34a,#15803d);color:white;font-weight:900;font-size:11px;border:none;border-radius:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;margin-top:8px;">
+                    📊 Excel de Novedades
                 </button>
             </div>
         </div>
 
         <!-- Botón generar -->
-        <div style="flex-shrink:0;padding:0 0 env(safe-area-inset-bottom);">
-            <button id="btn-generar-pdf-global" onclick="generarPDFGlobal()">
-                ⬇️ Generar PDF con selección
+        <div style="flex-shrink:0;padding:0 0 env(safe-area-inset-bottom);display:flex;gap:8px;">
+            <button id="btn-generar-pdf-global" onclick="generarPDFGlobal()" style="flex:1;">
+                ⬇️ PDF con selección
+            </button>
+            <button id="btn-generar-excel-global" onclick="generarExcelGlobal()" style="flex:1;background:linear-gradient(135deg,#16a34a,#15803d);color:white;font-weight:900;font-size:12px;border:none;border-radius:12px;cursor:pointer;padding:12px;display:flex;align-items:center;justify-content:center;gap:6px;">
+                📊 Excel con selección
             </button>
         </div>
     </div>
