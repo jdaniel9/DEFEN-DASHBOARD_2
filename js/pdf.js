@@ -512,3 +512,135 @@ async function generarPDFGlobal() {
     const fn = `ReporteNacional_${fh.replace(/\//g,'-')}.pdf`;
     doc.save(fn);
 }
+
+// ================================================================
+// EXCEL — Reporte Nacional (mismas secciones que el PDF, en hojas
+// separadas, respetando los filtros globales activos y las casillas
+// marcadas en el panel)
+// ================================================================
+function generarExcelGlobal() {
+    const hoy = new Date();
+    const fh  = `${String(hoy.getDate()).padStart(2,'0')}-${String(hoy.getMonth()+1).padStart(2,'0')}-${hoy.getFullYear()}`;
+
+    const inc = {
+        resumen:    document.getElementById('pdf-resumen')?.checked,
+        contrato:   document.getElementById('pdf-contrato')?.checked ?? true,
+        personal:   document.getElementById('pdf-personal')?.checked,
+        proyectos:  document.getElementById('pdf-proyectos')?.checked,
+        tramites:   document.getElementById('pdf-tramites')?.checked,
+        puestos:    document.getElementById('pdf-puestos')?.checked,
+    };
+
+    const provsActivas = Object.keys(data)
+        .filter(n => data[n].proyectos > 0 && proyectosFiltradosProvincia(n).length > 0)
+        .sort();
+
+    if (provsActivas.length === 0) { alert('No hay datos para exportar con los filtros activos.'); return; }
+
+    const wb = XLSX.utils.book_new();
+    const agregarHoja = (nombre, filas) => {
+        if (!filas || filas.length === 0) return;
+        const ws = XLSX.utils.json_to_sheet(filas);
+        ws['!cols'] = Object.keys(filas[0]).map(k => ({ wch: Math.max(String(k).length+2, 14) }));
+        XLSX.utils.book_append_sheet(wb, ws, nombre.substring(0,31));
+    };
+
+    // ── Resumen de provincias ──
+    if (inc.resumen) {
+        agregarHoja('Resumen Provincias', provsActivas.map((n,i) => {
+            const inf = data[n];
+            let g=0,a=0,pu=0;
+            const proys = proyectosFiltradosProvincia(n);
+            proys.forEach(p => { g+=Number(p.guardias)||0; a+=Number(p.armas)||0; pu+=Number(p.puestos)||0; });
+            return { 'N°':i+1, 'Provincia':n, 'Tipo':inf.tipo, 'Estado':inf.estado, 'Guardias':g, 'Armas':a, 'Puestos':pu, 'Proyectos':proys.length };
+        }));
+    }
+
+    // ── Por tipo de contrato ──
+    if (inc.contrato) {
+        const categorias = { ODC:{g:0,a:0,pu:0,pr:0}, CT:{g:0,a:0,pu:0,pr:0}, BROW:{g:0,a:0,pu:0,pr:0}, CUST:{g:0,a:0,pu:0,pr:0}, 'SIN CLASIFICAR':{g:0,a:0,pu:0,pr:0} };
+        provsActivas.forEach(n => proyectosFiltradosProvincia(n).forEach(p => {
+            const cat = (p.tipoContrato||'').toUpperCase().trim();
+            const key = ['ODC','CT','BROW','CUST'].includes(cat) ? cat : 'SIN CLASIFICAR';
+            categorias[key].g+=Number(p.guardias)||0; categorias[key].a+=Number(p.armas)||0;
+            categorias[key].pu+=Number(p.puestos)||0; categorias[key].pr++;
+        }));
+        agregarHoja('Por Tipo Contrato', ['ODC','CT','BROW','CUST','SIN CLASIFICAR'].map(k => ({
+            'Categoría':k, 'Guardias':categorias[k].g, 'Armas':categorias[k].a, 'Puestos':categorias[k].pu, 'Proyectos':categorias[k].pr
+        })));
+    }
+
+    // ── Proyectos por provincia ──
+    if (inc.proyectos) {
+        const filas = [];
+        provsActivas.forEach(n => proyectosFiltradosProvincia(n).forEach(p => {
+            const d = diasRestantes(p.fin);
+            filas.push({
+                'Provincia':n, 'Proyecto':p.nombre, 'Guardias':p.guardias, 'Armas':p.armas,
+                'Puestos':p.puestos??'', 'Finaliza':p.fin?formatFecha(p.fin):'',
+                'Días':p.fin?(d<0?'VENCIDO':d+'d'):'', 'Vacantes':p.vacantes||0
+            });
+        }));
+        agregarHoja('Proyectos por Provincia', filas.map((f,i)=>({'N°':i+1, ...f})));
+    }
+
+    // ── Trámites ──
+    if (inc.tramites) {
+        const filas = Object.keys(data).sort().map(n => {
+            const det = detalleProvincias[n]; if (!det) return null;
+            let diasV = '', estadoV = '';
+            if (det.vigenciaFin) {
+                const d = Math.round((new Date(det.vigenciaFin)-hoy)/86400000);
+                diasV = d<0?'VENCIDA':`${d}d`; estadoV = d<0?'VENCIDA':d<90?'POR VENCER':'VIGENTE';
+            } else if (det.estadoTramite) estadoV = det.estadoTramite;
+            return { 'Provincia':n, 'N° Trámite':det.tramite||'', 'Inicio':det.vigenciaInicio?formatFecha(det.vigenciaInicio):'',
+                     'Fin':det.vigenciaFin?formatFecha(det.vigenciaFin):'', 'Días':diasV, 'Estado':estadoV };
+        }).filter(Boolean);
+        agregarHoja('Trámites', filas.map((f,i)=>({'N°':i+1, ...f})));
+    }
+
+    // ── Personal / Nómina ──
+    if (inc.personal) {
+        const filas = [];
+        provsActivas.forEach(n => {
+            const proyOk = new Set(proyectosFiltradosProvincia(n).map(p => p.nombre.toUpperCase().trim()));
+            Object.entries(puestosData[n] || {}).forEach(([proyecto, lista]) => {
+                if (!proyOk.has(proyecto.toUpperCase().trim())) return;
+                puestosFiltrados(n, proyecto).forEach(pu => {
+                    const gs = Array.isArray(pu.guardias) ? pu.guardias : (pu.guardia||'').split(',').map(g=>g.trim()).filter(Boolean);
+                    gs.forEach((g,i) => filas.push({
+                        'Provincia':n, 'Proyecto':proyecto, 'Puesto':pu.nombre, 'Guardia':g,
+                        'Rol': i===0?'Turno actual':'Rotación',
+                        'Armado': pu.armado===true||String(pu.armado).toLowerCase()==='si'?'Sí':'No',
+                        'Jornada':pu.tipo||'', 'Días':pu.dias||''
+                    }));
+                });
+            });
+        });
+        agregarHoja('Personal', filas.map((f,i)=>({'N°':i+1, ...f})));
+    }
+
+    // ── Detalle de puestos ──
+    if (inc.puestos) {
+        const filas = [];
+        provsActivas.forEach(n => {
+            const proyOk = new Set(proyectosFiltradosProvincia(n).map(p => p.nombre.toUpperCase().trim()));
+            Object.entries(puestosData[n] || {}).forEach(([proyecto, lista]) => {
+                if (!proyOk.has(proyecto.toUpperCase().trim())) return;
+                puestosFiltrados(n, proyecto).forEach(pu => {
+                    const gs = Array.isArray(pu.guardias) ? pu.guardias.join(', ') : (pu.guardia||'');
+                    filas.push({
+                        'Provincia':n, 'Proyecto':proyecto, 'Puesto':pu.nombre, 'Guardia(s)':gs,
+                        'Tipo':pu.tipo||'', 'Armado': pu.armado?'Sí':'No',
+                        'Clase Arma': pu.tieneLetal?'AL':pu.tieneNoLetal?'ANL':'',
+                        'Radio': pu.radio?'Sí':'No', 'Turno':pu.turno||'', 'Días':pu.dias||''
+                    });
+                });
+            });
+        });
+        agregarHoja('Detalle Puestos', filas.map((f,i)=>({'N°':i+1, ...f})));
+    }
+
+    if (wb.SheetNames.length === 0) { alert('No hay secciones seleccionadas para exportar.'); return; }
+    XLSX.writeFile(wb, `ReporteNacional_${fh}.xlsx`);
+}
