@@ -159,6 +159,10 @@ function aplicarFiltrosGlobales() {
             if (nombreProv && data[nombreProv]) renderDetailPanel(nombreProv);
         }
     }
+
+    // Si algún desglose de Armamento está abierto, refrescarlo con los
+    // nuevos filtros en vez de dejarlo con datos viejos
+    if (typeof refrescarDesglosesArmamento === 'function') refrescarDesglosesArmamento();
 }
 
 function actualizarResumenFiltro() {
