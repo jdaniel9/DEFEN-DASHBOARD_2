@@ -67,12 +67,29 @@ function cerrarModalArmamento() {
 // =====================================================================
 
 // Rastrillo → desglosado por provincia/sede (Matriz, Sucursales, etc.)
+// Si algún desglose está abierto cuando cambian los filtros globales,
+// lo vuelve a abrir en el mismo estado (se llama desde filters.js)
+function refrescarDesglosesArmamento() {
+    if (document.getElementById('desglose-rastrillo')?.style.display === 'block') {
+        toggleDesgloseRastrillo(); toggleDesgloseRastrillo();
+    }
+    const campoAbierto = document.getElementById('desglose-en-campo')?.style.display === 'block';
+    const letalAbierto = document.getElementById('desglose-en-campo-letal')?.style.display === 'block';
+    const noLetalAbierto = document.getElementById('desglose-en-campo-noletal')?.style.display === 'block';
+
+    if (campoAbierto) {
+        toggleDesgloseEnCampo(); toggleDesgloseEnCampo();
+        if (letalAbierto)   toggleDesgloseEnCampoClase('letal');
+        if (noLetalAbierto) toggleDesgloseEnCampoClase('noletal');
+    }
+}
+
 function toggleDesgloseRastrillo() {
     const cont = document.getElementById('desglose-rastrillo');
     if (cont.style.display === 'block') { cont.style.display = 'none'; cont.innerHTML = ''; return; }
 
     const porProvincia = {};
-    armamentoDetalle.forEach(a => {
+    armamentoDetalle.filter(armaPasaFiltrosGlobales).forEach(a => {
         if (normalizarTexto(a.estado) !== 'rastrillo') return;
         const prov = a.provincia || 'SIN PROVINCIA';
         porProvincia[prov] = (porProvincia[prov] || 0) + 1;
@@ -100,7 +117,7 @@ function toggleDesgloseEnCampo() {
     const cont = document.getElementById('desglose-en-campo');
     if (cont.style.display === 'block') { cont.style.display = 'none'; cont.innerHTML = ''; return; }
 
-    const activas = armamentoDetalle.filter(a => normalizarTexto(a.estado) === 'activo');
+    const activas = armamentoDetalle.filter(a => normalizarTexto(a.estado) === 'activo' && armaPasaFiltrosGlobales(a));
     const letales = activas.filter(a => {
         const c = normalizarTexto(a.clase).replace(/\s/g,'');
         return c.includes('letal') && !c.includes('noletal');
@@ -138,6 +155,7 @@ function toggleDesgloseEnCampoClase(clase) {
 
     const activas = armamentoDetalle.filter(a => {
         if (normalizarTexto(a.estado) !== 'activo') return false;
+        if (!armaPasaFiltrosGlobales(a)) return false;
         const c = normalizarTexto(a.clase).replace(/\s/g,'');
         return clase === 'letal' ? (c.includes('letal') && !c.includes('noletal')) : c.includes('noletal');
     });
@@ -230,7 +248,67 @@ function normalizarTexto(s) {
         .normalize('NFD').replace(/[\u0300-\u036f]/g,'');
 }
 
+// Determina si un arma (por su provincia/proyecto/puesto) pasa los FILTROS
+// GLOBALES activos (jornada, arma, clase de arma, radio, vencimiento,
+// contrato, categoría) — los mismos que se usan en el resto del dashboard.
+function armaPasaFiltrosGlobales(a) {
+    const todosNeutros = !Object.keys(filtrosActivos).some(g => grupoActivo(g));
+    if (todosNeutros) return true;
+
+    const prov = a.provincia;
+    const proyUp = (a.proyecto || '').toUpperCase().trim();
+
+    // Categoría — nivel provincia
+    if (grupoActivo('cat')) {
+        const info = data[prov];
+        if (!info || !filtrosActivos.cat.includes(info.cat)) return false;
+    }
+
+    // Vencimiento / Tipo de contrato — nivel proyecto
+    if (grupoActivo('vence') || grupoActivo('contrato')) {
+        const det = detalleProvincias[prov];
+        const proyObj = det && det.proyectosList
+            ? det.proyectosList.find(p => (p.nombre||'').toUpperCase().trim() === proyUp)
+            : null;
+        if (!proyObj) return false;
+        if (grupoActivo('vence')) {
+            const d = diasRestantes(proyObj.fin);
+            const estadoV = d <= 30 ? 'critico' : d <= 60 ? 'alerta' : 'ok';
+            if (!filtrosActivos.vence.includes(estadoV)) return false;
+        }
+        if (grupoActivo('contrato')) {
+            if (!filtrosActivos.contrato.includes((proyObj.tipoContrato||'').toLowerCase())) return false;
+        }
+    }
+
+    // Jornada / Arma / Clase de arma / Radio — nivel puesto
+    if (grupoActivo('jornada') || grupoActivo('arma') || grupoActivo('claseArma') || grupoActivo('radio')) {
+        const puestosProy = (puestosData[prov] || {})[proyUp] || [];
+        const puestoObj = puestosProy.find(p => (p.nombre||'').toUpperCase().trim() === (a.puesto||'').toUpperCase().trim());
+        if (!puestoObj) return false;
+
+        if (grupoActivo('jornada')) {
+            const tipo = (puestoObj.tipo||'').toLowerCase().replace(/\s/g,'');
+            if (!filtrosActivos.jornada.some(j => tipo.includes(j))) return false;
+        }
+        if (grupoActivo('arma')) {
+            const armado = puestoObj.armado === true;
+            if (!filtrosActivos.arma.some(v => (v==='armado'&&armado)||(v==='desarmado'&&!armado))) return false;
+        }
+        if (grupoActivo('claseArma')) {
+            if (!filtrosActivos.claseArma.some(v => (v==='letal'&&puestoObj.tieneLetal)||(v==='noletal'&&puestoObj.tieneNoLetal))) return false;
+        }
+        if (grupoActivo('radio')) {
+            const conRadio = puestoObj.radio === true;
+            if (!filtrosActivos.radio.some(v => (v==='conradio'&&conRadio)||(v==='sinradio'&&!conRadio))) return false;
+        }
+    }
+
+    return true;
+}
+
 function armaPasaFiltros(a) {
+    if (!armaPasaFiltrosGlobales(a)) return false;
     for (const grupo of Object.keys(filtrosArmamento)) {
         if (filtrosArmamento[grupo].length === 0) continue;
         const valorArma = normalizarTexto(a[grupo]);
