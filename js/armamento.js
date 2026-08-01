@@ -342,18 +342,18 @@ function renderTablaArmamento() {
     theadGrupos.innerHTML =
         `<th style="padding:4px 8px;"></th>` +
         ARM_COLUMNAS.map(() => `<th style="padding:4px 8px;"></th>`).join('') +
-        `<th colspan="2" style="padding:4px 8px;text-align:center;background:#312e81;font-size:9px;letter-spacing:0.06em;">FOTOS</th>` +
-        `<th colspan="2" style="padding:4px 8px;text-align:center;background:#3730a3;font-size:9px;letter-spacing:0.06em;">GDLT</th>` +
+        `<th colspan="2" style="padding:4px 8px;text-align:center;background:#312e81;font-size:9px;letter-spacing:0.06em;border-left:2px solid #4338ca;border-right:2px solid #4338ca;">FOTOS</th>` +
+        `<th colspan="2" style="padding:4px 8px;text-align:center;background:#3730a3;font-size:9px;letter-spacing:0.06em;border-left:2px solid #312e81;border-right:2px solid #312e81;">GDLT</th>` +
         `<th style="padding:4px 8px;"></th>`;
 
     // ── Fila 2 del thead: columnas reales ──
     const thead = document.getElementById('armamento-thead-row');
     thead.innerHTML = '<th style="padding:8px;">N°</th>'
         + ARM_COLUMNAS.map(c => `<th style="padding:8px;white-space:nowrap;">${c.label}</th>`).join('')
-        + `<th style="padding:8px;white-space:nowrap;">Credencial</th>`
-        + `<th style="padding:8px;white-space:nowrap;">Arma</th>`
-        + `<th style="padding:8px;white-space:nowrap;">Envío</th>`
-        + `<th style="padding:8px;white-space:nowrap;">Retorno</th>`
+        + `<th style="padding:8px;white-space:nowrap;border-left:2px solid #4338ca;">Credencial</th>`
+        + `<th style="padding:8px;white-space:nowrap;border-right:2px solid #4338ca;">Arma</th>`
+        + `<th style="padding:8px;white-space:nowrap;border-left:2px solid #312e81;">Envío</th>`
+        + `<th style="padding:8px;white-space:nowrap;border-right:2px solid #312e81;">Retorno</th>`
         + `<th style="padding:8px;white-space:nowrap;">Mapa</th>`;
 
     const tbody = document.getElementById('armamento-tbody');
@@ -386,16 +386,16 @@ function renderTablaArmamento() {
             <td style="padding:6px 8px;">${a.proyecto||'—'}</td>
             <td style="padding:6px 8px;">${a.provincia||'—'}</td>
             <td style="padding:6px 8px;">${a.ubicacion||'—'}</td>
-            <td style="padding:6px 8px;white-space:nowrap;">
+            <td style="padding:6px 8px;white-space:nowrap;border-left:2px solid #e0e7ff;">
                 ${a.urlCredencial ? `<button onclick="verImagen('${a.urlCredencial}','Credencial · Serie ${a.serie||''}')" style="font-size:8px;font-weight:800;background:#ede9fe;color:#6d28d9;padding:2px 6px;border-radius:5px;border:none;cursor:pointer;">📇</button>` : '<span style="color:#e2e8f0;">—</span>'}
             </td>
-            <td style="padding:6px 8px;white-space:nowrap;">
+            <td style="padding:6px 8px;white-space:nowrap;border-right:2px solid #e0e7ff;">
                 ${a.urlImagenArma ? `<button onclick="verImagen('${a.urlImagenArma}','Foto del arma · Serie ${a.serie||''}')" style="font-size:8px;font-weight:800;background:#e0f2fe;color:#0369a1;padding:2px 6px;border-radius:5px;border:none;cursor:pointer;">📷</button>` : '<span style="color:#e2e8f0;">—</span>'}
             </td>
-            <td style="padding:6px 8px;white-space:nowrap;">
+            <td style="padding:6px 8px;white-space:nowrap;border-left:2px solid #ddd6fe;">
                 ${a.urlGuiaEnvio ? `<a href="${a.urlGuiaEnvio}" target="_blank" style="font-size:8px;font-weight:800;background:#dbeafe;color:#1d4ed8;padding:2px 6px;border-radius:5px;text-decoration:none;">📄</a>` : '<span style="color:#e2e8f0;">—</span>'}
             </td>
-            <td style="padding:6px 8px;white-space:nowrap;">
+            <td style="padding:6px 8px;white-space:nowrap;border-right:2px solid #ddd6fe;">
                 ${a.urlGuiaRetorno ? `<a href="${a.urlGuiaRetorno}" target="_blank" style="font-size:8px;font-weight:800;background:#fef3c7;color:#92400e;padding:2px 6px;border-radius:5px;text-decoration:none;">📄</a>` : '<span style="color:#e2e8f0;">—</span>'}
             </td>
             <td style="padding:6px 8px;white-space:nowrap;">
