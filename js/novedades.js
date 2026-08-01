@@ -110,10 +110,10 @@ async function generarReporteNovedades() {
             startY: y,
             margin: { left:14, right:14, top:MARGEN_PDF+4, bottom:MARGEN_PDF+4 },
             didDrawPage: didDrawPageNov,
-            headStyles: { fillColor: colorHead, textColor:[255,255,255], fontSize:7, cellPadding:2.5 },
+            headStyles:{halign:'center',valign:'middle', fillColor: colorHead, textColor:[255,255,255], fontSize:7, cellPadding:2.5 },
             head: [['N°', ...columnas]],
             body: numerarFilas(filas),
-            styles: { fontSize:7, cellPadding:2.2, overflow:'linebreak', lineColor:[226,232,240], lineWidth:0.3 },
+            styles:{halign:'center',valign:'middle', fontSize:7, cellPadding:2.2, overflow:'linebreak', lineColor:[226,232,240], lineWidth:0.3 },
             alternateRowStyles: { fillColor: LGRAY },
             columnStyles: { 0:{halign:'center', cellWidth:8} }
         });
