@@ -349,7 +349,7 @@ function renderTablaArmamento() {
     // ── Fila 2 del thead: columnas reales ──
     const thead = document.getElementById('armamento-thead-row');
     thead.innerHTML = '<th style="padding:8px;">N°</th>'
-        + ARM_COLUMNAS.map(c => `<th style="padding:8px;text-align:left;white-space:nowrap;">${c.label}</th>`).join('')
+        + ARM_COLUMNAS.map(c => `<th style="padding:8px;white-space:nowrap;">${c.label}</th>`).join('')
         + `<th style="padding:8px;white-space:nowrap;">Credencial</th>`
         + `<th style="padding:8px;white-space:nowrap;">Arma</th>`
         + `<th style="padding:8px;white-space:nowrap;">Envío</th>`
@@ -514,8 +514,8 @@ async function exportarPDFArmamento() {
             a.estado||'—', a.proyecto||'—', a.provincia||'—', a.ubicacion||'—',
             a.urlCredencial ? 'Sí' : '—', a.urlImagenArma ? 'Sí' : '—'
         ])),
-        headStyles: { fillColor:DARK, textColor:[255,255,255], fontSize:6.5, cellPadding:2 },
-        bodyStyles: { fontSize:6.5, cellPadding:1.8 },
+        headStyles:{halign:'center',valign:'middle', fillColor:DARK, textColor:[255,255,255], fontSize:6.5, cellPadding:2 },
+        bodyStyles:{halign:'center',valign:'middle', fontSize:6.5, cellPadding:1.8 },
         alternateRowStyles: { fillColor:[248,250,252] },
         columnStyles: { 0:{halign:'center'}, 14:{halign:'center'}, 15:{halign:'center'} }
     });
@@ -681,8 +681,8 @@ async function exportarPDFRadios() {
             didDrawPage: () => dibujarMembretePDF(doc, subt, fechaHoy),
             head: [['N°','Provincia','Proyecto','Puesto','Modelo','Serie']],
             body: numerarFilas(filtrados.map(r => [r.provincia, r.proyecto, r.puesto||'—', r.modelo||'—', r.serie||'—'])),
-            headStyles: { fillColor:[124,58,237], textColor:[255,255,255], fontSize:7.5, cellPadding:2.5 },
-            bodyStyles: { fontSize:7.5, cellPadding:2.2 },
+            headStyles:{halign:'center',valign:'middle', fillColor:[124,58,237], textColor:[255,255,255], fontSize:7.5, cellPadding:2.5 },
+            bodyStyles:{halign:'center',valign:'middle', fontSize:7.5, cellPadding:2.2 },
             alternateRowStyles: { fillColor:[248,250,252] },
             columnStyles: { 0:{halign:'center'} }
         });
