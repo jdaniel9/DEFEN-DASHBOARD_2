@@ -129,6 +129,7 @@ async function intentarLogin(usuario, password, departamento) {
         if (json.ok) {
             sessionStorage.setItem(AUTH_SESSION_KEY, '1');
             sessionStorage.setItem('defen_auth_nombre', json.nombre || usuario);
+            sessionStorage.setItem('defen_auth_usuario', usuario);
             sessionStorage.setItem(AUTH_ROL_KEY, json.rol || '');
             ocultarLogin();
             iniciarDashboard();
@@ -170,6 +171,7 @@ function inicializarLogin() {
 function cerrarSesion() {
     sessionStorage.removeItem(AUTH_SESSION_KEY);
     sessionStorage.removeItem('defen_auth_nombre');
+    sessionStorage.removeItem('defen_auth_usuario');
     sessionStorage.removeItem(AUTH_ROL_KEY);
     location.reload();
 }
