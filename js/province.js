@@ -448,24 +448,49 @@ function colocarMarcador(puesto, abrirPopup) {
         ? puesto.rotacionCompleta
         : guardias;
 
-    // ── Guías de armas (envío/retorno) asignadas a este puesto ──
-    const armasDelPuesto = (armamentoDetalle || []).filter(a =>
+    // ── Detalle completo de armas asignadas a este puesto (activas) ──
+    const armasCompletas = (armamentoDetalle || []).filter(a =>
         a.provincia === provinciaActual &&
         a.puesto && a.puesto.trim().toUpperCase() === (puesto.nombre || '').trim().toUpperCase() &&
-        (a.urlGuiaEnvio || a.urlGuiaRetorno)
+        normalizarTexto(a.estado || 'activo') === 'activo'
     );
-    const guiasHTML = armasDelPuesto.length > 0
-        ? `<div style="border-top:1px solid #f1f5f9;padding-top:8px;margin-top:2px;">
-               <p style="font-size:9px;font-weight:700;color:#94a3b8;text-transform:uppercase;margin-bottom:5px;">Guías de armamento</p>
-               ${armasDelPuesto.map(a => `
-                   <div style="display:flex;align-items:center;justify-content:space-between;gap:6px;padding:4px 0;">
-                       <span style="font-size:9px;color:#475569;font-weight:600;">🔫 ${a.serie || 'Serie s/n'}</span>
-                       <div style="display:flex;gap:4px;">
-                           ${a.urlGuiaEnvio ? `<a href="${a.urlGuiaEnvio}" target="_blank" rel="noopener" style="font-size:8px;font-weight:800;background:#dbeafe;color:#1d4ed8;padding:2px 6px;border-radius:5px;text-decoration:none;">⬇️ Envío</a>` : ''}
-                           ${a.urlGuiaRetorno ? `<a href="${a.urlGuiaRetorno}" target="_blank" rel="noopener" style="font-size:8px;font-weight:800;background:#fef3c7;color:#92400e;padding:2px 6px;border-radius:5px;text-decoration:none;">⬇️ Retorno</a>` : ''}
-                       </div>
-                   </div>`).join('')}
-           </div>`
+    const armamentoHTML = armasCompletas.length > 0
+        ? armasCompletas.map(a => {
+            const esLetal = normalizarTexto(a.clase).replace(/\s/g,'').includes('letal') && !normalizarTexto(a.clase).replace(/\s/g,'').includes('noletal');
+            const esNoLetal = normalizarTexto(a.clase).replace(/\s/g,'').includes('noletal');
+            return `
+            <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:8px 10px;margin-bottom:5px;">
+                <div style="display:flex;justify-content:space-between;align-items:start;gap:6px;">
+                    <div style="min-width:0;">
+                        <p style="font-size:10px;font-weight:900;color:#991b1b;margin:0;">${a.tipo||'Arma'} ${a.marca?'· '+a.marca:''}</p>
+                        <p style="font-size:9px;color:#b91c1c;font-weight:600;margin:2px 0 0;">${a.calibre?a.calibre+' · ':''}Serie: ${a.serie||'—'}</p>
+                    </div>
+                    <div style="display:flex;gap:3px;flex-shrink:0;">
+                        ${esLetal   ? `<span style="font-size:7px;font-weight:900;background:#dc2626;color:white;padding:2px 5px;border-radius:4px;">AL</span>` : ''}
+                        ${esNoLetal ? `<span style="font-size:7px;font-weight:900;background:#f59e0b;color:white;padding:2px 5px;border-radius:4px;">ANL</span>` : ''}
+                    </div>
+                </div>
+                <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:5px;">
+                    ${a.urlImagenArma ? `<button onclick="event.stopPropagation(); if(typeof verImagen==='function') verImagen('${a.urlImagenArma}','Foto del arma · Serie ${a.serie||''}')" style="font-size:8px;font-weight:800;background:#e0f2fe;color:#0369a1;padding:2px 6px;border-radius:5px;border:none;cursor:pointer;">📷 Ver foto</button>` : ''}
+                    ${a.urlCredencial ? `<button onclick="event.stopPropagation(); if(typeof verImagen==='function') verImagen('${a.urlCredencial}','Credencial · Serie ${a.serie||''}')" style="font-size:8px;font-weight:800;background:#ede9fe;color:#6d28d9;padding:2px 6px;border-radius:5px;border:none;cursor:pointer;">📇 Credencial</button>` : ''}
+                    ${a.urlGuiaEnvio ? `<a href="${a.urlGuiaEnvio}" target="_blank" rel="noopener" style="font-size:8px;font-weight:800;background:#dbeafe;color:#1d4ed8;padding:2px 6px;border-radius:5px;text-decoration:none;">⬇️ Guía Envío</a>` : ''}
+                    ${a.urlGuiaRetorno ? `<a href="${a.urlGuiaRetorno}" target="_blank" rel="noopener" style="font-size:8px;font-weight:800;background:#fef3c7;color:#92400e;padding:2px 6px;border-radius:5px;text-decoration:none;">⬇️ Guía Retorno</a>` : ''}
+                </div>
+            </div>`;
+        }).join('')
+        : '';
+
+    // ── Detalle completo de radios asignados a este puesto ──
+    const radiosCompletos = (radiosDetalle || []).filter(r =>
+        r.provincia === provinciaActual &&
+        r.puesto && r.puesto.trim().toUpperCase() === (puesto.nombre || '').trim().toUpperCase()
+    );
+    const radiosHTML = radiosCompletos.length > 0
+        ? radiosCompletos.map(r => `
+            <div style="background:#f5f3ff;border:1px solid #ddd6fe;border-radius:10px;padding:8px 10px;margin-bottom:5px;">
+                <p style="font-size:10px;font-weight:900;color:#6d28d9;margin:0;">📻 ${r.modelo||'Radio'}</p>
+                <p style="font-size:9px;color:#7c3aed;font-weight:600;margin:2px 0 0;">Serie: ${r.serie||'—'}</p>
+            </div>`).join('')
         : '';
 
     const guardiasPopup = listaRotacion.length > 1
@@ -484,7 +509,7 @@ function colocarMarcador(puesto, abrirPopup) {
            </div>`;
 
     const popup = `
-        <div style="font-family:'DM Sans',sans-serif;min-width:240px;max-width:300px;">
+        <div style="font-family:'DM Sans',sans-serif;min-width:260px;max-width:330px;">
             <div style="background:${puesto.armado ? '#dc2626' : '#16a34a'};padding:10px 14px;">
                 <p style="color:white;font-size:11px;font-weight:900;margin:0;">${puesto.nombre}</p>
                 <p style="color:rgba(255,255,255,0.75);font-size:9px;font-weight:700;margin:2px 0 0;text-transform:uppercase;">${puesto.tipo} · ${puesto.turno}</p>
@@ -497,24 +522,23 @@ function colocarMarcador(puesto, abrirPopup) {
                            ${guardiasPopup}
                        </div>`
                     : guardiasPopup}
-                <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #f1f5f9;padding-bottom:6px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;${armasCompletas.length===0 && radiosCompletos.length===0 ? 'border-bottom:1px solid #f1f5f9;padding-bottom:6px;' : ''}">
                     <span style="font-size:9px;font-weight:700;color:#94a3b8;text-transform:uppercase;">Armado</span>
-                    <span style="font-size:11px;font-weight:800;color:${puesto.armado?'#dc2626':'#16a34a'};">
-                        ${puesto.armado ? '✅ SÍ · '+(puesto.arma||'') : '❌ NO'}
-                        ${puesto.tieneLetal   ? ` <span style="font-size:8px;font-weight:900;background:#dc2626;color:white;padding:1px 4px;border-radius:4px;">AL</span>` : ''}
-                        ${puesto.tieneNoLetal ? ` <span style="font-size:8px;font-weight:900;background:#f59e0b;color:white;padding:1px 4px;border-radius:4px;">ANL</span>` : ''}
-                    </span>
+                    <span style="font-size:11px;font-weight:800;color:${puesto.armado?'#dc2626':'#16a34a'};">${puesto.armado ? '✅ Sí' : '❌ No'}</span>
                 </div>
-                <div style="display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #f1f5f9;padding-bottom:6px;">
+                ${armamentoHTML ? `<div style="margin-top:2px;">${armamentoHTML}</div>` : ''}
+
+                <div style="display:flex;justify-content:space-between;align-items:center;${radiosCompletos.length===0 ? 'border-bottom:1px solid #f1f5f9;padding-bottom:6px;' : ''}">
                     <span style="font-size:9px;font-weight:700;color:#94a3b8;text-transform:uppercase;">Radio</span>
-                    <span style="font-size:11px;font-weight:800;color:#1e293b;">${puesto.radio ? '📻 '+(puesto.radio_info||'Sí') : '— No'}</span>
+                    <span style="font-size:11px;font-weight:800;color:#1e293b;">${puesto.radio ? '✅ Sí' : '❌ No'}</span>
                 </div>
+                ${radiosHTML ? `<div style="margin-top:2px;">${radiosHTML}</div>` : ''}
+
                 <div style="display:flex;justify-content:space-between;align-items:center;">
                     <span style="font-size:9px;font-weight:700;color:#94a3b8;text-transform:uppercase;">Días</span>
                     <span style="font-size:11px;font-weight:800;color:#1e293b;">📅 ${puesto.dias}</span>
                 </div>
                 ${puesto.obs ? `<div style="margin-top:4px;padding:6px 8px;background:#f8fafc;border-radius:8px;font-size:9px;color:#64748b;">${puesto.obs}</div>` : ''}
-                ${guiasHTML}
                 <a href="https://www.google.com/maps/search/?api=1&query=${puesto.lat},${puesto.lng}"
                    target="_blank" rel="noopener"
                    style="display:flex;align-items:center;justify-content:center;gap:6px;margin-top:6px;padding:7px;background:#2563eb;color:white;text-decoration:none;border-radius:8px;font-size:10px;font-weight:800;">
@@ -523,7 +547,7 @@ function colocarMarcador(puesto, abrirPopup) {
             </div>
         </div>`;
 
-    marker.bindPopup(popup, { maxWidth:300, minWidth:240 });
+    marker.bindPopup(popup, { maxWidth:330, minWidth:260 });
     marker._puestoData = puesto;   // ← necesario para que los filtros funcionen
     if (abrirPopup) marker.openPopup();
     marcadoresMapa.push(marker);
@@ -1023,7 +1047,7 @@ async function exportarPDF() {
             startY: y,
             margin: { left:14, right:14, top:MARGEN_PDF+4, bottom:MARGEN_PDF+4 },
             didDrawPage: didDrawPageProv,
-            headStyles: { fillColor:DARK, textColor:[255,255,255], fontSize:7.5, fontStyle:'bold', cellPadding:2.5 },
+            headStyles:{halign:'center',valign:'middle', fillColor:DARK, textColor:[255,255,255], fontSize:7.5, fontStyle:'bold', cellPadding:2.5 },
             head: [['N°','Proyecto','Guardia(s)','Arma(s)','Puesto(s)','Finaliza','Supervisor(es)']],
             body: numerarFilas(proyectosList.map(p => {
                 const dias = p.fin ? Math.round((new Date(p.fin) - hoy)/86400000) : null;
@@ -1036,7 +1060,7 @@ async function exportarPDF() {
                     (p.supervisores && p.supervisores.length) ? p.supervisores.join(', ') : '—'
                 ];
             })),
-            styles: { fontSize:7.5, cellPadding:2.5, lineColor:[226,232,240], lineWidth:0.3 },
+            styles:{halign:'center',valign:'middle', fontSize:7.5, cellPadding:2.5, lineColor:[226,232,240], lineWidth:0.3 },
             alternateRowStyles: { fillColor:[248,250,252] },
             columnStyles: { 0:{halign:'center',cellWidth:8}, 1:{fontStyle:'bold', cellWidth:36}, 2:{halign:'center',cellWidth:18}, 3:{halign:'center',cellWidth:16}, 4:{halign:'center',cellWidth:18} }
         });
@@ -1076,7 +1100,7 @@ async function exportarPDF() {
                 startY: y,
                 margin: { left:14, right:14, top:MARGEN_PDF+4, bottom:MARGEN_PDF+4 },
                 didDrawPage: didDrawPageProv,
-                headStyles: { fillColor:[71,85,105], textColor:[255,255,255], fontSize:7, cellPadding:2.5 },
+                headStyles:{halign:'center',valign:'middle', fillColor:[71,85,105], textColor:[255,255,255], fontSize:7, cellPadding:2.5 },
                 head: [['N°','Puesto','Guardia(s)','Tipo','Armado','Arma (serie)','Radio','Turno/Días']],
                 body: numerarFilas(puestos.map(pu => {
                     const gs = Array.isArray(pu.guardias) ? pu.guardias : (pu.guardia||'').split(',').map(g=>g.trim()).filter(Boolean);
@@ -1090,7 +1114,7 @@ async function exportarPDF() {
                         `${pu.turno||'—'}\n${pu.dias||''}`
                     ];
                 })),
-                styles: { fontSize:7, cellPadding:2.2, overflow:'linebreak', lineColor:[226,232,240], lineWidth:0.3 },
+                styles:{halign:'center',valign:'middle', fontSize:7, cellPadding:2.2, overflow:'linebreak', lineColor:[226,232,240], lineWidth:0.3 },
                 alternateRowStyles: { fillColor:[248,250,252] },
                 columnStyles: { 0:{halign:'center',cellWidth:8}, 1:{cellWidth:26,fontStyle:'bold'}, 4:{halign:'center'}, 6:{cellWidth:24} }
             });
@@ -1238,7 +1262,7 @@ async function exportarPDFProyecto(nombreProyecto) {
             startY: y,
             margin: { left:14, right:14, top:MARGEN_PDF+4, bottom:MARGEN_PDF+4 },
             didDrawPage: didDrawPageProy,
-            headStyles: { fillColor:DARK, textColor:[255,255,255], fontSize:7, cellPadding:2.5 },
+            headStyles:{halign:'center',valign:'middle', fillColor:DARK, textColor:[255,255,255], fontSize:7, cellPadding:2.5 },
             head: [['N°','Puesto','Guardia(s)','Tipo','Armado','Arma (serie)','Radio','Turno/Días']],
             body: numerarFilas(puestos.map(pu => {
                 const gs = Array.isArray(pu.guardias) ? pu.guardias : (pu.guardia||'').split(',').map(g=>g.trim()).filter(Boolean);
@@ -1252,7 +1276,7 @@ async function exportarPDFProyecto(nombreProyecto) {
                     `${pu.turno||'—'}\n${pu.dias||''}`
                 ];
             })),
-            styles: { fontSize:7, cellPadding:2.2, overflow:'linebreak', lineColor:[226,232,240], lineWidth:0.3 },
+            styles:{halign:'center',valign:'middle', fontSize:7, cellPadding:2.2, overflow:'linebreak', lineColor:[226,232,240], lineWidth:0.3 },
             alternateRowStyles: { fillColor:[248,250,252] },
             columnStyles: { 0:{halign:'center',cellWidth:8}, 1:{cellWidth:26,fontStyle:'bold'}, 4:{halign:'center'}, 6:{cellWidth:24} }
         });
