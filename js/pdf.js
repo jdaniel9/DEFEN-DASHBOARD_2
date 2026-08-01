@@ -181,8 +181,8 @@ async function generarPDFGlobal() {
                 proys.forEach(p => { g+=Number(p.guardias)||0; a+=Number(p.armas)||0; pu+=Number(p.puestos)||0; });
                 return [n, inf.tipo, inf.estado, g, a, pu, proys.length];
             })),
-            headStyles:{fillColor:DARK,textColor:[255,255,255],fontSize:7,fontStyle:'bold',cellPadding:2.5},
-            bodyStyles:{fontSize:7,cellPadding:2},
+            headStyles:{halign:'center',valign:'middle',fillColor:DARK,textColor:[255,255,255],fontSize:7,fontStyle:'bold',cellPadding:2.5},
+            bodyStyles:{halign:'center',valign:'middle',fontSize:7,cellPadding:2},
             alternateRowStyles:{fillColor:LGRAY},
             columnStyles:{0:{halign:'center'},1:{fontStyle:'bold'},4:{halign:'center'},5:{halign:'center'},6:{halign:'center'},7:{halign:'center'}}
         });
@@ -243,9 +243,9 @@ async function generarPDFGlobal() {
             head: [['Categoría','Guardia(s)','Arma(s)','Puesto(s)','Proyecto(s)']],
             body: claves.map(k => [k, categorias[k].g, categorias[k].a, categorias[k].pu, categorias[k].pr]),
             foot: [['GLOBAL', globalT.g, globalT.a, globalT.pu, globalT.pr]],
-            headStyles:{fillColor:DARK,textColor:[255,255,255],fontSize:8,fontStyle:'bold',cellPadding:3},
+            headStyles:{halign:'center',valign:'middle',fillColor:DARK,textColor:[255,255,255],fontSize:8,fontStyle:'bold',cellPadding:3},
             footStyles:{fillColor:[15,23,42],textColor:[255,255,255],fontSize:9,fontStyle:'bold',cellPadding:3},
-            bodyStyles:{fontSize:8,cellPadding:2.5}, alternateRowStyles:{fillColor:LGRAY},
+            bodyStyles:{halign:'center',valign:'middle',fontSize:8,cellPadding:2.5}, alternateRowStyles:{fillColor:LGRAY},
             columnStyles:{0:{fontStyle:'bold'},1:{halign:'center'},2:{halign:'center'},3:{halign:'center'},4:{halign:'center'}}
         });
     }
@@ -285,8 +285,8 @@ async function generarPDFGlobal() {
                 startY:y, margin:{left:14,right:14,bottom:29,top:19}, didDrawPage: didDrawPageHook,
                 head:[['N°','Provincia','Proyecto','Puesto','Guardia','Rol','Armado','Jornada','Días']],
                 body: numerarFilas(filas),
-                headStyles:{fillColor:DARK,textColor:[255,255,255],fontSize:6,fontStyle:'bold',cellPadding:2},
-                bodyStyles:{fontSize:6,cellPadding:2}, alternateRowStyles:{fillColor:LGRAY},
+                headStyles:{halign:'center',valign:'middle',fillColor:DARK,textColor:[255,255,255],fontSize:6,fontStyle:'bold',cellPadding:2},
+                bodyStyles:{halign:'center',valign:'middle',fontSize:6,cellPadding:2}, alternateRowStyles:{fillColor:LGRAY},
                 columnStyles:{0:{halign:'center'},6:{halign:'center'},1:{fontStyle:'bold'}}
             });
         } else {
@@ -329,8 +329,8 @@ async function generarPDFGlobal() {
                     return [p.nombre, p.guardias, p.armas, p.puestos??'—',
                         formatFecha(p.fin), `${d < 0 ? 'VENCIDO' : d+'d'}`, est];
                 })),
-                headStyles:{fillColor:[71,85,105],textColor:[255,255,255],fontSize:7,fontStyle:'bold',cellPadding:2.5},
-                bodyStyles:{fontSize:7,cellPadding:2}, alternateRowStyles:{fillColor:LGRAY},
+                headStyles:{halign:'center',valign:'middle',fillColor:[71,85,105],textColor:[255,255,255],fontSize:7,fontStyle:'bold',cellPadding:2.5},
+                bodyStyles:{halign:'center',valign:'middle',fontSize:7,cellPadding:2}, alternateRowStyles:{fillColor:LGRAY},
                 columnStyles:{0:{halign:'center'},2:{halign:'center'},3:{halign:'center'},4:{halign:'center'},6:{halign:'center'},7:{halign:'center',fontStyle:'bold'}},
                 didParseCell: (d) => {
                     if (d.section === 'body' && d.column.index === 7) {
@@ -372,8 +372,8 @@ async function generarPDFGlobal() {
             startY:y, margin:{left:14,right:14,bottom:29,top:19}, didDrawPage: didDrawPageHook,
             head:[['N°','Provincia','N° Trámite','Inicio','Fin','Días','Estado']],
             body: numerarFilas(filas),
-            headStyles:{fillColor:DARK,textColor:[255,255,255],fontSize:7,fontStyle:'bold',cellPadding:2.5},
-            bodyStyles:{fontSize:7,cellPadding:2}, alternateRowStyles:{fillColor:LGRAY},
+            headStyles:{halign:'center',valign:'middle',fillColor:DARK,textColor:[255,255,255],fontSize:7,fontStyle:'bold',cellPadding:2.5},
+            bodyStyles:{halign:'center',valign:'middle',fontSize:7,cellPadding:2}, alternateRowStyles:{fillColor:LGRAY},
             columnStyles:{0:{halign:'center'},5:{halign:'center'},6:{halign:'center',fontStyle:'bold'}},
             didParseCell: (d) => {
                 if (d.section === 'body' && d.column.index === 6) {
@@ -444,8 +444,8 @@ async function generarPDFGlobal() {
                     p.fin ? formatFecha(p.fin) : '—',
                     (p.supervisores && p.supervisores.length) ? p.supervisores.join(', ') : '—'
                 ])),
-                headStyles:{fillColor:DARK,textColor:[255,255,255],fontSize:7,fontStyle:'bold',cellPadding:2.5},
-                bodyStyles:{fontSize:7,cellPadding:2}, alternateRowStyles:{fillColor:LGRAY},
+                headStyles:{halign:'center',valign:'middle',fillColor:DARK,textColor:[255,255,255],fontSize:7,fontStyle:'bold',cellPadding:2.5},
+                bodyStyles:{halign:'center',valign:'middle',fontSize:7,cellPadding:2}, alternateRowStyles:{fillColor:LGRAY},
                 columnStyles:{0:{halign:'center'},2:{halign:'center'},3:{halign:'center'},4:{halign:'center'}}
             });
             y = doc.lastAutoTable.finalY + 8;
@@ -482,8 +482,8 @@ async function generarPDFGlobal() {
                                 pu.armado?'Sí':'No', pu.armado?(pu.arma||'—'):'—',
                                 pu.radio?(pu.radio_info||'Sí'):'No'];
                         })),
-                        headStyles:{fillColor:[100,116,139],textColor:[255,255,255],fontSize:6.5,cellPadding:2},
-                        bodyStyles:{fontSize:6.5,cellPadding:1.8,overflow:'linebreak'}, alternateRowStyles:{fillColor:LGRAY},
+                        headStyles:{halign:'center',valign:'middle',fillColor:[100,116,139],textColor:[255,255,255],fontSize:6.5,cellPadding:2},
+                        bodyStyles:{halign:'center',valign:'middle',fontSize:6.5,cellPadding:1.8,overflow:'linebreak'}, alternateRowStyles:{fillColor:LGRAY},
                         columnStyles:{0:{halign:'center'},3:{halign:'center'}}
                     });
                     y = doc.lastAutoTable.finalY + 6;
