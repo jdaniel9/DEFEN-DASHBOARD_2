@@ -1,200 +1,448 @@
-/* map.css — Estilos del mapa de provincia (Leaflet, modal, puestos, acordeón) */
+// ================================================================
+// map.js — Mapa nacional: marcadores, tarjetas, tooltips, panel detalle
+// ================================================================
 
-/* ── MODAL VISTA DE PROVINCIA ────────────────────────── */
-#prov-modal {
-    display: none;
-    position: fixed;
-    inset: 0;
-    z-index: 10000;
-    background: rgba(15,23,42,0.65);
-    backdrop-filter: blur(6px);
-    align-items: flex-end;   /* móvil: sube desde abajo */
-    justify-content: center;
-}
-#prov-modal.open { display: flex; }
+function renderDetailPanel(nombre) {
+    const panel   = document.getElementById('detail-panel');
+    const detalle = detalleProvincias[nombre];
+    const prov    = data[nombre];
 
-#prov-modal-inner {
-    display: flex;
-    flex-direction: column;
-    width: 100%;
-    max-width: 1400px;
-    height: 100dvh;          /* móvil: pantalla completa */
-    background: #f1f5f9;
-    overflow: hidden;
-    animation: slideUpModal 0.28s cubic-bezier(0.16,1,0.3,1);
-}
-@keyframes slideUpModal {
-    from { transform: translateY(40px); opacity:0; }
-    to   { transform: translateY(0);    opacity:1; }
-}
-
-/* Desktop ≥ 768px: ventana centrada */
-@media (min-width: 768px) {
-    #prov-modal { align-items: center; }
-    #prov-modal-inner {
-        width: 96vw;
-        height: 92vh;
-        border-radius: 1.5rem;
-        box-shadow: 0 32px 80px rgba(0,0,0,0.45);
-        overflow: auto;
-        resize: both;
-        min-width: 700px;
-        min-height: 500px;
-        max-width: 98vw;
-        max-height: 98vh;
+    if (!detalle) {
+        panel.innerHTML = `
+            <div class="flex items-center justify-between mb-3">
+                <h3 class="text-base font-black text-slate-800">📍 ${nombre}</h3>
+                <button onclick="closeDetail()" class="text-slate-400 hover:text-slate-700 text-xs font-bold px-2 py-1 rounded-lg hover:bg-slate-100 transition-colors">✕ Cerrar</button>
+            </div>
+            <p class="text-sm text-slate-500 bg-slate-50 rounded-xl px-4 py-3 border border-slate-200">
+                Esta provincia aún no tiene información cargada en el sistema.
+            </p>`;
+        panel.classList.add('visible');
+        panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        return;
     }
+
+    // ── Trámite ──
+    const enTramite      = !detalle.vigenciaFin || !detalle.vigenciaInicio;
+    const sinRegistro    = !detalle.tramite;
+    const diasTramite    = enTramite ? null : diasRestantes(detalle.vigenciaFin);
+    const alTramite      = (!enTramite && diasTramite !== null) ? alertaVigencia(diasTramite) : null;
+
+    // Etiqueta dinámica: "AGENCIA VIGENTE" / "SUCURSAL EN TRÁMITE" / etc.
+    const tipoLabel   = (prov.tipo || 'AGENCIA').toUpperCase();
+    const estadoLabel = sinRegistro ? 'SIN REGISTRO' : (enTramite ? 'EN TRÁMITE' : 'VIGENTE');
+    const labelVigencia = `${tipoLabel} ${estadoLabel}`;
+
+    const tramiteHTML = sinRegistro
+        ? `<p class="text-sm font-bold text-slate-400 italic">Sin registro de trámite</p>`
+        : `<div class="flex items-center justify-between gap-2">
+               <p class="font-black text-slate-900 text-sm" style="font-family:'DM Mono',monospace">${detalle.tramite}</p>
+               ${detalle.urlCertificado ? `
+               <a href="${detalle.urlCertificado}" target="_blank" rel="noopener"
+                  class="flex-shrink-0 flex items-center gap-1 bg-blue-600 hover:bg-blue-700 text-white text-[9px] font-black px-2 py-1 rounded-lg transition-colors"
+                  title="Descargar certificado del trámite">
+                   ⬇️ PDF
+               </a>` : ''}
+           </div>`;
+
+    const vigenciaHTML = sinRegistro
+        ? `<p class="text-slate-400 text-[11px] italic">Sin datos de vigencia</p>`
+        : enTramite
+            ? `<p class="text-[11px] font-black text-amber-600">🕐 ${labelVigencia}</p>
+               <p class="text-[10px] text-slate-400 mt-0.5">${detalle.estadoTramite || 'Registro de Inspección'}</p>`
+            : `<p class="text-[11px] font-black text-green-600">✅ ${labelVigencia}</p>
+               <p class="text-[11px] text-slate-600 font-semibold mt-0.5">${formatFecha(detalle.vigenciaInicio)} → ${formatFecha(detalle.vigenciaFin)}</p>
+               <p class="text-[11px] font-black mt-1 ${alTramite.cls}">${alTramite.label}</p>`;
+
+    // ── Supervisores provincia ──
+    const supsProv     = detalle.supervisores || [];
+    const supsProvHTML = supsProv.length > 0
+        ? supsProv.map(s => `<span class="inline-flex items-center gap-1 text-[10px] font-bold text-slate-700 bg-white border border-slate-200 px-2 py-0.5 rounded-full">👤 ${s}</span>`).join('')
+        : `<span class="text-[11px] font-bold text-slate-400 italic">Sin supervisor asignado</span>`;
+
+    // ── Proyectos — usar solo los que pasan el filtro activo ──
+    const todosNeutros   = Object.values(filtrosActivos).every(v => v === 'todos');
+    const totFiltrados   = calcTotalesFiltrados(nombre);
+    const listaProy      = todosNeutros ? (detalle.proyectosList || []) : totFiltrados.proyectosList;
+    const totalProv      = detalle.proyectosList ? detalle.proyectosList.length : 0;
+    const hayFiltroActivo = !todosNeutros && totalProv !== listaProy.length;
+
+    const tieneProy = listaProy.length > 0;
+    const proyectosHTML = tieneProy
+        ? listaProy.map(p => {
+            const dias = diasRestantes(p.fin);
+            const al   = alertaProyecto(dias);
+            const supsP = p.supervisores && p.supervisores.length > 0
+                ? `<div class="flex flex-wrap gap-1 mt-1">${p.supervisores.map(s => `<span class="text-[9px] font-bold text-blue-700 bg-blue-50 border border-blue-100 px-1.5 py-0.5 rounded-full">👤 ${s}</span>`).join('')}</div>`
+                : '';
+
+            // ── Puestos de este proyecto (desplegable) ──
+            const puestosProy = (puestosData[nombre] || {})[p.nombre] || [];
+            const idSafe = `pu-${nombre}-${p.nombre}`.replace(/[^a-zA-Z0-9]/g,'');
+            const puestosListHTML = puestosProy.length > 0
+                ? puestosProy.map(pu => {
+                    const gs = Array.isArray(pu.guardias) ? pu.guardias : (pu.guardia||'').split(',').map(g=>g.trim()).filter(Boolean);
+                    const agentesHTML = gs.length > 0
+                        ? gs.map(g => `<span class="block text-[9px] text-slate-500 font-semibold">👤 ${g}</span>`).join('')
+                        : `<span class="block text-[9px] text-slate-400 italic">Sin agentes asignados</span>`;
+
+                    return `
+                    <div class="flex flex-col gap-1.5 bg-slate-50 rounded-lg px-3 py-2.5 border border-slate-100">
+                        <div class="flex items-start justify-between gap-2">
+                            <p class="text-[11px] font-black text-slate-700">${pu.nombre}</p>
+                            <span class="text-[8px] font-black px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 flex-shrink-0">${pu.tipo || '—'}</span>
+                        </div>
+                        <div class="flex flex-col gap-0.5">${agentesHTML}</div>
+                        <div class="flex flex-col gap-1 mt-0.5">
+                            ${pu.armado
+                                ? `<div class="flex items-center gap-1.5 bg-red-50 border border-red-100 rounded-md px-2 py-1">
+                                       <span class="text-[8px] font-black text-red-700">🔫 ARMADO</span>
+                                       ${pu.tieneLetal   ? `<span class="text-[7px] font-black bg-red-600 text-white px-1 rounded" title="Arma Letal">AL</span>` : ''}
+                                       ${pu.tieneNoLetal ? `<span class="text-[7px] font-black bg-amber-500 text-white px-1 rounded" title="Arma No Letal">ANL</span>` : ''}
+                                       <span class="text-[9px] text-red-600 font-medium truncate">${pu.arma || 'Sin serie registrada'}</span>
+                                   </div>`
+                                : `<div class="flex items-center gap-1.5"><span class="text-[8px] font-black px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500">Sin arma</span></div>`}
+                            ${pu.radio
+                                ? `<div class="flex items-center gap-1.5 bg-purple-50 border border-purple-100 rounded-md px-2 py-1">
+                                       <span class="text-[8px] font-black text-purple-700">📻 RADIO</span>
+                                       <span class="text-[9px] text-purple-600 font-medium truncate">${pu.radio_info || 'Sin modelo registrado'}</span>
+                                   </div>`
+                                : `<div class="flex items-center gap-1.5"><span class="text-[8px] font-black px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500">Sin radio</span></div>`}
+                        </div>
+                    </div>`;
+                }).join('')
+                : `<p class="text-[10px] text-slate-400 italic px-1">Sin puestos con coordenadas registradas para este proyecto.</p>`;
+
+            return `
+            <div class="project-row bg-white flex flex-col gap-2 ${p.vacantes > 0 ? 'ring-2 ring-red-300' : ''}">
+                <div class="flex items-start justify-between gap-2 cursor-pointer" onclick="document.getElementById('${idSafe}').classList.toggle('hidden'); this.querySelector('.chev-puestos').classList.toggle('rotate-180')">
+                    <span class="text-sm font-black text-slate-800 leading-tight">${p.nombre}</span>
+                    <div class="flex items-center gap-1.5 flex-shrink-0">
+                        ${p.urlDocumento ? `
+                        <a href="${p.urlDocumento}" target="_blank" rel="noopener" onclick="event.stopPropagation()"
+                           class="flex items-center gap-1 bg-slate-700 hover:bg-slate-800 text-white text-[9px] font-black px-2 py-1 rounded-full transition-colors"
+                           title="Descargar OC / Contrato">
+                            ⬇️ OC/CT
+                        </a>` : ''}
+                        ${p.urlKardex ? `
+                        <a href="${p.urlKardex}" target="_blank" rel="noopener" onclick="event.stopPropagation()"
+                           class="flex items-center gap-1 bg-green-700 hover:bg-green-800 text-white text-[9px] font-black px-2 py-1 rounded-full transition-colors"
+                           title="Descargar Kardex de Inventario (Excel)">
+                            📊 Kardex
+                        </a>` : ''}
+                        ${(typeof rolActual === 'function' && rolActual() === 'admin') ? `
+                        <button onclick="event.stopPropagation(); archivarProyectoActivo('${nombre}','${p.nombre.replace(/'/g,"\\'")}')"
+                           class="flex items-center gap-1 bg-amber-600 hover:bg-amber-700 text-white text-[9px] font-black px-2 py-1 rounded-full transition-colors"
+                           title="Archivar este proyecto (mover al histórico)">
+                            🗄️
+                        </button>` : ''}
+                        <span class="text-[10px] font-bold px-2.5 py-1 rounded-full whitespace-nowrap ${al.cls}">${al.label}</span>
+                        <span class="chev-puestos text-[10px] text-slate-400 transition-transform">▾</span>
+                    </div>
+                </div>
+                ${p.vacantes > 0 ? `
+                <div class="flex items-center gap-1.5 bg-red-50 border border-red-200 rounded-lg px-2.5 py-1.5">
+                    <span class="w-1.5 h-1.5 rounded-full bg-red-500 inline-block" style="animation:pulseGreen 1.5s infinite;"></span>
+                    <span class="text-[10px] font-black text-red-700">⚠️ ${p.vacantes} VACANTE${p.vacantes > 1 ? 'S' : ''} SIN CUBRIR</span>
+                </div>` : ''}
+                <div class="flex flex-wrap gap-3 text-[11px] text-slate-500 font-semibold">
+                    <span>👮 ${p.guardias} guardia(s)</span>
+                    <span>🔫 ${p.armas} arma(s)</span>
+                    <span>🏢 ${p.puestos ?? '—'} puesto(s)</span>
+                    <span>📅 Finaliza: ${formatFecha(p.fin)}</span>
+                </div>
+                ${supsP}
+                <div class="text-[10px] text-slate-400 font-medium">${al.desc}</div>
+                <div id="${idSafe}" class="hidden flex flex-col gap-1.5 mt-1 pt-2 border-t border-slate-100">
+                    ${puestosListHTML}
+                </div>
+            </div>`;
+        }).join('')
+        : `<div class="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-[12px] text-amber-700 font-semibold">
+            ${hayFiltroActivo
+                ? `⚙️ Ningún proyecto de esta provincia cumple el filtro activo. <button onclick="resetearFiltros()" class="underline ml-1">Limpiar filtros</button>`
+                : 'Sin proyectos activos en esta provincia.'}
+           </div>`;
+
+    panel.innerHTML = `
+        <div class="flex items-center justify-between mb-4">
+            <div>
+                <h3 class="text-lg font-black text-slate-900 leading-tight">📍 ${nombre}</h3>
+                <div class="flex items-center gap-2 mt-0.5">
+                    <p class="text-[10px] text-slate-400 font-bold uppercase tracking-wide">${prov.tipo} · ${prov.estado}</p>
+                    ${hayFiltroActivo ? `<span class="text-[8px] font-black bg-amber-500 text-white px-2 py-0.5 rounded-full">⚙️ Filtro activo · ${listaProy.length} de ${totalProv} proy.</span>` : ''}
+                </div>
+            </div>
+            <div class="flex items-center gap-2">
+                ${puestosData[nombre] ? `
+                <button onclick="abrirVistaProvincia('${nombre}')"
+                        class="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white text-[10px] font-black px-3 py-1.5 rounded-xl transition-colors shadow-sm">
+                    🗺️ Ver mapa de puestos
+                </button>` : ''}
+                <button onclick="closeDetail()" class="text-slate-400 hover:text-slate-700 text-xs font-bold px-2.5 py-1.5 rounded-xl hover:bg-slate-100 transition-colors border border-slate-200">✕ Cerrar</button>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+            <div class="bg-slate-50 border border-slate-200 rounded-xl p-3">
+                <p class="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">N° de Trámite</p>
+                ${tramiteHTML}
+            </div>
+            <div class="bg-slate-50 border border-slate-200 rounded-xl p-3">
+                <p class="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-1">Estado</p>
+                ${vigenciaHTML}
+            </div>
+            <div class="bg-slate-50 border border-slate-200 rounded-xl p-3">
+                <p class="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-2">Supervisor(es) Provincia</p>
+                <div class="flex flex-wrap gap-1">${supsProvHTML}</div>
+                ${supsProv.length > 0 ? `<p class="text-[9px] text-slate-400 font-medium mt-1">${supsProv.length} asignado(s)</p>` : ''}
+            </div>
+        </div>
+
+        ${(detalle.urlPermisoOperaciones || detalle.urlTenenciaArmas || detalle.urlPermisoUniforme) ? `
+        <div class="bg-indigo-50 border border-indigo-200 rounded-xl p-3 mb-4">
+            <p class="text-[9px] font-bold text-indigo-700 uppercase tracking-wider mb-2">📋 Documentos Habilitantes</p>
+            <div class="flex flex-wrap gap-2">
+                ${detalle.urlPermisoOperaciones ? `<a href="${detalle.urlPermisoOperaciones}" target="_blank" rel="noopener" class="flex items-center gap-1.5 bg-white border border-indigo-200 hover:bg-indigo-100 text-indigo-700 text-[10px] font-black px-3 py-1.5 rounded-lg transition-colors">⬇️ Permiso de Operaciones</a>` : ''}
+                ${detalle.urlTenenciaArmas ? `<a href="${detalle.urlTenenciaArmas}" target="_blank" rel="noopener" class="flex items-center gap-1.5 bg-white border border-indigo-200 hover:bg-indigo-100 text-indigo-700 text-[10px] font-black px-3 py-1.5 rounded-lg transition-colors">⬇️ Tenencia de Armas</a>` : ''}
+                ${detalle.urlPermisoUniforme ? `<a href="${detalle.urlPermisoUniforme}" target="_blank" rel="noopener" class="flex items-center gap-1.5 bg-white border border-indigo-200 hover:bg-indigo-100 text-indigo-700 text-[10px] font-black px-3 py-1.5 rounded-lg transition-colors">⬇️ Permiso de Uniforme</a>` : ''}
+            </div>
+        </div>` : ''}
+
+        ${prov.rastrilloSede > 0 ? `
+        <div class="bg-slate-100 border border-slate-300 rounded-xl p-3 mb-4 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+                <span class="text-lg">🔫</span>
+                <div>
+                    <p class="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Armas en Rastrillo en esta sede</p>
+                    <p class="text-[10px] text-slate-400 font-medium">Sin asignar a ningún proyecto actualmente</p>
+                </div>
+            </div>
+            <span class="text-2xl font-black text-slate-700">${prov.rastrilloSede}</span>
+        </div>` : ''}
+
+        <div>
+            <div class="flex items-center gap-2 mb-2">
+                <h4 class="text-sm font-black text-slate-700">Proyecto(s) Activo(s)</h4>
+                ${tieneProy ? `<div class="flex gap-2 ml-auto text-[9px] font-bold">
+                    <span class="badge-danger px-2 py-0.5 rounded-full">≤30d: acción</span>
+                    <span class="badge-warn  px-2 py-0.5 rounded-full">≤60d: pendiente</span>
+                    <span class="badge-ok    px-2 py-0.5 rounded-full">&gt;60d: ok</span>
+                </div>` : ''}
+            </div>
+            <div class="flex flex-col gap-2">${proyectosHTML}</div>
+        </div>`;
+
+    panel.classList.add('visible');
+    panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
-/* Body: mapa arriba + sidebar abajo en móvil  */
-#prov-modal-body {
-    display: flex;
-    flex-direction: column-reverse;   /* móvil: sidebar abajo, mapa arriba */
-    flex: 1;
-    overflow: hidden;
-    min-height: 0;
+function closeDetail() {
+    const panel = document.getElementById('detail-panel');
+    panel.classList.remove('visible');
+    panel.innerHTML = '';
+    // Quitar selección visual de tarjetas
+    document.querySelectorAll('.card-selected').forEach(c => c.classList.remove('card-selected'));
 }
-@media (min-width: 768px) {
-    #prov-modal-body {
-        flex-direction: row;           /* desktop: sidebar izq, mapa der */
+
+// =====================================================================
+// MARKERS
+// =====================================================================
+const tooltip       = document.getElementById('tooltip');
+const markersLayer  = document.getElementById('markers-layer');
+const listContainer = document.getElementById('province-list');
+
+function init() {
+    document.getElementById('markers-layer').innerHTML = '';
+    document.getElementById('province-list').innerHTML = '';
+
+    // Regenerar los chips de "Tipo de proyecto" según los datos reales cargados
+    renderChipsContrato();
+
+    // Totales calculados desde proyectosList (fuente de verdad)
+    let totals = { G:0, A:0, Pu:0, Pr:0, Prov:0 };
+    Object.keys(data).sort().forEach(name => {
+        const info    = data[name];
+        const detalle = detalleProvincias[name];
+        if (info.proyectos > 0) {
+            if (detalle && detalle.proyectosList && detalle.proyectosList.length > 0) {
+                detalle.proyectosList.forEach(p => {
+                    totals.G  += Number(p.guardias) || 0;
+                    totals.A  += Number(p.armas)    || 0;
+                    totals.Pu += Number(p.puestos)  || 0;
+                });
+            } else {
+                totals.G  += info.guardias;
+                totals.A  += info.armas;
+                totals.Pu += info.puestos;
+            }
+            totals.Pr   += info.proyectos;
+            totals.Prov++;
+        }
+        createMarker(name, info);
+        createListItem(name, info);
+    });
+
+    // Resumen ejecutivo
+    document.getElementById('total-guardias').innerText   = totals.G.toLocaleString();
+    document.getElementById('total-armas').innerText      = totals.A;
+    document.getElementById('total-puestos').innerText    = totals.Pu;
+    document.getElementById('total-proyectos').innerText  = totals.Pr;
+    document.getElementById('total-provincias').innerText = totals.Prov;
+
+    // Alerta nacional de vacantes — solo se muestra si hay al menos 1
+    const alertaVac = document.getElementById('alerta-vacantes-nacional');
+    if (alertaVac) {
+        if (vacantesNacional > 0) {
+            alertaVac.style.display = 'flex';
+            document.getElementById('total-vacantes-nacional').textContent = vacantesNacional;
+        } else {
+            alertaVac.style.display = 'none';
+        }
     }
+
+    // Resumen armamento — todos los valores calculados automáticamente
+    const set = (id, val) => { const el = document.getElementById(id); if (el) el.innerText = val !== null && val !== undefined ? val : '—'; };
+    set('armas-operativas-tbl', armamento.enCampo  ?? totals.A);
+    set('armas-transito',       armamento.enTransito);
+    set('armas-rastrillo',      armamento.rastrillo);
+    set('armas-perdida',        armamento.perdida);
+    set('armas-confiscada',     armamento.confiscada);
+    set('armas-global',         armamento.global);
+    // En campo en resumen ejecutivo = suma real de proyectosList
+    document.getElementById('total-armas').innerText = totals.A;
 }
 
-/* ── Sidebar ──────────────────────────────────────────── */
-#prov-sidebar {
-    background: white;
-    border-top: 1px solid #e2e8f0;
-    overflow-y: auto;
-    flex-shrink: 0;
-    /* Móvil: altura fija, se puede scroll */
-    height: 42vh;
-    display: flex;
-    flex-direction: column;
+function markerColor(info) {
+    if (info.cat === 'active')
+        return (info.tipo === 'MATRIZ' || info.tipo === 'SUCURSAL') ? '#2563eb' : '#16a34a';
+    if (info.cat === 'agency_only') return '#f59e0b';
+    return '#ef4444';
 }
-@media (min-width: 768px) {
-    #prov-sidebar {
-        width: 300px;
-        height: 100%;
-        border-top: none;
-        border-right: 1px solid #e2e8f0;
+
+function createMarker(name, info) {
+    const color   = markerColor(info);
+    const cleanId = name.replace(/\s/g,'');
+    const marker  = document.createElement('div');
+    marker.className = 'marker';
+    marker.style.left = info.x + '%';
+    marker.style.top  = info.y + '%';
+    marker.style.backgroundColor = color;
+    marker.id = `marker-${cleanId}`;
+
+    if (info.cat === 'active') {
+        const pulse = document.createElement('div');
+        pulse.className = 'marker-pulse';
+        pulse.style.backgroundColor = color;
+        marker.appendChild(pulse);
     }
-}
-@media (min-width: 1024px) {
-    #prov-sidebar { width: 320px; }
+
+    marker.onmousemove = (e) => showTooltip(e, name, info);
+    marker.onmouseleave = hideTooltip;
+    marker.onclick = () => {
+        hideTooltip();
+        highlightCard(cleanId);
+        renderDetailPanel(name);
+        // Si tiene puestos registrados, ofrecer vista de mapa
+        if (info.cat === 'active' && puestosData[name]) {
+            abrirVistaProvincia(name);
+        }
+    };
+    markersLayer.appendChild(marker);
 }
 
-/* ── Mapa ─────────────────────────────────────────────── */
-#prov-map {
-    flex: 1;
-    min-height: 0;
-    z-index: 1;
-    /* Móvil: el mapa ocupa la mitad superior */
-    height: 58vh;
-}
-@media (min-width: 768px) {
-    #prov-map { height: 100%; }
+function createListItem(name, info) {
+    const cleanId = name.replace(/\s/g,'');
+    let borderCls = 'border-l-red-500';
+    let bgCls     = 'bg-slate-50';
+    if (info.cat === 'active') {
+        borderCls = (info.tipo === 'MATRIZ' || info.tipo === 'SUCURSAL') ? 'border-l-blue-600' : 'border-l-green-600';
+        bgCls     = 'bg-white';
+    } else if (info.cat === 'agency_only') {
+        borderCls = 'border-l-yellow-500';
+    }
+
+    const div = document.createElement('div');
+    div.id        = `card-${cleanId}`;
+    div.className = `p-3 ${bgCls} border border-slate-200 rounded-xl transition-all hover:shadow-md cursor-pointer group border-l-4 ${borderCls}`;
+
+    div.innerHTML = `
+        <div class="flex justify-between items-start">
+            <div>
+                <h4 class="font-black text-slate-800 text-xs group-hover:text-blue-600 transition-colors">${name}</h4>
+                <p class="text-[9px] font-bold text-slate-400 uppercase">${info.estado}</p>
+            </div>
+            ${info.proyectos > 0
+                ? `<span class="bg-blue-600 text-white text-[8px] font-black px-2 py-0.5 rounded-full card-proy-badge-${cleanId}">${info.proyectos} PROY.</span>`
+                : ''}
+        </div>
+        ${info.proyectos > 0 ? `
+        <div class="grid grid-cols-2 gap-2 mt-2 text-[10px]">
+            <div class="flex items-center justify-between gap-1 bg-red-50 border border-red-100 rounded-lg px-2 py-1.5">
+                <span class="text-red-600 font-bold uppercase flex items-center gap-1">🔫 Arma(s)</span>
+                <span class="font-black text-red-700 card-armas-${cleanId}">${info.armas}</span>
+            </div>
+            <div class="flex items-center justify-between gap-1 bg-blue-50 border border-blue-100 rounded-lg px-2 py-1.5">
+                <span class="text-blue-600 font-bold uppercase flex items-center gap-1">👮 Guardia(s)</span>
+                <span class="font-black text-blue-700 card-guardias-${cleanId}">${info.guardias}</span>
+            </div>
+        </div>` : `<p class="text-[9px] text-slate-400 mt-1 font-medium">→ Ver trámite</p>`}
+    `;
+
+    div.onclick = () => {
+        // Scroll al marcador en el mapa
+        const marker = document.getElementById(`marker-${cleanId}`);
+        if (marker) {
+            marker.style.transform = 'translate(-50%, -50%) scale(2.5)';
+            setTimeout(() => marker.style.transform = '', 900);
+        }
+        highlightCard(cleanId);
+        renderDetailPanel(name);
+    };
+
+    listContainer.appendChild(div);
 }
 
-/* ── Acordeón de proyectos ────────────────────────────── */
-.acord-proyecto {
-    border: 1px solid #e2e8f0;
-    border-radius: 12px;
-    overflow: hidden;
-    transition: box-shadow 0.18s;
+function highlightCard(id) {
+    document.querySelectorAll('.card-selected').forEach(c => c.classList.remove('card-selected'));
+    const card = document.getElementById(`card-${id}`);
+    if (!card) return;
+    card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    card.classList.add('card-selected');
 }
-.acord-proyecto:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.07); }
 
-.acord-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 9px 12px;
-    cursor: pointer;
-    background: #f8fafc;
-    user-select: none;
-    gap: 8px;
-    transition: background 0.15s;
-}
-.acord-header:hover   { background: #eff6ff; }
-.acord-header.active  { background: #dbeafe; border-bottom: 1px solid #bfdbfe; }
+// =====================================================================
+// HELPER: calcular totales de una provincia SEGÚN FILTROS ACTIVOS
+// Devuelve {guardias, armas, puestos, proyectos, proyectosList}
+// =====================================================================
 
-.acord-chevron {
-    font-size: 10px;
-    color: #94a3b8;
-    transition: transform 0.2s;
-    flex-shrink: 0;
-}
-.acord-header.active .acord-chevron { transform: rotate(180deg); color: #3b82f6; }
+function showTooltip(e, name, info) {
+    // Usar totales filtrados en el tooltip
+    const tot = calcTotalesFiltrados(name);
+    const hayFiltro = !Object.values(filtrosActivos).every(v => v === 'todos');
 
-.acord-body {
-    display: none;
-    padding: 10px;
-    background: white;
-    flex-direction: column;
-    gap: 6px;
+    tooltip.style.display = 'block';
+    tooltip.innerHTML = `
+        <div class="text-[9px] font-bold text-blue-400 uppercase mb-1">${info.tipo}</div>
+        <div class="text-sm font-black border-b border-white/10 pb-2 mb-2">${name}</div>
+        ${hayFiltro ? `<div class="text-[8px] text-amber-400 font-bold mb-2 flex items-center gap-1">⚙️ Mostrando datos filtrados</div>` : ''}
+        <div class="grid grid-cols-2 gap-3 text-[11px]">
+            <div><div class="text-slate-400 text-[9px] uppercase">Puesto(s)</div><div class="font-bold">${tot.puestos}</div></div>
+            <div><div class="text-slate-400 text-[9px] uppercase">Guardia(s)</div><div class="font-bold text-blue-400">${tot.guardias}</div></div>
+            <div><div class="text-slate-400 text-[9px] uppercase">Proyecto(s)</div><div class="font-bold">${tot.proyectos}</div></div>
+            <div><div class="text-slate-400 text-[9px] uppercase">Arma(s)</div><div class="font-bold text-green-400">${tot.armas}</div></div>
+        </div>
+        <div class="mt-2 pt-2 border-t border-white/10 text-[10px] text-slate-300 uppercase">
+            Estado: <span class="${info.estado==='VIGENTE'?'text-green-400':'text-amber-400'} font-bold">${info.estado}</span>
+        </div>
+        ${info.cat==='active' ? '<div class="mt-1 text-[9px] text-blue-300 font-medium">→ Clic para ver detalle completo</div>' : '<div class="mt-1 text-[9px] text-slate-400 font-medium">→ Clic para ver trámite</div>'}
+    `;
+    const x = e.clientX + 20;
+    const y = e.clientY + 20;
+    tooltip.style.left = (x + 220 > window.innerWidth ? e.clientX - 240 : x) + 'px';
+    tooltip.style.top  = (y + 160 > window.innerHeight ? e.clientY - 180 : y) + 'px';
 }
-.acord-body.open { display: flex; }
 
-/* ── Tarjeta de puesto ────────────────────────────────── */
-.puesto-card {
-    border: 1px solid #e2e8f0;
-    border-radius: 10px;
-    padding: 8px 10px;
-    cursor: pointer;
-    transition: all 0.15s;
-    background: white;
-}
-.puesto-card:hover  { background: #f0fdf4; border-color: #86efac; }
-.puesto-card.active { background: #dcfce7; border-color: #16a34a;
-                      box-shadow: 0 0 0 2px rgba(22,163,74,0.2); }
+function hideTooltip() { tooltip.style.display = 'none'; }
 
-/* Popup Leaflet */
-.leaflet-popup-content-wrapper {
-    border-radius: 14px !important;
-    box-shadow: 0 12px 32px rgba(0,0,0,0.22) !important;
-    border: 1px solid #e2e8f0;
-    padding: 0 !important;
-    overflow: hidden;
-}
-.leaflet-popup-content { margin: 0 !important; }
-.leaflet-popup-tip-container { display:none; }
 
-/* ── Barra de filtros y acciones ──────────────────────── */
-#filtros-bar {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 7px 12px;
-    background: #0f172a;
-    border-top: 1px solid rgba(255,255,255,0.07);
-    flex-wrap: wrap;
-    flex-shrink: 0;
-}
-.filtro-btn {
-    display: flex; align-items: center; gap: 5px;
-    font-size: 10px; font-weight: 700;
-    padding: 4px 10px; border-radius: 20px;
-    border: 1.5px solid transparent;
-    cursor: pointer; transition: all 0.15s;
-    white-space: nowrap;
-    background: rgba(255,255,255,0.07);
-    color: #94a3b8;
-}
-.filtro-btn:hover { background: rgba(255,255,255,0.12); color: white; }
-.filtro-btn.on-todos    { background:#3b82f6; color:white; border-color:#2563eb; }
-.filtro-btn.on-armado   { background:#dc2626; color:white; border-color:#b91c1c; }
-.filtro-btn.on-desarmado{ background:#16a34a; color:white; border-color:#15803d; }
-.filtro-btn.on-radio    { background:#7c3aed; color:white; border-color:#6d28d9; }
-
-.pdf-btn {
-    margin-left: auto;
-    display: flex; align-items: center; gap: 5px;
-    font-size: 10px; font-weight: 800;
-    padding: 5px 12px; border-radius: 20px;
-    background: #f59e0b; color: #1c1917;
-    cursor: pointer; transition: all 0.15s;
-    white-space: nowrap; border: none;
-}
-.pdf-btn:hover { background: #d97706; }
-
-/* Marcador atenuado al filtrar */
-.marker-dim { opacity: 0.18 !important; }
+function hideTooltip() { document.getElementById('tooltip').style.display = 'none'; }
