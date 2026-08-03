@@ -480,7 +480,7 @@ function exportarExcelArmamento() {
 
     const hoy = new Date();
     const fechaHoy = `${String(hoy.getDate()).padStart(2,'0')}-${String(hoy.getMonth()+1).padStart(2,'0')}-${hoy.getFullYear()}`;
-    XLSX.writeFile(wb, `Inventario_Armamento_${fechaHoy}.xlsx`);
+    XLSX.writeFile(wb, `Inventario_Armamento_DEFEN_${fechaHoy}.xlsx`);
 }
 
 async function exportarPDFArmamento() {
@@ -527,7 +527,7 @@ async function exportarPDFArmamento() {
         doc.text(`Página ${i} de ${totalPag}`, W-14, H-MARGEN_PDF+20, {align:'right'});
         doc.text('Documento confidencial · Uso interno', 14, H-MARGEN_PDF+20);
     }
-    doc.save(`Inventario_Armamento_${fechaHoy.replace(/\//g,'-')}.pdf`);
+    doc.save(`Inventario_Armamento_DEFEN_${fechaHoy.replace(/\//g,'-')}.pdf`);
 }
 
 // ================================================================
@@ -654,7 +654,7 @@ function exportarExcelRadios() {
 
     const hoy = new Date();
     const fechaHoy = `${String(hoy.getDate()).padStart(2,'0')}-${String(hoy.getMonth()+1).padStart(2,'0')}-${hoy.getFullYear()}`;
-    XLSX.writeFile(wb, `Inventario_Radios_${fechaHoy}.xlsx`);
+    XLSX.writeFile(wb, `Inventario_Radios_DEFEN_${fechaHoy}.xlsx`);
 }
 
 async function exportarPDFRadios() {
@@ -695,5 +695,5 @@ async function exportarPDFRadios() {
         doc.text(`Página ${i} de ${totalPag}`, W-14, H-MARGEN_PDF+20, {align:'right'});
         doc.text('Documento confidencial · Uso interno', 14, H-MARGEN_PDF+20);
     }
-    doc.save(`Inventario_Radios_${fechaHoy.replace(/\//g,'-')}.pdf`);
+    doc.save(`Inventario_Radios_DEFEN_${fechaHoy.replace(/\//g,'-')}.pdf`);
 }
