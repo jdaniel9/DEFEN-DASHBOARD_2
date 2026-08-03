@@ -68,6 +68,12 @@ function procesarDatosAPI(json) {
         delete json.__radios_detalle__;
     }
 
+    // ── Cédulas por puesto (para la Nómina de Personal) ──
+    if (json.__cedulas__) {
+        cedulasPorPuesto = json.__cedulas__;
+        delete json.__cedulas__;
+    }
+
     // ── Asistencia: quién está de turno HOY por puesto ──
     if (json.__asistencia__) {
         asistenciaHoy = json.__asistencia__;
