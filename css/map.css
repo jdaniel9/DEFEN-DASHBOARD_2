@@ -36,6 +36,12 @@
         height: 92vh;
         border-radius: 1.5rem;
         box-shadow: 0 32px 80px rgba(0,0,0,0.45);
+        overflow: auto;
+        resize: both;
+        min-width: 700px;
+        min-height: 500px;
+        max-width: 98vw;
+        max-height: 98vh;
     }
 }
 
@@ -178,6 +184,8 @@
 .filtro-btn.on-armado   { background:#dc2626; color:white; border-color:#b91c1c; }
 .filtro-btn.on-desarmado{ background:#16a34a; color:white; border-color:#15803d; }
 .filtro-btn.on-radio    { background:#7c3aed; color:white; border-color:#6d28d9; }
+.filtro-btn.on-letal    { background:#991b1b; color:white; border-color:#7f1d1d; }
+.filtro-btn.on-noletal  { background:#d97706; color:white; border-color:#b45309; }
 
 .pdf-btn {
     margin-left: auto;
