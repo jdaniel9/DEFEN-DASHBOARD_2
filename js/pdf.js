@@ -1,6 +1,16 @@
 // ================================================================
 // pdf.js — Generador PDF global con membrete DEFEN CIA. LTDA.
 // Respeta los filtros globales activos en todas sus secciones.
+//
+// Orden de secciones:
+//   1. Resumen Ejecutivo
+//   2. Estado de Trámites por Provincia
+//   3. Resumen por Tipo de Contrato (categorías dinámicas, según lo
+//      que exista realmente en tu columna tipo_contrato — sin limitarse
+//      a ODC/CT/BROW/CUST)
+//   4. Proyectos Activos por Provincia
+//   5. Nómina de Personal Operativo — Nacional (con Cédula)
+//   6. Detalle de Puestos por Provincia (opcional, con mapa)
 // ================================================================
 
 // ── Helpers de filtrado, compartidos por todas las secciones ──
@@ -32,6 +42,17 @@ function puestosQuePasanFiltro(n) {
     }).map(p => (p.nombre||'').toUpperCase().trim()));
 }
 
+// Categorías de contrato REALES según lo que exista en tus datos — no se
+// limita a ODC/CT/BROW/CUST, usa exactamente lo que pongas en tu Excel
+function obtenerCategoriasContrato(provsActivas) {
+    const vistas = new Set();
+    provsActivas.forEach(n => proyectosFiltradosProvincia(n).forEach(p => {
+        const cat = (p.tipoContrato || '').toUpperCase().trim();
+        if (cat) vistas.add(cat);
+    }));
+    return [...vistas].sort();
+}
+
 async function generarPDFGlobal() {
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF({ orientation:'portrait', unit:'mm', format:'a4' });
@@ -48,13 +69,14 @@ async function generarPDFGlobal() {
     const LGRAY = [248,250,252];
     const ORANGE = [245,158,11];
     const PURPLE = [124,58,237];
+    const COLORES_CAT = [AMB, GREEN, PURPLE, [71,85,105], BLUE, RED, [8,145,178], [190,24,93]];
 
     const inc = {
         resumen:    document.getElementById('pdf-resumen')?.checked,
-        contrato:   document.getElementById('pdf-contrato')?.checked ?? true,
-        personal:   document.getElementById('pdf-personal')?.checked,
-        proyectos:  document.getElementById('pdf-proyectos')?.checked,
         tramites:   document.getElementById('pdf-tramites')?.checked,
+        contrato:   document.getElementById('pdf-contrato')?.checked ?? true,
+        proyectos:  document.getElementById('pdf-proyectos')?.checked,
+        personal:   document.getElementById('pdf-personal')?.checked,
         puestos:    document.getElementById('pdf-puestos')?.checked,
     };
 
@@ -138,7 +160,7 @@ async function generarPDFGlobal() {
     const W210 = 210; // ancho estándar vertical, usado en cálculos de layout de esta función
 
     // ════════════════════════════════════════════════
-    // SECCIÓN 1 — RESUMEN EJECUTIVO
+    // PUNTO 1 — RESUMEN EJECUTIVO
     // ════════════════════════════════════════════════
     if (inc.resumen) {
         encabezado('Reporte Operativo Nacional — Resumen Ejecutivo');
@@ -173,7 +195,7 @@ async function generarPDFGlobal() {
 
         doc.autoTable({
             startY: y, margin:{left:14,right:14,bottom:29,top:19}, didDrawPage: didDrawPageHook,
-            head: [['N°','Provincia','Tipo','Estado','Guardia(s)','Arma(s)','Puesto(s)','Proy.']],
+            head: [['N°','Provincia','Tipo','Estado','Guardia(s)','Arma(s)','Puesto(s)','Proyecto(s)']],
             body: numerarFilas(provsActivas.map(n => {
                 const inf = data[n];
                 let g=0,a=0,pu=0;
@@ -190,164 +212,7 @@ async function generarPDFGlobal() {
     }
 
     // ════════════════════════════════════════════════
-    // SECCIÓN 1B — RESUMEN POR TIPO DE CONTRATO (ODC / CT / BROW / CUST)
-    // ════════════════════════════════════════════════
-    if (inc.contrato) {
-        encabezado('Resumen por Tipo de Contrato'); y = 33;
-
-        const categorias = {
-            ODC:  { g:0, a:0, pu:0, pr:0 },
-            CT:   { g:0, a:0, pu:0, pr:0 },
-            BROW: { g:0, a:0, pu:0, pr:0 },
-            CUST: { g:0, a:0, pu:0, pr:0 },
-            'SIN CLASIFICAR': { g:0, a:0, pu:0, pr:0 }
-        };
-        const globalT = { g:0, a:0, pu:0, pr:0 };
-
-        provsActivas.forEach(n => {
-            proyectosFiltradosProvincia(n).forEach(p => {
-                const cat = (p.tipoContrato || '').toUpperCase().trim();
-                const key = ['ODC','CT','BROW','CUST'].includes(cat) ? cat : 'SIN CLASIFICAR';
-                categorias[key].g  += Number(p.guardias)||0;
-                categorias[key].a  += Number(p.armas)   ||0;
-                categorias[key].pu += Number(p.puestos) ||0;
-                categorias[key].pr++;
-                globalT.g += Number(p.guardias)||0;
-                globalT.a += Number(p.armas)   ||0;
-                globalT.pu+= Number(p.puestos) ||0;
-                globalT.pr++;
-            });
-        });
-
-        // KPIs por categoría (tarjetas de color)
-        const coloresCat = { ODC:AMB, CT:GREEN, BROW:PURPLE, CUST:[71,85,105], 'SIN CLASIFICAR':[148,163,184] };
-        const claves = ['ODC','CT','BROW','CUST','SIN CLASIFICAR'];
-        const bwc = (W210-28)/5 - 2.5;
-        claves.forEach((k,i) => {
-            const x = 14 + i*(bwc+3);
-            doc.setFillColor(...GRAY); doc.roundedRect(x,y,bwc,20,2,2,'F');
-            doc.setFontSize(13); doc.setFont('helvetica','bold'); doc.setTextColor(...coloresCat[k]);
-            doc.text(String(categorias[k].g), x+bwc/2, y+10, {align:'center'});
-            doc.setFontSize(5); doc.setFont('helvetica','normal'); doc.setTextColor(100,116,139);
-            doc.text(k, x+bwc/2, y+15, {align:'center'});
-            doc.setFontSize(4.5);
-            doc.text(`${categorias[k].pr} proy.`, x+bwc/2, y+18.5, {align:'center'});
-        });
-        y += 26;
-
-        doc.setFontSize(9); doc.setFont('helvetica','bold'); doc.setTextColor(...DARK);
-        doc.text('Detalle por categoría de contrato', 14, y); y += 5;
-
-        doc.autoTable({
-            startY: y, margin:{left:14,right:14,bottom:29,top:19}, didDrawPage: didDrawPageHook,
-            head: [['Categoría','Guardia(s)','Arma(s)','Puesto(s)','Proyecto(s)']],
-            body: claves.map(k => [k, categorias[k].g, categorias[k].a, categorias[k].pu, categorias[k].pr]),
-            foot: [['GLOBAL', globalT.g, globalT.a, globalT.pu, globalT.pr]],
-            headStyles:{halign:'center',valign:'middle',fillColor:DARK,textColor:[255,255,255],fontSize:8,fontStyle:'bold',cellPadding:3},
-            footStyles:{fillColor:[15,23,42],textColor:[255,255,255],fontSize:9,fontStyle:'bold',cellPadding:3},
-            bodyStyles:{halign:'center',valign:'middle',fontSize:8,cellPadding:2.5}, alternateRowStyles:{fillColor:LGRAY},
-            columnStyles:{0:{fontStyle:'bold'},1:{halign:'center'},2:{halign:'center'},3:{halign:'center'},4:{halign:'center'}}
-        });
-    }
-
-    // ════════════════════════════════════════════════
-    // SECCIÓN 4 — PERSONAL / NÓMINA GLOBAL
-    // ════════════════════════════════════════════════
-    if (inc.personal) {
-        encabezado('Nómina de Personal Operativo — Nacional'); y = 33;
-        const filas = [];
-        provsActivas.forEach(n => {
-            const proyOk = new Set(proyectosFiltradosProvincia(n).map(p => p.nombre.toUpperCase().trim()));
-            Object.entries(puestosData[n] || {}).forEach(([proyecto, puestosList]) => {
-                if (!proyOk.has(proyecto.toUpperCase().trim())) return;
-                const puestosOk = puestosFiltrados(n, proyecto);
-                puestosOk.forEach(pu => {
-                    const gs = Array.isArray(pu.guardias)
-                        ? pu.guardias
-                        : (pu.guardia||'').split(',').map(g=>g.trim()).filter(Boolean);
-                    gs.forEach((g,i) => {
-                        filas.push([n, proyecto, pu.nombre, g,
-                            i===0 ? 'Turno actual' : 'Rotación',
-                            pu.armado===true||String(pu.armado).toLowerCase()==='si' ? 'Sí':'No',
-                            pu.tipo||'—', pu.dias||'—']);
-                    });
-                });
-            });
-        });
-
-        doc.setFillColor(...GRAY); doc.roundedRect(14,y,W210-28,14,2,2,'F');
-        doc.setFontSize(10); doc.setFont('helvetica','bold'); doc.setTextColor(...BLUE);
-        doc.text(`Total personal registrado: ${filas.length} agente(s)`, W210/2, y+9, {align:'center'});
-        y += 18;
-
-        if (filas.length > 0) {
-            doc.autoTable({
-                startY:y, margin:{left:14,right:14,bottom:29,top:19}, didDrawPage: didDrawPageHook,
-                head:[['N°','Provincia','Proyecto','Puesto','Guardia','Rol','Armado','Jornada','Días']],
-                body: numerarFilas(filas),
-                headStyles:{halign:'center',valign:'middle',fillColor:DARK,textColor:[255,255,255],fontSize:6,fontStyle:'bold',cellPadding:2},
-                bodyStyles:{halign:'center',valign:'middle',fontSize:6,cellPadding:2}, alternateRowStyles:{fillColor:LGRAY},
-                columnStyles:{0:{halign:'center'},6:{halign:'center'},1:{fontStyle:'bold'}}
-            });
-        } else {
-            doc.setFontSize(9); doc.setTextColor(100,116,139);
-            doc.text('No hay personal registrado para los filtros activos.',14,y+8);
-        }
-    }
-
-    // ════════════════════════════════════════════════
-    // SECCIÓN 5 — PROYECTOS POR PROVINCIA (agrupado, un bloque por provincia)
-    // ════════════════════════════════════════════════
-    if (inc.proyectos) {
-        encabezado('Proyectos Activos por Provincia'); y = 33;
-
-        provsActivas.forEach(n => {
-            const proys = proyectosFiltradosProvincia(n);
-            if (proys.length === 0) return;
-
-            if (y > 250) { encabezadoMini(); y = MARGEN_PDF*0.6 + 8; }
-
-            // Encabezado de provincia (mini stat box a modo de "ficha")
-            doc.setFillColor(...DARK);
-            doc.roundedRect(14, y, W210-28, 10, 2, 2, 'F');
-            doc.setTextColor(255,255,255); doc.setFontSize(10); doc.setFont('helvetica','bold');
-            doc.text(n, 18, y+6.5);
-            let gT=0,aT=0; proys.forEach(p=>{gT+=Number(p.guardias)||0;aT+=Number(p.armas)||0;});
-            doc.setFontSize(7.5); doc.setFont('helvetica','normal');
-            doc.text(`${proys.length} proyecto(s) · ${gT} guardia(s) · ${aT} arma(s)`, W210-18, y+6.5, {align:'right'});
-            y += 13;
-
-            doc.autoTable({
-                startY: y, margin:{left:14,right:14,bottom:29,top:19}, didDrawPage: didDrawPageHook,
-                head: [['N°','Proyecto','G.','A.','Pu.','Fin','Días','Estado']],
-                body: numerarFilas(proys.map(p => {
-                    if (!p.fin) {
-                        return [p.nombre, p.guardias, p.armas, p.puestos??'—', '—', '—', 'SIN FECHA'];
-                    }
-                    const d   = diasRestantes(p.fin);
-                    const est = d <= 30 ? 'CRÍTICO' : d <= 60 ? 'ALERTA' : 'OK';
-                    return [p.nombre, p.guardias, p.armas, p.puestos??'—',
-                        formatFecha(p.fin), `${d < 0 ? 'VENCIDO' : d+'d'}`, est];
-                })),
-                headStyles:{halign:'center',valign:'middle',fillColor:[71,85,105],textColor:[255,255,255],fontSize:7,fontStyle:'bold',cellPadding:2.5},
-                bodyStyles:{halign:'center',valign:'middle',fontSize:7,cellPadding:2}, alternateRowStyles:{fillColor:LGRAY},
-                columnStyles:{0:{halign:'center'},2:{halign:'center'},3:{halign:'center'},4:{halign:'center'},6:{halign:'center'},7:{halign:'center',fontStyle:'bold'}},
-                didParseCell: (d) => {
-                    if (d.section === 'body' && d.column.index === 7) {
-                        const v = d.cell.raw;
-                        if (v === 'CRÍTICO') d.cell.styles.textColor = RED;
-                        else if (v === 'ALERTA') d.cell.styles.textColor = AMB;
-                        else if (v === 'OK') d.cell.styles.textColor = GREEN;
-                        else if (v === 'SIN FECHA') d.cell.styles.textColor = [148,163,184];
-                    }
-                }
-            });
-            y = doc.lastAutoTable.finalY + 8;
-        });
-    }
-
-    // ════════════════════════════════════════════════
-    // SECCIÓN 6 — ESTADO DE TRÁMITES (con semaforización)
+    // PUNTO 2 — ESTADO DE TRÁMITES POR PROVINCIA (con semaforización)
     // ════════════════════════════════════════════════
     if (inc.tramites) {
         encabezado('Estado de Trámites por Provincia'); y = 33;
@@ -402,11 +267,168 @@ async function generarPDFGlobal() {
     }
 
     // ════════════════════════════════════════════════
-    // SECCIÓN 7 — DETALLE DE PUESTOS POR PROVINCIA
+    // PUNTO 3 — RESUMEN POR TIPO DE CONTRATO
+    // Categorías 100% dinámicas: usa exactamente lo que hayas escrito en
+    // la columna tipo_contrato de tu Excel, sin limitarse a valores fijos
+    // ════════════════════════════════════════════════
+    if (inc.contrato) {
+        encabezado('Resumen por Tipo de Contrato'); y = 33;
+
+        const categoriasVistas = obtenerCategoriasContrato(provsActivas);
+        const claves = categoriasVistas.length > 0 ? [...categoriasVistas, 'SIN CLASIFICAR'] : ['SIN CLASIFICAR'];
+
+        const categorias = {};
+        claves.forEach(k => categorias[k] = { g:0, a:0, pu:0, pr:0 });
+        const globalT = { g:0, a:0, pu:0, pr:0 };
+
+        provsActivas.forEach(n => {
+            proyectosFiltradosProvincia(n).forEach(p => {
+                const cat = (p.tipoContrato || '').toUpperCase().trim();
+                const key = categoriasVistas.includes(cat) ? cat : 'SIN CLASIFICAR';
+                categorias[key].g  += Number(p.guardias)||0;
+                categorias[key].a  += Number(p.armas)   ||0;
+                categorias[key].pu += Number(p.puestos) ||0;
+                categorias[key].pr++;
+                globalT.g += Number(p.guardias)||0;
+                globalT.a += Number(p.armas)   ||0;
+                globalT.pu+= Number(p.puestos) ||0;
+                globalT.pr++;
+            });
+        });
+
+        // KPIs por categoría (tarjetas de color) — se acomodan según cuántas categorías existan
+        const bwc = (W210-28)/claves.length - (claves.length > 1 ? 2.5 : 0);
+        claves.forEach((k,i) => {
+            const col = k === 'SIN CLASIFICAR' ? [148,163,184] : COLORES_CAT[i % COLORES_CAT.length];
+            const x = 14 + i*(bwc+3);
+            doc.setFillColor(...GRAY); doc.roundedRect(x,y,bwc,20,2,2,'F');
+            doc.setFontSize(13); doc.setFont('helvetica','bold'); doc.setTextColor(...col);
+            doc.text(String(categorias[k].g), x+bwc/2, y+10, {align:'center'});
+            doc.setFontSize(5); doc.setFont('helvetica','normal'); doc.setTextColor(100,116,139);
+            doc.text(k, x+bwc/2, y+15, {align:'center', maxWidth:bwc-4});
+            doc.setFontSize(4.5);
+            doc.text(`${categorias[k].pr} proy.`, x+bwc/2, y+18.5, {align:'center'});
+        });
+        y += 26;
+
+        doc.setFontSize(9); doc.setFont('helvetica','bold'); doc.setTextColor(...DARK);
+        doc.text('Detalle por categoría de contrato', 14, y); y += 5;
+
+        doc.autoTable({
+            startY: y, margin:{left:14,right:14,bottom:29,top:19}, didDrawPage: didDrawPageHook,
+            head: [['Categoría','Guardia(s)','Arma(s)','Puesto(s)','Proyecto(s)']],
+            body: claves.map(k => [k, categorias[k].g, categorias[k].a, categorias[k].pu, categorias[k].pr]),
+            foot: [['GLOBAL', globalT.g, globalT.a, globalT.pu, globalT.pr]],
+            headStyles:{halign:'center',valign:'middle',fillColor:DARK,textColor:[255,255,255],fontSize:8,fontStyle:'bold',cellPadding:3},
+            footStyles:{halign:'center',valign:'middle',fillColor:[15,23,42],textColor:[255,255,255],fontSize:9,fontStyle:'bold',cellPadding:3},
+            bodyStyles:{halign:'center',valign:'middle',fontSize:8,cellPadding:2.5}, alternateRowStyles:{fillColor:LGRAY},
+            columnStyles:{0:{fontStyle:'bold'},1:{halign:'center'},2:{halign:'center'},3:{halign:'center'},4:{halign:'center'}}
+        });
+    }
+
+    // ════════════════════════════════════════════════
+    // PUNTO 4 — PROYECTOS ACTIVOS POR PROVINCIA (agrupado, un bloque por provincia)
+    // ════════════════════════════════════════════════
+    if (inc.proyectos) {
+        encabezado('Proyectos Activos por Provincia'); y = 33;
+
+        provsActivas.forEach(n => {
+            const proys = proyectosFiltradosProvincia(n);
+            if (proys.length === 0) return;
+
+            if (y > 250) { encabezadoMini(); y = MARGEN_PDF*0.6 + 8; }
+
+            // Encabezado de provincia (mini stat box a modo de "ficha")
+            doc.setFillColor(...DARK);
+            doc.roundedRect(14, y, W210-28, 10, 2, 2, 'F');
+            doc.setTextColor(255,255,255); doc.setFontSize(10); doc.setFont('helvetica','bold');
+            doc.text(n, 18, y+6.5);
+            let gT=0,aT=0; proys.forEach(p=>{gT+=Number(p.guardias)||0;aT+=Number(p.armas)||0;});
+            doc.setFontSize(7.5); doc.setFont('helvetica','normal');
+            doc.text(`${proys.length} proyecto(s) · ${gT} guardia(s) · ${aT} arma(s)`, W210-18, y+6.5, {align:'right'});
+            y += 13;
+
+            doc.autoTable({
+                startY: y, margin:{left:14,right:14,bottom:29,top:19}, didDrawPage: didDrawPageHook,
+                head: [['N°','Proyecto','Guardia(s)','Arma(s)','Puesto(s)','Fin','Días','Estado']],
+                body: numerarFilas(proys.map(p => {
+                    if (!p.fin) {
+                        return [p.nombre, p.guardias, p.armas, p.puestos??'—', '—', '—', 'SIN FECHA'];
+                    }
+                    const d   = diasRestantes(p.fin);
+                    const est = d <= 30 ? 'CRÍTICO' : d <= 60 ? 'ALERTA' : 'OK';
+                    return [p.nombre, p.guardias, p.armas, p.puestos??'—',
+                        formatFecha(p.fin), `${d < 0 ? 'VENCIDO' : d+'d'}`, est];
+                })),
+                headStyles:{halign:'center',valign:'middle',fillColor:[71,85,105],textColor:[255,255,255],fontSize:6.5,fontStyle:'bold',cellPadding:2.5},
+                bodyStyles:{halign:'center',valign:'middle',fontSize:7,cellPadding:2}, alternateRowStyles:{fillColor:LGRAY},
+                columnStyles:{0:{halign:'center'},2:{halign:'center'},3:{halign:'center'},4:{halign:'center'},6:{halign:'center'},7:{halign:'center',fontStyle:'bold'}},
+                didParseCell: (d) => {
+                    if (d.section === 'body' && d.column.index === 7) {
+                        const v = d.cell.raw;
+                        if (v === 'CRÍTICO') d.cell.styles.textColor = RED;
+                        else if (v === 'ALERTA') d.cell.styles.textColor = AMB;
+                        else if (v === 'OK') d.cell.styles.textColor = GREEN;
+                        else if (v === 'SIN FECHA') d.cell.styles.textColor = [148,163,184];
+                    }
+                }
+            });
+            y = doc.lastAutoTable.finalY + 8;
+        });
+    }
+
+    // ════════════════════════════════════════════════
+    // PUNTO 5 — NÓMINA DE PERSONAL OPERATIVO — NACIONAL (con Cédula)
+    // ════════════════════════════════════════════════
+    if (inc.personal) {
+        encabezado('Nómina de Personal Operativo — Nacional'); y = 33;
+        const filas = [];
+        provsActivas.forEach(n => {
+            const proyOk = new Set(proyectosFiltradosProvincia(n).map(p => p.nombre.toUpperCase().trim()));
+            Object.entries(puestosData[n] || {}).forEach(([proyecto, puestosList]) => {
+                if (!proyOk.has(proyecto.toUpperCase().trim())) return;
+                const puestosOk = puestosFiltrados(n, proyecto);
+                puestosOk.forEach(pu => {
+                    const gs = Array.isArray(pu.guardias)
+                        ? pu.guardias
+                        : (pu.guardia||'').split(',').map(g=>g.trim()).filter(Boolean);
+                    const puestoKey = (pu.nombre||'').toUpperCase().trim();
+                    gs.forEach((g,i) => {
+                        const cedula = (cedulasPorPuesto[puestoKey] && cedulasPorPuesto[puestoKey][g]) || '—';
+                        filas.push([n, proyecto, pu.nombre, g, cedula,
+                            i===0 ? 'Turno actual' : 'Rotación',
+                            pu.armado===true||String(pu.armado).toLowerCase()==='si' ? 'Sí':'No',
+                            pu.tipo||'—', pu.dias||'—']);
+                    });
+                });
+            });
+        });
+
+        doc.setFillColor(...GRAY); doc.roundedRect(14,y,W210-28,14,2,2,'F');
+        doc.setFontSize(10); doc.setFont('helvetica','bold'); doc.setTextColor(...BLUE);
+        doc.text(`Total personal registrado: ${filas.length} agente(s)`, W210/2, y+9, {align:'center'});
+        y += 18;
+
+        if (filas.length > 0) {
+            doc.autoTable({
+                startY:y, margin:{left:14,right:14,bottom:29,top:19}, didDrawPage: didDrawPageHook,
+                head:[['N°','Provincia','Proyecto','Puesto','Guardia','Cédula','Rol','Armado','Jornada','Días']],
+                body: numerarFilas(filas),
+                headStyles:{halign:'center',valign:'middle',fillColor:DARK,textColor:[255,255,255],fontSize:6,fontStyle:'bold',cellPadding:2},
+                bodyStyles:{halign:'center',valign:'middle',fontSize:6,cellPadding:2}, alternateRowStyles:{fillColor:LGRAY},
+                columnStyles:{0:{halign:'center'},7:{halign:'center'},1:{fontStyle:'bold'}}
+            });
+        } else {
+            doc.setFontSize(9); doc.setTextColor(100,116,139);
+            doc.text('No hay personal registrado para los filtros activos.',14,y+8);
+        }
+    }
+
+    // ════════════════════════════════════════════════
+    // PUNTO 6 (OPCIONAL) — DETALLE DE PUESTOS POR PROVINCIA
     // (combina, para CADA provincia filtrada: resumen + proyectos +
-    //  detalle por puesto agrupado por proyecto + mapa esquemático —
-    //  el mismo contenido del reporte individual "por provincia", todo
-    //  junto en un solo documento)
+    //  detalle por puesto agrupado por proyecto — el mismo contenido del
+    //  reporte individual "por provincia", todo junto en un solo documento)
     // ════════════════════════════════════════════════
     if (inc.puestos) {
         provsActivas.forEach((n, idxProv) => {
@@ -438,13 +460,13 @@ async function generarPDFGlobal() {
             doc.text(`PROYECTOS (${proys.length})`, 14, y); y += 5;
             doc.autoTable({
                 startY: y, margin:{left:14,right:14,bottom:29,top:19}, didDrawPage: didDrawPageHook,
-                head: [['N°','Proyecto','G.','A.','Pu.','Fin','Supervisor(es)']],
+                head: [['N°','Proyecto','Guardia(s)','Arma(s)','Puesto(s)','Fin','Supervisor(es)']],
                 body: numerarFilas(proys.map(p => [
                     p.nombre, p.guardias, p.armas, p.puestos??'—',
                     p.fin ? formatFecha(p.fin) : '—',
                     (p.supervisores && p.supervisores.length) ? p.supervisores.join(', ') : '—'
                 ])),
-                headStyles:{halign:'center',valign:'middle',fillColor:DARK,textColor:[255,255,255],fontSize:7,fontStyle:'bold',cellPadding:2.5},
+                headStyles:{halign:'center',valign:'middle',fillColor:DARK,textColor:[255,255,255],fontSize:6.5,fontStyle:'bold',cellPadding:2.5},
                 bodyStyles:{halign:'center',valign:'middle',fontSize:7,cellPadding:2}, alternateRowStyles:{fillColor:LGRAY},
                 columnStyles:{0:{halign:'center'},2:{halign:'center'},3:{halign:'center'},4:{halign:'center'}}
             });
@@ -458,14 +480,16 @@ async function generarPDFGlobal() {
             });
 
             if (Object.keys(puestosPorProyectoFiltrados).length > 0) {
-                if (y > 245) { encabezadoMini(); y = MARGEN_PDF*0.6 + 8; }
+                if (y > 225) { encabezadoMini(); y = MARGEN_PDF*0.6 + 8; }
                 doc.setFontSize(10); doc.setFont('helvetica','bold'); doc.setTextColor(...DARK);
-                doc.text('DETALLE POR PUESTO', 14, y); y += 6;
+                doc.text('DETALLE POR PUESTO', 14, y); y += 8;
 
+                let primerProyecto = true;
                 proys.forEach(p => {
                     const puestos = puestosPorProyectoFiltrados[p.nombre] || [];
                     if (puestos.length === 0) return;
-                    if (y > 250) { encabezadoMini(); y = MARGEN_PDF*0.6 + 8; }
+                    if (!primerProyecto && y > 250) { encabezadoMini(); y = MARGEN_PDF*0.6 + 8; }
+                    primerProyecto = false;
 
                     doc.setFillColor(71,85,105);
                     doc.roundedRect(14, y, W210-28, 7, 2, 2, 'F');
@@ -509,7 +533,7 @@ async function generarPDFGlobal() {
         doc.text('Documento confidencial · Uso interno', 14, H-MARGEN_PDF+20);
     }
 
-    const fn = `ReporteNacional_${fh.replace(/\//g,'-')}.pdf`;
+    const fn = `ReporteNacional_DEFEN_${fh.replace(/\//g,'-')}.pdf`;
     doc.save(fn);
 }
 
@@ -524,10 +548,10 @@ function generarExcelGlobal() {
 
     const inc = {
         resumen:    document.getElementById('pdf-resumen')?.checked,
-        contrato:   document.getElementById('pdf-contrato')?.checked ?? true,
-        personal:   document.getElementById('pdf-personal')?.checked,
-        proyectos:  document.getElementById('pdf-proyectos')?.checked,
         tramites:   document.getElementById('pdf-tramites')?.checked,
+        contrato:   document.getElementById('pdf-contrato')?.checked ?? true,
+        proyectos:  document.getElementById('pdf-proyectos')?.checked,
+        personal:   document.getElementById('pdf-personal')?.checked,
         puestos:    document.getElementById('pdf-puestos')?.checked,
     };
 
@@ -545,46 +569,18 @@ function generarExcelGlobal() {
         XLSX.utils.book_append_sheet(wb, ws, nombre.substring(0,31));
     };
 
-    // ── Resumen de provincias ──
+    // ── 1. Resumen de provincias ──
     if (inc.resumen) {
-        agregarHoja('Resumen Provincias', provsActivas.map((n,i) => {
+        agregarHoja('Resumen Ejecutivo', provsActivas.map((n,i) => {
             const inf = data[n];
             let g=0,a=0,pu=0;
             const proys = proyectosFiltradosProvincia(n);
             proys.forEach(p => { g+=Number(p.guardias)||0; a+=Number(p.armas)||0; pu+=Number(p.puestos)||0; });
-            return { 'N°':i+1, 'Provincia':n, 'Tipo':inf.tipo, 'Estado':inf.estado, 'Guardias':g, 'Armas':a, 'Puestos':pu, 'Proyectos':proys.length };
+            return { 'N°':i+1, 'Provincia':n, 'Tipo':inf.tipo, 'Estado':inf.estado, 'Guardia(s)':g, 'Arma(s)':a, 'Puesto(s)':pu, 'Proyecto(s)':proys.length };
         }));
     }
 
-    // ── Por tipo de contrato ──
-    if (inc.contrato) {
-        const categorias = { ODC:{g:0,a:0,pu:0,pr:0}, CT:{g:0,a:0,pu:0,pr:0}, BROW:{g:0,a:0,pu:0,pr:0}, CUST:{g:0,a:0,pu:0,pr:0}, 'SIN CLASIFICAR':{g:0,a:0,pu:0,pr:0} };
-        provsActivas.forEach(n => proyectosFiltradosProvincia(n).forEach(p => {
-            const cat = (p.tipoContrato||'').toUpperCase().trim();
-            const key = ['ODC','CT','BROW','CUST'].includes(cat) ? cat : 'SIN CLASIFICAR';
-            categorias[key].g+=Number(p.guardias)||0; categorias[key].a+=Number(p.armas)||0;
-            categorias[key].pu+=Number(p.puestos)||0; categorias[key].pr++;
-        }));
-        agregarHoja('Por Tipo Contrato', ['ODC','CT','BROW','CUST','SIN CLASIFICAR'].map(k => ({
-            'Categoría':k, 'Guardias':categorias[k].g, 'Armas':categorias[k].a, 'Puestos':categorias[k].pu, 'Proyectos':categorias[k].pr
-        })));
-    }
-
-    // ── Proyectos por provincia ──
-    if (inc.proyectos) {
-        const filas = [];
-        provsActivas.forEach(n => proyectosFiltradosProvincia(n).forEach(p => {
-            const d = diasRestantes(p.fin);
-            filas.push({
-                'Provincia':n, 'Proyecto':p.nombre, 'Guardias':p.guardias, 'Armas':p.armas,
-                'Puestos':p.puestos??'', 'Finaliza':p.fin?formatFecha(p.fin):'',
-                'Días':p.fin?(d<0?'VENCIDO':d+'d'):'', 'Vacantes':p.vacantes||0
-            });
-        }));
-        agregarHoja('Proyectos por Provincia', filas.map((f,i)=>({'N°':i+1, ...f})));
-    }
-
-    // ── Trámites ──
+    // ── 2. Trámites ──
     if (inc.tramites) {
         const filas = Object.keys(data).sort().map(n => {
             const det = detalleProvincias[n]; if (!det) return null;
@@ -596,10 +592,42 @@ function generarExcelGlobal() {
             return { 'Provincia':n, 'N° Trámite':det.tramite||'', 'Inicio':det.vigenciaInicio?formatFecha(det.vigenciaInicio):'',
                      'Fin':det.vigenciaFin?formatFecha(det.vigenciaFin):'', 'Días':diasV, 'Estado':estadoV };
         }).filter(Boolean);
-        agregarHoja('Trámites', filas.map((f,i)=>({'N°':i+1, ...f})));
+        agregarHoja('Estado de Trámites', filas.map((f,i)=>({'N°':i+1, ...f})));
     }
 
-    // ── Personal / Nómina ──
+    // ── 3. Por tipo de contrato (dinámico) ──
+    if (inc.contrato) {
+        const categoriasVistas = obtenerCategoriasContrato(provsActivas);
+        const claves = categoriasVistas.length > 0 ? [...categoriasVistas, 'SIN CLASIFICAR'] : ['SIN CLASIFICAR'];
+        const categorias = {};
+        claves.forEach(k => categorias[k] = { g:0, a:0, pu:0, pr:0 });
+
+        provsActivas.forEach(n => proyectosFiltradosProvincia(n).forEach(p => {
+            const cat = (p.tipoContrato||'').toUpperCase().trim();
+            const key = categoriasVistas.includes(cat) ? cat : 'SIN CLASIFICAR';
+            categorias[key].g+=Number(p.guardias)||0; categorias[key].a+=Number(p.armas)||0;
+            categorias[key].pu+=Number(p.puestos)||0; categorias[key].pr++;
+        }));
+        agregarHoja('Por Tipo Contrato', claves.map(k => ({
+            'Categoría':k, 'Guardia(s)':categorias[k].g, 'Arma(s)':categorias[k].a, 'Puesto(s)':categorias[k].pu, 'Proyecto(s)':categorias[k].pr
+        })));
+    }
+
+    // ── 4. Proyectos por provincia ──
+    if (inc.proyectos) {
+        const filas = [];
+        provsActivas.forEach(n => proyectosFiltradosProvincia(n).forEach(p => {
+            const d = diasRestantes(p.fin);
+            filas.push({
+                'Provincia':n, 'Proyecto':p.nombre, 'Guardia(s)':p.guardias, 'Arma(s)':p.armas,
+                'Puesto(s)':p.puestos??'', 'Finaliza':p.fin?formatFecha(p.fin):'',
+                'Días':p.fin?(d<0?'VENCIDO':d+'d'):'', 'Vacantes':p.vacantes||0
+            });
+        }));
+        agregarHoja('Proyectos por Provincia', filas.map((f,i)=>({'N°':i+1, ...f})));
+    }
+
+    // ── 5. Personal / Nómina (con cédula) ──
     if (inc.personal) {
         const filas = [];
         provsActivas.forEach(n => {
@@ -608,19 +636,23 @@ function generarExcelGlobal() {
                 if (!proyOk.has(proyecto.toUpperCase().trim())) return;
                 puestosFiltrados(n, proyecto).forEach(pu => {
                     const gs = Array.isArray(pu.guardias) ? pu.guardias : (pu.guardia||'').split(',').map(g=>g.trim()).filter(Boolean);
-                    gs.forEach((g,i) => filas.push({
-                        'Provincia':n, 'Proyecto':proyecto, 'Puesto':pu.nombre, 'Guardia':g,
-                        'Rol': i===0?'Turno actual':'Rotación',
-                        'Armado': pu.armado===true||String(pu.armado).toLowerCase()==='si'?'Sí':'No',
-                        'Jornada':pu.tipo||'', 'Días':pu.dias||''
-                    }));
+                    const puestoKey = (pu.nombre||'').toUpperCase().trim();
+                    gs.forEach((g,i) => {
+                        const cedula = (cedulasPorPuesto[puestoKey] && cedulasPorPuesto[puestoKey][g]) || '';
+                        filas.push({
+                            'Provincia':n, 'Proyecto':proyecto, 'Puesto':pu.nombre, 'Guardia':g, 'Cédula':cedula,
+                            'Rol': i===0?'Turno actual':'Rotación',
+                            'Armado': pu.armado===true||String(pu.armado).toLowerCase()==='si'?'Sí':'No',
+                            'Jornada':pu.tipo||'', 'Días':pu.dias||''
+                        });
+                    });
                 });
             });
         });
-        agregarHoja('Personal', filas.map((f,i)=>({'N°':i+1, ...f})));
+        agregarHoja('Nómina de Personal', filas.map((f,i)=>({'N°':i+1, ...f})));
     }
 
-    // ── Detalle de puestos ──
+    // ── 6. Detalle de puestos (opcional) ──
     if (inc.puestos) {
         const filas = [];
         provsActivas.forEach(n => {
@@ -642,5 +674,5 @@ function generarExcelGlobal() {
     }
 
     if (wb.SheetNames.length === 0) { alert('No hay secciones seleccionadas para exportar.'); return; }
-    XLSX.writeFile(wb, `ReporteNacional_${fh}.xlsx`);
+    XLSX.writeFile(wb, `ReporteNacional_DEFEN_${fh}.xlsx`);
 }
