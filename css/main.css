@@ -227,13 +227,12 @@
 
         /* Botón generar PDF */
         #btn-generar-pdf-global {
-            margin: 14px 18px;
-            padding: 11px;
+            padding: 12px;
             background: linear-gradient(135deg,#f59e0b,#d97706);
             color: #1c1917; font-weight: 900; font-size: 12px;
             border: none; border-radius: 12px; cursor: pointer;
             transition: all 0.15s; display: flex;
-            align-items: center; justify-content: center; gap: 8px;
+            align-items: center; justify-content: center; gap: 6px;
         }
         #btn-generar-pdf-global:hover { filter: brightness(1.08); transform: scale(1.01); }
 
