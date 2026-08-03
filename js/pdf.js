@@ -499,16 +499,20 @@ async function generarPDFGlobal() {
 
                     doc.autoTable({
                         startY: y, margin:{left:14,right:14,bottom:29,top:19}, didDrawPage: didDrawPageHook,
-                        head: [['N°','Puesto','Guardia(s)','Tipo','Armado','Arma','Radio']],
+                        head: [['N°','Puesto','Guardia(s)','Cédula','Tipo','Armado','Arma','Radio']],
                         body: numerarFilas(puestos.map(pu => {
                             const gs = Array.isArray(pu.guardias) ? pu.guardias : (pu.guardia||'').split(',').map(g=>g.trim()).filter(Boolean);
-                            return [pu.nombre, gs.join(', ')||'—', pu.tipo||'—',
-                                pu.armado?'Sí':'No', pu.armado?(pu.arma||'—'):'—',
+                            const puestoKey = (pu.nombre || '').toUpperCase().trim();
+                            const guardiasTxt = gs.map(g => `• ${g}`).join('\n') || '—';
+                            const cedulasTxt  = gs.map(g => (cedulasPorPuesto[puestoKey] && cedulasPorPuesto[puestoKey][g]) || '—').join('\n') || '—';
+                            const claseArma = pu.tieneLetal ? ' [AL]' : pu.tieneNoLetal ? ' [ANL]' : '';
+                            return [pu.nombre, guardiasTxt, cedulasTxt, pu.tipo||'—',
+                                pu.armado?'Sí':'No', pu.armado?(pu.arma||'—')+claseArma:'—',
                                 pu.radio?(pu.radio_info||'Sí'):'No'];
                         })),
                         headStyles:{halign:'center',valign:'middle',fillColor:[100,116,139],textColor:[255,255,255],fontSize:6.5,cellPadding:2},
                         bodyStyles:{halign:'center',valign:'middle',fontSize:6.5,cellPadding:1.8,overflow:'linebreak'}, alternateRowStyles:{fillColor:LGRAY},
-                        columnStyles:{0:{halign:'center'},3:{halign:'center'}}
+                        columnStyles:{0:{halign:'center'},2:{halign:'left'},4:{halign:'center'}}
                     });
                     y = doc.lastAutoTable.finalY + 6;
                 });
