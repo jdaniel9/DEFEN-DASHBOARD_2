@@ -960,7 +960,7 @@ function exportarExcelProvincia() {
 
     const hoy = new Date();
     const fechaHoy = `${String(hoy.getDate()).padStart(2,'0')}-${String(hoy.getMonth()+1).padStart(2,'0')}-${hoy.getFullYear()}`;
-    XLSX.writeFile(wb, `Reporte_${prov}_${fechaHoy}.xlsx`);
+    XLSX.writeFile(wb, `Reporte_${prov}_DEFEN_${fechaHoy}.xlsx`);
 }
 
 async function exportarPDF() {
@@ -1149,7 +1149,7 @@ async function exportarPDF() {
         doc.text('Documento confidencial · Uso interno', 14, H-MARGEN_PDF+20);
     }
 
-    doc.save(`Reporte_${prov}_${fechaHoy.replace(/\//g,'-')}.pdf`);
+    doc.save(`Reporte_${prov}_DEFEN_${fechaHoy.replace(/\//g,'-')}.pdf`);
 }
 
 // =====================================================================
@@ -1183,7 +1183,7 @@ function exportarExcelProyecto(nombreProyecto) {
 
     const hoy = new Date();
     const fechaHoy = `${String(hoy.getDate()).padStart(2,'0')}-${String(hoy.getMonth()+1).padStart(2,'0')}-${hoy.getFullYear()}`;
-    XLSX.writeFile(wb, `Reporte_${nombreProyecto.replace(/[^\w]+/g,'_')}_${fechaHoy}.xlsx`);
+    XLSX.writeFile(wb, `Reporte_${nombreProyecto.replace(/[^\w]+/g,'_')}_DEFEN_${fechaHoy}.xlsx`);
 }
 
 async function exportarPDFProyecto(nombreProyecto) {
@@ -1311,7 +1311,7 @@ async function exportarPDFProyecto(nombreProyecto) {
         doc.text('Documento confidencial · Uso interno', 14, H-MARGEN_PDF+20);
     }
 
-    doc.save(`Reporte_${nombreProyecto.replace(/[^\w]+/g,'_')}_${fechaHoy.replace(/\//g,'-')}.pdf`);
+    doc.save(`Reporte_${nombreProyecto.replace(/[^\w]+/g,'_')}_DEFEN_${fechaHoy.replace(/\//g,'-')}.pdf`);
 }
 
 function cerrarVistaProvincia() {
