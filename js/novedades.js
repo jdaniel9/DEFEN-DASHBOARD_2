@@ -186,7 +186,7 @@ async function generarReporteNovedades() {
         doc.text('Documento confidencial · Uso interno', 14, H-MARGEN_PDF+20);
     }
 
-    doc.save(`Novedades_Personal_${periodo}_${fechaHoyStr.replace(/\//g,'-')}.pdf`);
+    doc.save(`Novedades_Personal_${periodo}_DEFEN_${fechaHoyStr.replace(/\//g,'-')}.pdf`);
 }
 
 // =====================================================================
@@ -236,5 +236,5 @@ function generarExcelNovedades() {
         'Proyecto': r.proyecto||'', 'Motivo': r.motivo||'', 'Tipo': r.tipo_llamado||'', 'Registrado por': r.registrado_por||''
     })));
 
-    XLSX.writeFile(wb, `Novedades_Personal_${periodo}_${fechaHoyStr.replace(/\//g,'-')}.xlsx`);
+    XLSX.writeFile(wb, `Novedades_Personal_${periodo}_DEFEN_${fechaHoyStr.replace(/\//g,'-')}.xlsx`);
 }
