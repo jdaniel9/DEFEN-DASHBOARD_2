@@ -754,7 +754,7 @@ function aplicarFiltro(tipo) {
     filtroActivo = tipo;
 
     // Actualizar estilo de botones
-    ['todos','armado','desarmado','radio'].forEach(t => {
+    ['todos','armado','desarmado','radio','letal','noletal'].forEach(t => {
         const btn = document.getElementById(`f-${t}`);
         if (!btn) return;
         btn.className = tipo === t ? `filtro-btn on-${t}` : 'filtro-btn';
@@ -768,6 +768,8 @@ function aplicarFiltro(tipo) {
         if (tipo === 'armado')    visible = puesto.armado === true || puesto.armado === 'Si';
         if (tipo === 'desarmado') visible = !(puesto.armado === true || puesto.armado === 'Si');
         if (tipo === 'radio')     visible = puesto.radio === true || puesto.radio === 'Si';
+        if (tipo === 'letal')     visible = puesto.tieneLetal === true;
+        if (tipo === 'noletal')   visible = puesto.tieneNoLetal === true;
         const el = marker.getElement();
         if (el) {
             el.style.opacity      = visible ? '1' : '0.12';
@@ -784,6 +786,8 @@ function aplicarFiltro(tipo) {
         if (tipo === 'armado')    return p.armado === true || p.armado === 'Si';
         if (tipo === 'desarmado') return !(p.armado === true || p.armado === 'Si');
         if (tipo === 'radio')     return p.radio === true  || p.radio  === 'Si';
+        if (tipo === 'letal')     return p.tieneLetal === true;
+        if (tipo === 'noletal')   return p.tieneNoLetal === true;
     }).length;
 
     // Insertar/actualizar contador junto al botón PDF
@@ -1100,23 +1104,28 @@ async function exportarPDF() {
                 startY: y,
                 margin: { left:14, right:14, top:MARGEN_PDF+4, bottom:MARGEN_PDF+4 },
                 didDrawPage: didDrawPageProv,
-                headStyles:{halign:'center',valign:'middle', fillColor:[71,85,105], textColor:[255,255,255], fontSize:7, cellPadding:2.5 },
-                head: [['N°','Puesto','Guardia(s)','Tipo','Armado','Arma (serie)','Radio','Turno/Días']],
+                headStyles:{halign:'center',valign:'middle', fillColor:[71,85,105], textColor:[255,255,255], fontSize:6.5, cellPadding:2.5 },
+                head: [['N°','Puesto','Guardia(s)','Cédula','Tipo','Armado','Arma (serie)','Radio','Turno/Días']],
                 body: numerarFilas(puestos.map(pu => {
                     const gs = Array.isArray(pu.guardias) ? pu.guardias : (pu.guardia||'').split(',').map(g=>g.trim()).filter(Boolean);
+                    const puestoKey = (pu.nombre || '').toUpperCase().trim();
+                    const guardiasTxt = gs.map(g => `• ${g}`).join('\n');
+                    const cedulasTxt  = gs.map(g => (cedulasPorPuesto[puestoKey] && cedulasPorPuesto[puestoKey][g]) || '—').join('\n');
+                    const claseArma = pu.tieneLetal ? ' [AL]' : pu.tieneNoLetal ? ' [ANL]' : '';
                     return [
                         pu.nombre,
-                        gs.join('\n'),
+                        guardiasTxt,
+                        cedulasTxt,
                         pu.tipo || '—',
                         pu.armado ? 'Sí' : 'No',
-                        pu.armado ? (pu.arma || '—') : '—',
+                        pu.armado ? (pu.arma || '—') + claseArma : '—',
                         pu.radio ? (pu.radio_info || 'Sí') : 'No',
                         `${pu.turno||'—'}\n${pu.dias||''}`
                     ];
                 })),
-                styles:{halign:'center',valign:'middle', fontSize:7, cellPadding:2.2, overflow:'linebreak', lineColor:[226,232,240], lineWidth:0.3 },
+                styles:{halign:'center',valign:'middle', fontSize:6.5, cellPadding:2.2, overflow:'linebreak', lineColor:[226,232,240], lineWidth:0.3 },
                 alternateRowStyles: { fillColor:[248,250,252] },
-                columnStyles: { 0:{halign:'center',cellWidth:8}, 1:{cellWidth:26,fontStyle:'bold'}, 4:{halign:'center'}, 6:{cellWidth:24} }
+                columnStyles: { 0:{halign:'center',cellWidth:8}, 1:{cellWidth:22,fontStyle:'bold'}, 2:{halign:'left',cellWidth:32}, 5:{halign:'center'}, 7:{cellWidth:20} }
             });
             y = doc.lastAutoTable.finalY + 9;
         });
@@ -1262,23 +1271,30 @@ async function exportarPDFProyecto(nombreProyecto) {
             startY: y,
             margin: { left:14, right:14, top:MARGEN_PDF+4, bottom:MARGEN_PDF+4 },
             didDrawPage: didDrawPageProy,
-            headStyles:{halign:'center',valign:'middle', fillColor:DARK, textColor:[255,255,255], fontSize:7, cellPadding:2.5 },
-            head: [['N°','Puesto','Guardia(s)','Tipo','Armado','Arma (serie)','Radio','Turno/Días']],
+            headStyles:{halign:'center',valign:'middle', fillColor:DARK, textColor:[255,255,255], fontSize:6.5, cellPadding:2.5 },
+            head: [['N°','Puesto','Guardia(s)','Cédula','Tipo','Armado','Arma (serie)','Radio','Turno/Días']],
             body: numerarFilas(puestos.map(pu => {
                 const gs = Array.isArray(pu.guardias) ? pu.guardias : (pu.guardia||'').split(',').map(g=>g.trim()).filter(Boolean);
+                const puestoKey = (pu.nombre || '').toUpperCase().trim();
+                // Un "•" al inicio de cada guardia para separarlos claramente,
+                // incluso cuando un nombre largo se parte en 2 líneas
+                const guardiasTxt = gs.map(g => `• ${g}`).join('\n');
+                const cedulasTxt  = gs.map(g => (cedulasPorPuesto[puestoKey] && cedulasPorPuesto[puestoKey][g]) || '—').join('\n');
+                const claseArma = pu.tieneLetal ? ' [AL]' : pu.tieneNoLetal ? ' [ANL]' : '';
                 return [
                     pu.nombre,
-                    gs.join('\n'),
+                    guardiasTxt,
+                    cedulasTxt,
                     pu.tipo || '—',
                     pu.armado ? 'Sí' : 'No',
-                    pu.armado ? (pu.arma || '—') : '—',
+                    pu.armado ? (pu.arma || '—') + claseArma : '—',
                     pu.radio ? (pu.radio_info || 'Sí') : 'No',
                     `${pu.turno||'—'}\n${pu.dias||''}`
                 ];
             })),
-            styles:{halign:'center',valign:'middle', fontSize:7, cellPadding:2.2, overflow:'linebreak', lineColor:[226,232,240], lineWidth:0.3 },
+            styles:{halign:'center',valign:'middle', fontSize:6.5, cellPadding:2.2, overflow:'linebreak', lineColor:[226,232,240], lineWidth:0.3 },
             alternateRowStyles: { fillColor:[248,250,252] },
-            columnStyles: { 0:{halign:'center',cellWidth:8}, 1:{cellWidth:26,fontStyle:'bold'}, 4:{halign:'center'}, 6:{cellWidth:24} }
+            columnStyles: { 0:{halign:'center',cellWidth:8}, 1:{cellWidth:22,fontStyle:'bold'}, 2:{halign:'left',cellWidth:34}, 5:{halign:'center'}, 7:{cellWidth:22} }
         });
         y = doc.lastAutoTable.finalY + 10;
     } else {
