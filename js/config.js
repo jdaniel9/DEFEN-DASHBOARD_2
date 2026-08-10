@@ -22,6 +22,7 @@ let llamadosAtencion  = [];
 let vacantesNacional  = 0;
 let historicoProyectos = [];
 let cedulasPorPuesto = {};
+let personalActas     = []; // personal activo de Asistencia para el generador de actas
 let puestosData       = {};
  
 // ── Estado del panel de filtros globales (arrays = multi-selección) ──
