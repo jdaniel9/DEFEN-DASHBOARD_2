@@ -41,6 +41,7 @@ function procesarDatosAPI(json) {
     data              = {};
     detalleProvincias = {};
     puestosData       = {};
+    personalActas     = [];
 
     // ── Armamento ──
     if (json.__armamento__) {
@@ -72,6 +73,12 @@ function procesarDatosAPI(json) {
     if (json.__cedulas__) {
         cedulasPorPuesto = json.__cedulas__;
         delete json.__cedulas__;
+    }
+
+    // ── Personal para Actas: listado activo completo desde Asistencia ──
+    if (json.__personal_actas__) {
+        personalActas = Array.isArray(json.__personal_actas__) ? json.__personal_actas__ : [];
+        delete json.__personal_actas__;
     }
 
     // ── Asistencia: quién está de turno HOY por puesto ──
