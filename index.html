@@ -19,6 +19,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="css/main.css">
     <link rel="stylesheet" href="css/map.css">
+    <link rel="stylesheet" href="css/actas.css">
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
@@ -187,6 +188,7 @@
                     <div class="flex items-center justify-between mb-3 px-1">
                         <h2 class="text-base font-black text-slate-800">Resumen Armamento</h2>
                         <div class="flex gap-1.5">
+                            <button onclick="abrirModalActa()" class="text-[9px] font-black bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1 rounded-full transition-colors shadow-sm">📄 Generar Acta</button>
                             <button onclick="abrirModalArmamento()" class="text-[9px] font-black bg-slate-800 hover:bg-slate-900 text-white px-2.5 py-1 rounded-full transition-colors">📋 Detalle</button>
                             <button onclick="abrirModalRadios()" class="text-[9px] font-black bg-purple-600 hover:bg-purple-700 text-white px-2.5 py-1 rounded-full transition-colors">📻 Radios</button>
                         </div>
@@ -640,6 +642,74 @@
             <div id="historico-detalle-cuerpo" style="flex:1;overflow:auto;padding:16px;display:flex;flex-direction:column;gap:8px;"></div>
         </div>
     </div>
+    <!-- ================================================================
+         MODAL — Generación de Actas de Armamento
+    ================================================================ -->
+    <div id="modalActaArmamento" class="modal-oculto">
+        <div class="modal-contenido">
+            <div class="modal-cabecera">
+                <h2>Generar Acta de Armamento</h2>
+                <span class="cerrar-modal" onclick="cerrarModalActa()">&times;</span>
+            </div>
+            
+            <div class="modal-cuerpo">
+                <!-- Div para mostrar errores sin usar alert() -->
+                <div id="actaNotificacion" class="notificacion-error"></div>
+
+                <div class="grupo-input">
+                    <label>Tipo de Acta:</label>
+                    <select id="actaTipo" onchange="cambiarTipoActa()">
+                        <option value="custodio">Acta para Custodio VIP (Vertical)</option>
+                        <option value="guardia">Acta para Guardia de Seguridad (Horizontal)</option>
+                    </select>
+                </div>
+
+                <div class="grupo-input">
+                    <label>Seleccionar Arma (Busque por serie o marca):</label>
+                    <select id="actaArmaSeleccionada">
+                        <!-- Las opciones se llenan automáticamente con JavaScript -->
+                    </select>
+                </div>
+
+                <div class="grupo-input" style="background-color: #f9f9f9; padding: 10px; border-radius: 5px;">
+                    <label>Datos de Quien Recibe el Arma:</label>
+                    <div class="grupo-input-doble">
+                        <input type="text" id="actaNombreRecibe" placeholder="Nombres y Apellidos">
+                        <input type="text" id="actaCedulaRecibe" placeholder="Cédula de Identidad">
+                    </div>
+                    <div class="grupo-input-doble">
+                        <input type="text" id="actaCargoRecibe" placeholder="Cargo (Ej. Custodio VIP)" value="Custodio VIP">
+                        <input type="text" id="actaProyecto" placeholder="Área / Proyecto">
+                    </div>
+                </div>
+
+                <!-- Div dinámico para el formato de Guardia -->
+                <div id="divSupervisor" class="grupo-input" style="display: none; background-color: #e8f4f8; padding: 10px; border-radius: 5px;">
+                    <label>Datos del Supervisor (Quien Entrega el Arma):</label>
+                    <div class="grupo-input-doble">
+                        <input type="text" id="actaNombreEntrega" placeholder="Nombres del Supervisor">
+                        <input type="text" id="actaCedulaEntrega" placeholder="Cédula del Supervisor">
+                    </div>
+                </div>
+
+                <div class="grupo-input-doble">
+                    <div>
+                        <label>Cantidad de Municiones:</label>
+                        <input type="number" id="actaMuniciones" value="15" min="0">
+                    </div>
+                    <div>
+                        <label>Novedades/Comentarios:</label>
+                        <input type="text" id="actaNovedades" placeholder="Ej: Rayones leves..." value="N/A">
+                    </div>
+                </div>
+            </div>
+
+            <div class="modal-pie">
+                <button class="btn-secundario" onclick="cerrarModalActa()">Cancelar</button>
+                <button class="btn-primario" id="btnGenerarPDF" onclick="prepararYGenerarActa()">Generar PDF</button>
+            </div>
+        </div>
+    </div>
 
     <!-- ── Módulos JS (orden importa: config → utils → data → map → filters → province → pdf → auth) ── -->
     <script src="js/config.js"></script>
@@ -650,6 +720,7 @@
     <script src="js/filters.js"></script>
     <script src="js/province.js"></script>
     <script src="js/armamento.js"></script>
+    <script src="js/actas.js"></script>
     <script src="js/historico.js"></script>
     <script src="js/novedades.js"></script>
     <script src="js/pdf.js"></script>
@@ -691,60 +762,5 @@
         inicializarLogin();
     });
     </script>
-    <!-- Botón para poner junto al inventario de armamento -->
-    <button id="btnAbrirModalActa" class="btn-accion" onclick="abrirModalActa()">📄 Generar Acta de Entrega</button>
-    <!-- Estructura del Modal (Ventana Emergente) -->
-    <div id="modalActaArmamento" class="modal-oculto">
-      <div class="modal-contenido">
-        <div class="modal-cabecera">
-          <h2>Generar Acta de Armamento</h2>
-          <span class="cerrar-modal" onclick="cerrarModalActa()">&times;</span>
-        </div>
-        <div class="modal-cuerpo">
-          <div class="grupo-input">
-            <label>Tipo de Acta:</label>
-            <select id="actaTipo" onchange="cambiarTipoActa()">
-              <option value="custodio">Custodio VIP (Vertical)</option>
-              <option value="guardia">Guardia Seguridad (Horizontal)</option>
-            </select>
-          </div>
-        <div class="grupo-input">
-            <label>Seleccionar Arma:</label>
-            <select id="actaArmaSeleccionada">
-          <!-- Se llenará con JavaScript -->
-            </select>
-      </div>
-        <div class="grupo-input">
-            <label>Datos de Quien Recibe:</label>
-            <input type="text" id="actaNombreRecibe" placeholder="Nombre completo">
-            <input type="text" id="actaCedulaRecibe" placeholder="Cédula">
-            <input type="text" id="actaCargoRecibe" placeholder="Cargo (Ej. Custodio VIP)" value="Custodio VIP">
-            <input type="text" id="actaProyecto" placeholder="Área / Proyecto">
-      </div>
-<!-- Este div solo se mostrará si es acta de Guardia -->
-      <div id="divSupervisor" class="grupo-input" style="display: none;">
-        <label>Datos del Supervisor (Quien Entrega):</label>
-        <input type="text" id="actaNombreEntrega" placeholder="Nombre del Supervisor">
-        <input type="text" id="actaCedulaEntrega" placeholder="Cédula del Supervisor">
-      </div>
-
-      <div class="grupo-input-doble">
-        <div>
-          <label>Cant. Municiones:</label>
-          <input type="number" id="actaMuniciones" value="15">
-        </div>
-        <div>
-          <label>Novedades/Comentarios:</label>
-          <input type="text" id="actaNovedades" placeholder="Ninguna" value="N/A">
-        </div>
-      </div>
-    </div>
-
-    <div class="modal-pie">
-      <button class="btn-secundario" onclick="cerrarModalActa()">Cancelar</button>
-      <button class="btn-primario" id="btnGenerarPDF" onclick="prepararYGenerarActa()">Generar PDF</button>
-    </div>
-  </div>
-</div>
 </body>
 </html>
