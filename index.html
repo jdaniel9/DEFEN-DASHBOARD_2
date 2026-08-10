@@ -691,6 +691,60 @@
         inicializarLogin();
     });
     </script>
+    <!-- Botón para poner junto al inventario de armamento -->
+    <button id="btnAbrirModalActa" class="btn-accion" onclick="abrirModalActa()">📄 Generar Acta de Entrega</button>
+    <!-- Estructura del Modal (Ventana Emergente) -->
+    <div id="modalActaArmamento" class="modal-oculto">
+      <div class="modal-contenido">
+        <div class="modal-cabecera">
+          <h2>Generar Acta de Armamento</h2>
+          <span class="cerrar-modal" onclick="cerrarModalActa()">&times;</span>
+        </div>
+        <div class="modal-cuerpo">
+          <div class="grupo-input">
+            <label>Tipo de Acta:</label>
+            <select id="actaTipo" onchange="cambiarTipoActa()">
+              <option value="custodio">Custodio VIP (Vertical)</option>
+              <option value="guardia">Guardia Seguridad (Horizontal)</option>
+            </select>
+          </div>
+        <div class="grupo-input">
+            <label>Seleccionar Arma:</label>
+            <select id="actaArmaSeleccionada">
+          <!-- Se llenará con JavaScript -->
+            </select>
+      </div>
+        <div class="grupo-input">
+            <label>Datos de Quien Recibe:</label>
+            <input type="text" id="actaNombreRecibe" placeholder="Nombre completo">
+            <input type="text" id="actaCedulaRecibe" placeholder="Cédula">
+            <input type="text" id="actaCargoRecibe" placeholder="Cargo (Ej. Custodio VIP)" value="Custodio VIP">
+            <input type="text" id="actaProyecto" placeholder="Área / Proyecto">
+      </div>
+<!-- Este div solo se mostrará si es acta de Guardia -->
+      <div id="divSupervisor" class="grupo-input" style="display: none;">
+        <label>Datos del Supervisor (Quien Entrega):</label>
+        <input type="text" id="actaNombreEntrega" placeholder="Nombre del Supervisor">
+        <input type="text" id="actaCedulaEntrega" placeholder="Cédula del Supervisor">
+      </div>
 
+      <div class="grupo-input-doble">
+        <div>
+          <label>Cant. Municiones:</label>
+          <input type="number" id="actaMuniciones" value="15">
+        </div>
+        <div>
+          <label>Novedades/Comentarios:</label>
+          <input type="text" id="actaNovedades" placeholder="Ninguna" value="N/A">
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-pie">
+      <button class="btn-secundario" onclick="cerrarModalActa()">Cancelar</button>
+      <button class="btn-primario" id="btnGenerarPDF" onclick="prepararYGenerarActa()">Generar PDF</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>
