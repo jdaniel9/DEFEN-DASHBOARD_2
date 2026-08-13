@@ -5,6 +5,45 @@
 // Solo ADMIN y OPERACIONES.
 // ================================================================
 
+// Estilos compartidos del generador. Se cargan una sola vez, incluso cuando
+// el modal se recrea al cambiar entre Nueva acta e Historial.
+function inyectarEstilosActasV3() {
+    if (document.getElementById('actas-v3-estilos')) return;
+    const style = document.createElement('style');
+    style.id = 'actas-v3-estilos';
+    style.textContent = `
+      #actas-modal .acta-card{background:#fff;border:1px solid #dbe4ef;border-radius:12px;padding:13px;box-shadow:0 1px 2px rgba(15,23,42,.03)}
+      #actas-modal .acta-label{display:block;margin:0 0 5px;font-size:9px;font-weight:900;letter-spacing:.02em;color:#64748b;text-transform:uppercase}
+      #actas-modal .acta-input{display:block;width:100%;min-height:36px;box-sizing:border-box;padding:8px 10px;border:1.5px solid #cbd5e1;border-radius:8px;background:#fff;color:#172033;font-size:11px;font-weight:700;outline:none;transition:border-color .16s,box-shadow .16s}
+      #actas-modal .acta-input:focus{border-color:#f97316;box-shadow:0 0 0 3px rgba(249,115,22,.12)}
+      #actas-modal .acta-input[readonly]{background:#f8fafc;color:#334155}
+      #actas-modal .acta-section{margin:15px 0 7px;font-size:10px;font-weight:900;letter-spacing:.08em;color:#475569}
+      #actas-modal .acta-grid2,#actas-modal .acta-grid3,#actas-modal .acta-grid4{display:grid;gap:10px;align-items:start}
+      #actas-modal .acta-grid2{grid-template-columns:repeat(2,minmax(0,1fr))}
+      #actas-modal .acta-grid3{grid-template-columns:repeat(3,minmax(0,1fr))}
+      #actas-modal .acta-grid4{grid-template-columns:repeat(4,minmax(145px,1fr))}
+      #actas-modal .acta-radio{display:flex;gap:15px;align-items:center;flex-wrap:wrap;font-size:11px;font-weight:800;color:#334155}
+      #actas-modal .acta-radio label{display:inline-flex;align-items:center;gap:4px;cursor:pointer}
+      #actas-modal .acta-resultados{display:none;position:relative;z-index:3;max-height:165px;margin-top:6px;overflow:auto;border:1px solid #dbe4ef;border-radius:8px;background:#fff;box-shadow:0 8px 20px rgba(15,23,42,.10)}
+      #actas-modal .acta-resultado{padding:9px 10px;border-bottom:1px solid #f1f5f9;cursor:pointer;font-size:11px;color:#172033}
+      #actas-modal .acta-resultado:last-child{border-bottom:0}
+      #actas-modal .acta-resultado:hover{background:#fff7ed}
+      #actas-modal .acta-help{margin:6px 0 0;font-size:9px;color:#64748b}
+      #actas-modal .acta-error{display:none;margin-bottom:10px;padding:9px 12px;border-radius:9px;background:#fee2e2;color:#991b1b;font-size:11px;font-weight:800}
+      #actas-modal .acta-close,#actas-modal .acta-cancel,#actas-modal .acta-submit{border:0;border-radius:9px;padding:10px 13px;font-weight:900;cursor:pointer;transition:filter .16s,transform .16s}
+      #actas-modal .acta-close{background:#334155;color:#fff}
+      #actas-modal .acta-cancel{flex:1;border:1px solid #cbd5e1;background:#fff;color:#475569}
+      #actas-modal .acta-submit{flex:2;background:linear-gradient(135deg,#f97316,#ea580c);color:#fff}
+      #actas-modal .acta-close:hover,#actas-modal .acta-cancel:hover,#actas-modal .acta-submit:hover{filter:brightness(.96)}
+      #actas-modal .acta-arma-item{margin-top:10px;padding:11px;border:1px solid #cfe0ff;border-radius:10px;background:#f8fbff}
+      #actas-modal .acta-arma-seleccionada{margin-top:7px;padding:9px 10px;border-radius:8px;background:#e9efff;color:#3730a3;font-size:10px;font-weight:700;line-height:1.45}
+      #actas-modal .acta-cantidad{width:58px;min-height:28px;padding:4px 6px;border:1px solid #cbd5e1;border-radius:6px}
+      @media(max-width:700px){#actas-modal .acta-grid2,#actas-modal .acta-grid3,#actas-modal .acta-grid4{grid-template-columns:1fr}#actas-modal .acta-radio{gap:9px}}
+    `;
+    document.head.appendChild(style);
+}
+inyectarEstilosActasV3();
+
 let armaActaSeleccionada = null;
 let actaGenerando = false;
 let agentesActaFiltrados = [];
@@ -582,6 +621,7 @@ function asegurarModalActas(){
   document.body.appendChild(modal);
   const style=document.createElement('style'); style.textContent=`.acta-card{background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:12px}.acta-label{display:block;font-size:9px;font-weight:900;color:#64748b;text-transform:uppercase;margin-bottom:4px}.acta-input{width:100%;box-sizing:border-box;padding:8px 10px;border:1.5px solid #cbd5e1;border-radius:8px;background:#fff;color:#0f172a;font-size:11px;font-weight:700;outline:none}.acta-input:focus{border-color:#f97316}.acta-section{font-size:10px;letter-spacing:.08em;color:#475569;margin:14px 0 6px;font-weight:900}.acta-grid2,.acta-grid3,.acta-grid4{display:grid;gap:9px}.acta-grid2{grid-template-columns:repeat(2,minmax(0,1fr))}.acta-grid3{grid-template-columns:repeat(3,minmax(0,1fr))}.acta-grid4{grid-template-columns:repeat(4,minmax(150px,1fr))}.acta-radio{display:flex;gap:16px;flex-wrap:wrap;font-size:11px;font-weight:800;color:#334155}.acta-resultados{display:none;margin-top:6px;max-height:165px;overflow:auto;border:1px solid #e2e8f0;border-radius:8px;background:#fff}.acta-resultado{padding:8px 10px;border-bottom:1px solid #f1f5f9;cursor:pointer;font-size:11px}.acta-resultado:hover{background:#fff7ed}.acta-help{font-size:9px;color:#64748b;margin:6px 0 0}.acta-error{display:none;margin-bottom:10px;padding:9px 12px;border-radius:10px;background:#fee2e2;color:#991b1b;font-size:11px;font-weight:800}.acta-close,.acta-cancel,.acta-submit{border:0;border-radius:9px;padding:10px;font-weight:900;cursor:pointer}.acta-close{background:#334155;color:#fff}.acta-cancel{flex:1;border:1px solid #cbd5e1;background:#fff;color:#475569}.acta-submit{flex:2;background:linear-gradient(135deg,#f97316,#ea580c);color:#fff}.acta-arma-item{margin-top:10px;padding:10px;border:1px solid #dbeafe;border-radius:10px;background:#f8fbff}.acta-arma-seleccionada{margin-top:7px;padding:8px;background:#eef2ff;border-radius:8px;color:#3730a3;font-size:10px;font-weight:700}.acta-cantidad{width:54px;padding:4px;border:1px solid #cbd5e1;border-radius:6px}@media(max-width:650px){.acta-grid2,.acta-grid3,.acta-grid4{grid-template-columns:1fr}}`; document.head.appendChild(style);
 }
+
 // Historial integrado dentro del mismo generador de actas.
 function asegurarModalActas(){
   if(document.getElementById('actas-modal'))return;
