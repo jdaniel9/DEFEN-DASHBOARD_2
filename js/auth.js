@@ -184,6 +184,11 @@ function inicializarLogin() {
 }
 
 function cerrarSesion() {
+    // El caché contiene una copia temporal de la respuesta del dashboard.
+    // Se elimina al salir para que nunca quede disponible para otro usuario del mismo equipo.
+    Object.keys(sessionStorage)
+        .filter(k => k.startsWith('defen_dashboard_datos_v1_'))
+        .forEach(k => sessionStorage.removeItem(k));
     sessionStorage.removeItem(AUTH_SESSION_KEY);
     sessionStorage.removeItem('defen_auth_nombre');
     sessionStorage.removeItem('defen_auth_usuario');
