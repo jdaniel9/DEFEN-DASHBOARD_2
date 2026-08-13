@@ -2,33 +2,91 @@
 // data.js — Carga de datos desde API + datos locales de respaldo
 // ================================================================
 
+const API_TIMEOUT_MS = 25000;
+const CACHE_DATOS_PREFIJO = 'defen_dashboard_datos_v1_';
+
 async function cargarDatos() {
     mostrarCargando(true);
-    let cargadoDesdeAPI = false;
-
-    if (APPS_SCRIPT_URL !== "PEGA_AQUI_TU_URL") {
-        try {
-            const res  = await fetch(APPS_SCRIPT_URL, { redirect: 'follow' });
-            const json = await res.json();
-            procesarDatosAPI(json);
-            cargadoDesdeAPI = true;
-            console.log("✅ Datos cargados desde Google Sheets");
-        } catch (e) {
-            console.warn("⚠️ Usando datos locales:", e.message);
+    try {
+        const json = await solicitarDatosAPI();
+        validarRespuestaDatos(json);
+        procesarDatosAPI(json);
+        guardarCacheDatos(json);
+        init();
+        document.querySelectorAll('.chip[data-val="todos"]').forEach(c => c.classList.add('active-blue'));
+        console.log('Datos cargados desde Google Sheets');
+    } catch (error) {
+        console.error('No se pudieron cargar los datos:', error);
+        if (error.codigo === 'SESION_INVALIDA') {
+            limpiarSesionVencida();
+            return;
         }
+        const cache = leerCacheDatos();
+        if (cache) {
+            try {
+                validarRespuestaDatos(cache);
+                procesarDatosAPI(cache);
+                init();
+                console.warn('Se muestran los últimos datos válidos guardados en esta sesión.');
+                return;
+            } catch (_) { sessionStorage.removeItem(claveCacheDatos()); }
+        }
+        mostrarErrorCarga(error.message || 'No se pudieron cargar los datos.');
+    } finally {
+        mostrarCargando(false);
     }
+}
 
-    if (!cargadoDesdeAPI) {
-        data              = DATOS_LOCALES_data;
-        detalleProvincias = DATOS_LOCALES_detalle;
-        armamento         = { rastrillo: 289, perdida: 1, confiscada: 1, global: 414, enCampo: 0, enTransito: 0 };
-        puestosData       = PUESTOS_LOCALES;
+async function solicitarDatosAPI() {
+    if (!tokenSesionActual()) {
+        const error = new Error('Tu sesión no es válida. Ingresa nuevamente.');
+        error.codigo = 'SESION_INVALIDA';
+        throw error;
     }
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
+    const url = new URL(APPS_SCRIPT_URL);
+    url.searchParams.set('accion', 'datos');
+    url.searchParams.set('token', tokenSesionActual());
+    try {
+        const res = await fetch(url.toString(), { method: 'GET', redirect: 'follow', cache: 'no-store', signal: controller.signal });
+        if (!res.ok) throw new Error(`El servidor respondió HTTP ${res.status}.`);
+        return await res.json();
+    } catch (e) {
+        if (e.name === 'AbortError') throw new Error('La carga tardó demasiado. Intenta nuevamente.');
+        throw e;
+    } finally {
+        clearTimeout(timeout);
+    }
+}
 
-    mostrarCargando(false);
-    init();
-    // Activar chips "Todos" por defecto
-    document.querySelectorAll('.chip[data-val="todos"]').forEach(c => c.classList.add('active-blue'));
+function validarRespuestaDatos(json) {
+    if (!json || typeof json !== 'object' || Array.isArray(json)) throw new Error('El servidor devolvió una respuesta inválida.');
+    if (json.ok === false) {
+        const error = new Error(json.mensaje || 'El servidor rechazó la consulta.');
+        error.codigo = json.codigo || '';
+        throw error;
+    }
+    if (!json.__meta__ || json.__meta__.tipo !== 'dashboard') throw new Error('La respuesta del servidor está incompleta. No se modificaron los datos mostrados.');
+    if (Object.keys(json).filter(k => !k.startsWith('__')).length === 0) throw new Error('La respuesta no contiene provincias. No se modificaron los datos mostrados.');
+}
+
+function claveCacheDatos() {
+    const usuario = sessionStorage.getItem('defen_auth_usuario') || 'anonimo';
+    const rol = sessionStorage.getItem(AUTH_ROL_KEY) || 'sin_rol';
+    return `${CACHE_DATOS_PREFIJO}${usuario}_${rol}`;
+}
+function guardarCacheDatos(json) { try { sessionStorage.setItem(claveCacheDatos(), JSON.stringify(json)); } catch (e) { console.warn('No fue posible guardar la copia temporal de datos:', e.message); } }
+function leerCacheDatos() { try { const raw = sessionStorage.getItem(claveCacheDatos()); return raw ? JSON.parse(raw) : null; } catch (_) { return null; } }
+function limpiarSesionVencida() {
+    sessionStorage.removeItem(AUTH_SESSION_KEY);
+    sessionStorage.removeItem(AUTH_TOKEN_KEY);
+    mostrarErrorCarga('Tu sesión venció. Ingresa nuevamente para consultar el dashboard.');
+    if (typeof mostrarLogin === 'function') mostrarLogin();
+}
+function mostrarErrorCarga(mensaje) {
+    const panel = document.getElementById('detail-panel');
+    if (panel) panel.innerHTML = `<div style="padding:18px;border-radius:12px;background:#fff7ed;border:1px solid #fed7aa;color:#9a3412;font-weight:700;font-size:12px;">${mensaje}<button onclick="cargarDatos()" style="margin-left:10px;padding:6px 10px;border:0;border-radius:7px;background:#ea580c;color:white;font-weight:800;cursor:pointer;">Reintentar</button></div>`;
 }
 
 function mostrarCargando(activo) {
@@ -38,10 +96,20 @@ function mostrarCargando(activo) {
 
 // Procesa JSON de la API → llena data, detalleProvincias, armamento y puestosData
 function procesarDatosAPI(json) {
+    // No mutar la respuesta original: se conserva para recuperación temporal.
+    json = { ...json };
     data              = {};
     detalleProvincias = {};
     puestosData       = {};
     personalActas     = [];
+    armamentoDetalle  = [];
+    radiosDetalle     = [];
+    cedulasPorPuesto  = {};
+    asistenciaHoy     = {};
+    novedadesPersonal = { ingresos: [], salidas: [], faltas: [] };
+    llamadosAtencion  = [];
+    historicoProyectos = [];
+    delete json.__meta__;
 
     // ── Armamento ──
     if (json.__armamento__) {
