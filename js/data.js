@@ -2,7 +2,8 @@
 // data.js — Carga de datos desde API + datos locales de respaldo
 // ================================================================
 
-const API_TIMEOUT_MS = 25000;
+const API_TIMEOUT_MS = 60000;
+const API_AVISO_DEMORA_MS = 15000;
 const CACHE_DATOS_PREFIJO = 'defen_dashboard_datos_v1_';
 
 async function cargarDatos() {
@@ -45,6 +46,10 @@ async function solicitarDatosAPI() {
     }
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
+    const avisoDemora = setTimeout(() => {
+        const texto = document.querySelector('#loading-overlay p');
+        if (texto) texto.textContent = 'La información sigue cargando; puede tardar hasta un minuto…';
+    }, API_AVISO_DEMORA_MS);
     const url = new URL(APPS_SCRIPT_URL);
     url.searchParams.set('accion', 'datos');
     url.searchParams.set('token', tokenSesionActual());
@@ -57,6 +62,7 @@ async function solicitarDatosAPI() {
         throw e;
     } finally {
         clearTimeout(timeout);
+        clearTimeout(avisoDemora);
     }
 }
 
@@ -91,7 +97,10 @@ function mostrarErrorCarga(mensaje) {
 
 function mostrarCargando(activo) {
     const el = document.getElementById('loading-overlay');
-    if (el) el.style.display = activo ? 'flex' : 'none';
+    if (!el) return;
+    el.style.display = activo ? 'flex' : 'none';
+    const texto = el.querySelector('p');
+    if (texto && !activo) texto.textContent = 'Cargando datos desde Google Sheets…';
 }
 
 // Procesa JSON de la API → llena data, detalleProvincias, armamento y puestosData
