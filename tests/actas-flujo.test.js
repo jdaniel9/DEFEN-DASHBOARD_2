@@ -112,7 +112,7 @@ const primera = crear({ token: 'ok', idSolicitud: 'solicitud-00000001', acta });
 if (!primera.ok || primera.reutilizada || hoja.getLastRow() !== 2) throw new Error('Falló la creación inicial.');
 if (hoja.datos[0].length !== hoja.datos[1].length) throw new Error(`Encabezados (${hoja.datos[0].length}) y fila (${hoja.datos[1].length}) no coinciden.`);
 let columnasInventario = contexto.estructuraHojaControl(hojaInventario).cols;
-if (hojaInventario.datos[1][columnasInventario.estado] !== 'En Transito' || listarTransito({ token: 'ok' }).cantidad !== 1) throw new Error('El arma no pasó a EN TRÁNSITO.');
+if (hojaInventario.datos[1][columnasInventario.estado] !== 'Transito' || listarTransito({ token: 'ok' }).cantidad !== 1) throw new Error('El arma no pasó al estado Transito.');
 if (!primera.pendienteSubsanar || listarPendientes({ token: 'ok' }).cantidad !== 1) throw new Error('No se registró la emergencia como pendiente de subsanar.');
 const subsanada = subsanar({ token: 'ok', codigo: primera.codigo, guia: { nombre: 'guia.pdf', mime: 'application/pdf', base64: Buffer.from('%PDF-prueba').toString('base64') } });
 if (!subsanada.ok || listarPendientes({ token: 'ok' }).cantidad !== 0) throw new Error('Falló la subsanación de la guía.');
