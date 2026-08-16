@@ -30,7 +30,8 @@ class Rango {
 }
 
 class Hoja {
-  constructor() { this.datos = []; }
+  constructor(nombre, datos = []) { this.nombre = nombre; this.datos = datos; }
+  getName() { return this.nombre; }
   getLastRow() {
     for (let i = this.datos.length - 1; i >= 0; i--) if (this.datos[i].some(v => v !== '' && v !== undefined)) return i + 1;
     return 0;
@@ -42,10 +43,16 @@ class Hoja {
   deleteRows(inicio, cantidad) { this.datos.splice(inicio - 1, cantidad); }
 }
 
-const hoja = new Hoja();
+const hoja = new Hoja('actas_armamento');
+const hojaInventario = new Hoja('armamento_detalle', [[
+  'codigo_arma','serie','clase','categoria','tipo','marca','calibre','estado','proyecto','provincia','puesto','ubicacion','url_guia_envio','url_guia_retorno'
+],[
+  'AR-1','SERIE-1','LETAL','MOVIL','PISTOLA','PRUEBA','9MM','Activo','PROYECTO ANTERIOR','GUAYAS','PUESTO ANTERIOR','PUESTO ANTERIOR','',''
+]]);
+const hojas = new Map([['actas_armamento', hoja], ['armamento_detalle', hojaInventario]]);
 const ss = {
-  getSheetByName(nombre) { return nombre === 'actas_armamento' ? hoja : null; },
-  insertSheet() { return hoja; }
+  getSheetByName(nombre) { return hojas.get(nombre) || null; },
+  insertSheet(nombre) { const nueva = new Hoja(nombre); hojas.set(nombre, nueva); return nueva; }
 };
 const propiedades = new Map();
 const contexto = vm.createContext({
@@ -63,6 +70,7 @@ const contexto = vm.createContext({
     base64EncodeWebSafe: bytes => Buffer.from(bytes).toString('base64url'),
     base64Decode: valor => [...Buffer.from(valor, 'base64')],
     newBlob: (bytes, mime, nombre) => ({ bytes, mime, nombre }),
+    getUuid: () => crypto.randomUUID(),
     formatDate: fecha => String(fecha.getFullYear())
   },
   DriveApp: {
@@ -98,9 +106,13 @@ const crear = contexto.crearActaArmamento;
 const eliminar = contexto.eliminarUltimaActa;
 const listarPendientes = contexto.listarGuiasPendientes;
 const subsanar = contexto.subsanarGuiaActa;
+const listarTransito = contexto.listarMovimientosTransito;
+const confirmarLlegada = contexto.confirmarLlegadaArmas;
 const primera = crear({ token: 'ok', idSolicitud: 'solicitud-00000001', acta });
 if (!primera.ok || primera.reutilizada || hoja.getLastRow() !== 2) throw new Error('Falló la creación inicial.');
 if (hoja.datos[0].length !== hoja.datos[1].length) throw new Error(`Encabezados (${hoja.datos[0].length}) y fila (${hoja.datos[1].length}) no coinciden.`);
+let columnasInventario = contexto.estructuraHojaControl(hojaInventario).cols;
+if (hojaInventario.datos[1][columnasInventario.estado] !== 'En Transito' || listarTransito({ token: 'ok' }).cantidad !== 1) throw new Error('El arma no pasó a EN TRÁNSITO.');
 if (!primera.pendienteSubsanar || listarPendientes({ token: 'ok' }).cantidad !== 1) throw new Error('No se registró la emergencia como pendiente de subsanar.');
 const subsanada = subsanar({ token: 'ok', codigo: primera.codigo, guia: { nombre: 'guia.pdf', mime: 'application/pdf', base64: Buffer.from('%PDF-prueba').toString('base64') } });
 if (!subsanada.ok || listarPendientes({ token: 'ok' }).cantidad !== 0) throw new Error('Falló la subsanación de la guía.');
@@ -108,6 +120,11 @@ contexto.validarSesionActas = () => ({ usuario: 'operaciones', rol: 'operaciones
 const sinGuiaOperaciones = crear({ token: 'ok', idSolicitud: 'solicitud-ops-0001', acta });
 if (sinGuiaOperaciones.ok || !String(sinGuiaOperaciones.mensaje).includes('obligatoria')) throw new Error('Operaciones pudo crear un acta sin guía.');
 contexto.validarSesionActas = () => ({ usuario: 'admin', rol: 'admin' });
+const llegada = confirmarLlegada({ token: 'ok', codigoActa: primera.codigo });
+columnasInventario = contexto.estructuraHojaControl(hojaInventario).cols;
+if (!llegada.ok || hojaInventario.datos[1][columnasInventario.estado] !== 'Activo' || listarTransito({ token: 'ok' }).cantidad !== 0) throw new Error('Falló la confirmación de llegada.');
+const llegadaRepetida = confirmarLlegada({ token: 'ok', codigoActa: primera.codigo });
+if (!llegadaRepetida.ok || !llegadaRepetida.reutilizada) throw new Error('La confirmación repetida no fue idempotente.');
 
 const repetida = crear({ token: 'ok', idSolicitud: 'solicitud-00000001', acta });
 if (!repetida.ok || !repetida.reutilizada || repetida.codigo !== primera.codigo || hoja.getLastRow() !== 2) throw new Error('Falló la idempotencia.');
@@ -121,11 +138,15 @@ if (!segunda.ok || hoja.datos[1][columnas.estado_acta] !== 'INVALIDADA' || hoja.
 
 const borrada = eliminar({ token: 'ok', codigo: segunda.codigo });
 if (!borrada.ok || hoja.getLastRow() !== 2 || hoja.datos[1][columnas.estado_acta] !== 'VIGENTE') throw new Error('Falló la restauración al eliminar el reemplazo.');
+columnasInventario = contexto.estructuraHojaControl(hojaInventario).cols;
+if (hojaInventario.datos[1][columnasInventario.estado] !== 'Activo' || hojaInventario.datos[1][columnasInventario.acta_vigente] !== primera.codigo) throw new Error('No se restauró el estado anterior del inventario al eliminar el acta.');
 
 console.log('OK creación inicial');
 console.log('OK emergencia pendiente y subsanación de guía');
 console.log('OK guía obligatoria para Operaciones');
+console.log('OK salida EN TRÁNSITO y confirmación EN CAMPO');
 console.log('OK solicitud repetida sin duplicado');
 console.log('OK confirmación de reemplazo');
 console.log('OK invalidación con nueva acta vigente');
 console.log('OK restauración al eliminar la última acta');
+console.log('OK restauración de inventario y movimiento al eliminar');
