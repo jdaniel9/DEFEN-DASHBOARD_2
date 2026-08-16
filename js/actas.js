@@ -860,4 +860,19 @@ function asegurarHistorialActas(){if(document.getElementById('historial-actas-mo
 function cerrarHistorialActas(){document.getElementById('historial-actas-modal').style.display='none';}
 async function abrirHistorialActas(){asegurarHistorialActas();document.getElementById('historial-actas-modal').style.display='flex';const c=document.getElementById('historial-actas-lista');c.innerHTML='<p style="color:#64748b">Cargando historial…</p>';try{const r=await postActas({accion:'listar_actas',token:tokenSesionActual()});if(!r.ok)throw new Error(r.mensaje);const grupos={GUARDIA:[],CUSTODIO:[]};(r.actas||[]).forEach(a=>(normalizarTexto(a.tipo).includes('custodio')?grupos.CUSTODIO:grupos.GUARDIA).push(a));c.innerHTML=['GUARDIA','CUSTODIO'].map(tipo=>`<h3 class="acta-section">${tipo==='GUARDIA'?'Actas de Guardia':'Actas de Custodio'}</h3>${grupos[tipo].length?grupos[tipo].map(a=>`<div style="background:white;border:1px solid #e2e8f0;border-radius:10px;padding:10px 12px;margin-bottom:7px;display:flex;gap:10px;align-items:center;flex-wrap:wrap"><div style="flex:1;min-width:220px"><b style="font-size:12px;color:#0f172a">${escHtml(a.codigo)}</b><div style="font-size:10px;color:#64748b">${escHtml(a.receptor)} · ${a.armas.length} arma(s) · ${escHtml(a.fecha)}</div><div style="font-size:9px;color:#94a3b8">Series: ${a.armas.map(escHtml).join(', ')}</div></div><button onclick="descargarPdfDesdeHistorial('${escAttr(a.codigo)}')" style="border:0;border-radius:7px;background:#dbeafe;color:#075985;padding:6px 8px;font-size:10px;font-weight:900;cursor:pointer">📄 Generar PDF</button>${r.esAdmin?`<button onclick="eliminarUltimaActa('${escAttr(a.codigo)}')" style="border:0;border-radius:7px;background:#fee2e2;color:#b91c1c;padding:6px 8px;font-size:10px;font-weight:900;cursor:pointer">Eliminar</button>`:''}</div>`).join(''):'<p style="font-size:11px;color:#94a3b8">Sin actas registradas.</p>'}`).join('');}catch(e){c.innerHTML=`<p style="color:#b91c1c;font-weight:700">${escHtml(e.message||String(e))}</p>`;}}
 async function descargarPdfDesdeHistorial(codigo){try{progresoActa('Recuperando datos del acta…',20);const r=await postActas({accion:'obtener_acta',token:tokenSesionActual(),codigo});if(!r.ok)throw new Error(r.mensaje);await descargarPdfActa(r.acta);progresoActa('PDF descargado.',100);}catch(e){alert(e.message||String(e));}finally{setTimeout(cerrarProgresoActa,500);}}
-async function eliminarUltimaActa(codigo){if(!confirm(`¿Eliminar ${codigo}? Solo se permite eliminar la última acta.`))return;const r=await postActas({accion:'eliminar_ultima_acta',token:tokenSesionActual(),codigo});if(!r.ok)return alert(r.mensaje||'No se pudo eliminar.');const historialIntegrado=document.getElementById('acta-vista-historial');if(historialIntegrado&&historialIntegrado.style.display!=='none'){await cargarHistorialIntegrado();return;}const historialAnterior=document.getElementById('historial-actas-modal');if(historialAnterior&&historialAnterior.style.display==='flex'){await abrirHistorialActas();}}
+async function eliminarUltimaActa(codigo){
+    if(!confirm(`¿Eliminar ${codigo}? Solo se permite eliminar la última acta.`))return;
+    try{
+        progresoActa('Eliminando acta y restaurando el estado anterior…',35);
+        const r=await postActas({accion:'eliminar_ultima_acta',token:tokenSesionActual(),codigo},90000);
+        if(!r.ok)throw new Error(r.mensaje||'No se pudo eliminar.');
+        progresoActa('Actualizando inventario y contadores…',70);
+        if(typeof cargarDatos==='function')await cargarDatos();
+        const historialIntegrado=document.getElementById('acta-vista-historial');
+        if(historialIntegrado&&historialIntegrado.style.display!=='none')await cargarHistorialIntegrado();
+        const historialAnterior=document.getElementById('historial-actas-modal');
+        if(historialAnterior&&historialAnterior.style.display==='flex')await abrirHistorialActas();
+        progresoActa('Información actualizada.',100);
+    }catch(e){alert(e.message||String(e));}
+    finally{setTimeout(cerrarProgresoActa,350);}
+}
