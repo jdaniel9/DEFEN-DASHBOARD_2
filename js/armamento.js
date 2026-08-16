@@ -360,7 +360,7 @@ function renderTablaArmamento() {
 
     const tbody = document.getElementById('armamento-tbody');
     const badgeEstado = (e) => {
-        const map = { activo:'#dcfce7;color:#15803d', transito:'#dbeafe;color:#1d4ed8', rastrillo:'#f1f5f9;color:#475569', perdida:'#fee2e2;color:#b91c1c', confiscada:'#fef3c7;color:#92400e' };
+        const map = { activo:'#dcfce7;color:#15803d', transito:'#dbeafe;color:#1d4ed8', 'en transito':'#dbeafe;color:#1d4ed8', rastrillo:'#f1f5f9;color:#475569', perdida:'#fee2e2;color:#b91c1c', confiscada:'#fef3c7;color:#92400e' };
         const key = String(e||'').toLowerCase();
         const style = map[key] || '#f1f5f9;color:#475569';
         return `<span style="background:${style.split(';')[0]};color:${style.split(';')[1].replace('color:','')};font-size:9px;font-weight:800;padding:2px 8px;border-radius:999px;">${e||'—'}</span>`;
@@ -705,3 +705,4 @@ async function exportarPDFRadios() {
     }
     doc.save(`Inventario_Radios_DEFEN_${fechaHoy.replace(/\//g,'-')}.pdf`);
 }
+
