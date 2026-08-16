@@ -422,7 +422,16 @@ function validarDatosActa(d){
     if(!d.supervisorNombre&&d.tipoActa==='GUARDIA')return 'Para el acta de Guardia indica quién entrega.';
     return '';
 }
-function mostrarErrorActa(m){const e=document.getElementById('acta-error');if(!e)return;e.textContent=m;e.style.display=m?'block':'none';}
+function mostrarErrorActa(m){
+    const e=document.getElementById('acta-error');
+    if(!e)return;
+    e.textContent=m;
+    e.style.display=m?'block':'none';
+    if(m){
+        console.error('Actas:',m);
+        e.scrollIntoView({behavior:'smooth',block:'center'});
+    }
+}
 
 async function postActas(payload){const r=await fetch(APPS_SCRIPT_URL,{method:'POST',body:JSON.stringify(payload),redirect:'follow'});return await r.json();}
 async function registrarActaServidor(d){return await postActas({accion:'crear_acta_armamento',token:tokenSesionActual(),acta:d});}
@@ -673,8 +682,29 @@ function armasDisponiblesActa(){const orden={rastrillo:0,activo:1,transito:2,per
 function generarPDFCustodio(d,evidencias){const armas=d.armas||[];if(armas.length===1){const a=armas[0],ev=evidencias[0]||{};return generarPDFCustodioOriginal({...d,...a},ev.cred,ev.arma);}return generarPDFCustodioMultiple(d,evidencias);}
 
 function asegurarProgresoActa(){if(document.getElementById('acta-progreso'))return;const e=document.createElement('div');e.id='acta-progreso';e.style.cssText='display:none;position:fixed;inset:0;z-index:22000;background:rgba(15,23,42,.88);align-items:center;justify-content:center;padding:20px';e.innerHTML='<div style="width:100%;max-width:390px;background:white;border-radius:16px;padding:22px;box-shadow:0 24px 70px rgba(0,0,0,.4)"><p style="margin:0 0 5px;font-weight:900;color:#0f172a">Generando acta</p><p id="acta-progreso-texto" style="margin:0;color:#64748b;font-size:12px">Preparando…</p><div style="height:8px;background:#e2e8f0;border-radius:99px;margin-top:16px;overflow:hidden"><div id="acta-progreso-barra" style="height:100%;width:8%;background:linear-gradient(90deg,#f97316,#fb923c);transition:width .35s ease"></div></div><p style="margin:10px 0 0;font-size:10px;color:#94a3b8">El registro quedará disponible para regenerar el acta desde el historial.</p></div>';document.body.appendChild(e);}
+function progresoActa(texto,porcentaje){asegurarProgresoActa();document.getElementById('acta-progreso').style.display='flex';document.getElementById('acta-progreso-texto').textContent=texto;document.getElementById('acta-progreso-barra').style.width=`${porcentaje}%`;}
 function cerrarProgresoActa(){const e=document.getElementById('acta-progreso');if(e)e.style.display='none';}
-async function postActas(payload,timeoutMs=45000){const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),timeoutMs);try{const r=await fetch(APPS_SCRIPT_URL,{method:'POST',body:JSON.stringify(payload),redirect:'follow',signal:controller.signal});if(!r.ok){if(r.status===404)throw new Error('La URL publicada de Apps Script no tiene esta función. Publica una nueva versión de Code.gs y verifica que config.js conserve la URL /exec correcta.');throw new Error(`El servidor respondió HTTP ${r.status}.`);}return await r.json();}catch(e){if(e.name==='AbortError')throw new Error('La operación tardó demasiado. Intenta nuevamente.');throw e;}finally{clearTimeout(timeout);}}
+async function postActas(payload,timeoutMs=45000){
+    const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),timeoutMs);
+    try{
+        const r=await fetch(APPS_SCRIPT_URL,{method:'POST',body:JSON.stringify(payload),redirect:'follow',signal:controller.signal});
+        if(!r.ok){
+            if(r.status===404)throw new Error('La URL publicada de Apps Script no tiene esta función. Publica una nueva versión de Code.gs y verifica que config.js conserve la URL /exec correcta.');
+            throw new Error(`El servidor respondió HTTP ${r.status}.`);
+        }
+        const contenido=await r.text();
+        try{
+            const json=JSON.parse(contenido);
+            if(!json||typeof json!=='object')throw new Error();
+            return json;
+        }catch(_){
+            throw new Error('Apps Script no devolvió una respuesta JSON válida. Actualiza e implementa una nueva versión del proyecto en Apps Script y confirma que config.js use la URL /exec vigente.');
+        }
+    }catch(e){
+        if(e.name==='AbortError')throw new Error('La operación tardó demasiado. Intenta nuevamente.');
+        throw e;
+    }finally{clearTimeout(timeout);}
+}
 async function generarActaArmamento(){if(actaGenerando)return;const d=leerFormularioActa(),err=validarDatosActa(d);if(err)return mostrarErrorActa(err);mostrarErrorActa('');const b=document.getElementById('acta-btn-generar');actaGenerando=true;b.disabled=true;try{progresoActa('Registrando datos del acta…',20);const reg=await registrarActaServidor(d);if(!reg.ok)throw new Error(reg.mensaje||'No se pudo registrar el acta');d.codigoActa=reg.codigo;progresoActa('Registro guardado. Generando PDF…',45);await descargarPdfActa(d);progresoActa('Finalizando…',100);if(typeof cerrarModalArmamento==='function')cerrarModalArmamento();document.getElementById('actas-modal').style.display='none';}catch(e){mostrarErrorActa(e.message||String(e));}finally{setTimeout(cerrarProgresoActa,350);actaGenerando=false;b.disabled=false;b.textContent='📄 Registrar y generar PDF';}}
 async function descargarPdfActa(d){progresoActa('Recuperando evidencias fotográficas…',60);const ev=await Promise.all((d.armas||[]).map(async a=>({cred:await imagenActaBase64(a.urlCredencial),arma:await imagenActaBase64(a.urlArma)})));progresoActa('Construyendo PDF…',80);const doc=d.tipoActa==='CUSTODIO VIP'?generarPDFCustodio(d,ev):generarPDFGuardia(d,ev);doc.save(`${d.codigoActa}_${d.tipoActa==='CUSTODIO VIP'?'CUSTODIO':'GUARDIA'}.pdf`);}
 
