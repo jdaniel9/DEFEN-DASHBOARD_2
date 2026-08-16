@@ -23,9 +23,7 @@ function calcularRangoNovedades(periodo) {
 
 // Convierte "YYYY-MM-DD" a Date, o null
 function parseFechaISO(str) {
-    if (!str) return null;
-    const d = new Date(str);
-    return isNaN(d) ? null : d;
+    return parseFechaLocal(str);
 }
 
 // Filtra ingresos/salidas/faltas/llamados según el periodo elegido —
