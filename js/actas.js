@@ -277,7 +277,13 @@ function esPerfilCustodio(p){
 function personalSegunTipoActa(){
     const tipo=document.getElementById('acta-tipo')?.value||'guardia';
     const base=personalBaseActas();
-    return base.filter(p=>tipo==='custodio'?esPerfilCustodio(p):!esPerfilCustodio(p));
+    // Un custodio puede constar en Asistencia con otro cargo o proyecto.
+    // Por eso, para este tipo de acta se permite buscar en todo el personal
+    // activo y solo se priorizan los perfiles identificados como custodios.
+    if(tipo==='custodio'){
+        return [...base].sort((a,b)=>Number(esPerfilCustodio(b))-Number(esPerfilCustodio(a)));
+    }
+    return base.filter(p=>!esPerfilCustodio(p));
 }
 
 function cargarAgentesActa(){
@@ -679,7 +685,7 @@ function generarPDFCustodioMultiple(d,evidencias){
 }
 // Ajustes de presentación y reglas específicas de Custodio.
 function actasV3ActualizarTipo(){const t=document.getElementById('acta-tipo').value;document.getElementById('acta-comentario').value=t==='guardia'?'SE ENTREGA PERMISO ORIGINAL DEL ARMA':'EQUIPO ENTREGADO EN BUENAS CONDICIONES';document.getElementById('acta-seccion-entrega').style.display=t==='guardia'?'block':'none';actasV3BuscarAgentes(document.getElementById('acta-agente-busqueda').value||'');actasV3CantidadArmas();}
-function actasV3BuscarAgentes(q){const out=document.getElementById('acta-agente-resultados');q=normalizarTexto(q);const base=personalBaseActas(),tipo=document.getElementById('acta-tipo').value;let candidatos=tipo==='custodio'?base.filter(esPerfilCustodio):base.filter(p=>!esPerfilCustodio(p));if(tipo==='custodio'&&!candidatos.length)candidatos=base;const resultados=q.length>=2?candidatos.filter(p=>[p.nombre,p.cedula].some(v=>normalizarTexto(v).includes(q))).slice(0,12):[];agentesActaFiltrados=resultados;out.innerHTML=resultados.map((p,i)=>`<div class="acta-resultado" onclick="actasV3ElegirAgente(${i})"><strong>${escHtml(p.nombre)}</strong>${p.cedula?` · CI ${escHtml(p.cedula)}`:''}<br><span style="color:#64748b">${escHtml(p.provincia||'')} · ${escHtml(p.proyecto||'')} · ${escHtml(p.puesto||'')}</span></div>`).join('')||'<div class="acta-resultado">No hay coincidencias.</div>';out.style.display=q.length>=2?'block':'none';document.getElementById('acta-agentes-ayuda').textContent=q.length<2?'Escribe al menos 2 caracteres para buscar.':`${resultados.length} coincidencia(s), mostrando nombre, cédula y ubicación.`;}
+function actasV3BuscarAgentes(q){const out=document.getElementById('acta-agente-resultados');q=normalizarTexto(q);const tipo=document.getElementById('acta-tipo').value,candidatos=personalSegunTipoActa();const resultados=q.length>=2?candidatos.filter(p=>[p.nombre,p.cedula].some(v=>normalizarTexto(v).includes(q))).slice(0,12):[];agentesActaFiltrados=resultados;out.innerHTML=resultados.map((p,i)=>`<div class="acta-resultado" onclick="actasV3ElegirAgente(${i})"><strong>${escHtml(p.nombre)}</strong>${p.cedula?` · CI ${escHtml(p.cedula)}`:''}<br><span style="color:#64748b">${escHtml(p.provincia||'')} · ${escHtml(p.proyecto||'')} · ${escHtml(p.puesto||'')}</span></div>`).join('')||'<div class="acta-resultado">No hay coincidencias.</div>';out.style.display=q.length>=2?'block':'none';document.getElementById('acta-agentes-ayuda').textContent=q.length<2?'Escribe al menos 2 caracteres para buscar.':`${resultados.length} coincidencia(s) en ${tipo==='custodio'?'todo el personal activo':'el personal de Guardia'}, mostrando nombre, cédula y ubicación.`;}
 function armasDisponiblesActa(){const orden={rastrillo:0,activo:1,transito:2,perdida:3,confiscada:4},esCustodio=document.getElementById('acta-tipo')?.value==='custodio';return [...armamentoDetalle].filter(a=>a&&(a.serie||a.codigoArma)&&(!esCustodio||normalizarTexto(a.categoria).includes('movil'))).sort((a,b)=>(orden[normalizarTexto(a.estado)]??9)-(orden[normalizarTexto(b.estado)]??9)||String(a.serie||'').localeCompare(String(b.serie||'')));}
 function generarPDFCustodio(d,evidencias){const armas=d.armas||[];if(armas.length===1){const a=armas[0],ev=evidencias[0]||{};return generarPDFCustodioOriginal({...d,...a},ev.cred,ev.arma);}return generarPDFCustodioMultiple(d,evidencias);}
 
