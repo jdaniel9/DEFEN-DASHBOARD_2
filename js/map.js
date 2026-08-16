@@ -60,7 +60,7 @@ function renderDetailPanel(nombre) {
         : `<span class="text-[11px] font-bold text-slate-400 italic">Sin supervisor asignado</span>`;
 
     // ── Proyectos — usar solo los que pasan el filtro activo ──
-    const todosNeutros   = Object.values(filtrosActivos).every(v => v === 'todos');
+    const todosNeutros   = !Object.keys(filtrosActivos).some(g => grupoActivo(g));
     const totFiltrados   = calcTotalesFiltrados(nombre);
     const listaProy      = todosNeutros ? (detalle.proyectosList || []) : totFiltrados.proyectosList;
     const totalProv      = detalle.proyectosList ? detalle.proyectosList.length : 0;
@@ -418,7 +418,7 @@ function highlightCard(id) {
 function showTooltip(e, name, info) {
     // Usar totales filtrados en el tooltip
     const tot = calcTotalesFiltrados(name);
-    const hayFiltro = !Object.values(filtrosActivos).every(v => v === 'todos');
+    const hayFiltro = Object.keys(filtrosActivos).some(g => grupoActivo(g));
 
     tooltip.style.display = 'block';
     tooltip.innerHTML = `
