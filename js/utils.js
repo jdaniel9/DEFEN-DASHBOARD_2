@@ -11,7 +11,10 @@ function parseFechaLocal(valor) {
     }
 
     const texto = String(valor).trim();
-    const fechaISO = texto.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    // Apps Script puede devolver las fechas de Sheets como ISO completo
+    // (2026-08-11T07:00:00.000Z). Tomamos la parte calendario sin aplicar
+    // conversión de zona horaria para no cambiar accidentalmente el día.
+    const fechaISO = texto.match(/^(\d{4})-(\d{2})-(\d{2})(?=$|[T\s])/);
     if (fechaISO) {
         const [, anio, mes, dia] = fechaISO;
         const fecha = new Date(Number(anio), Number(mes) - 1, Number(dia));
@@ -22,6 +25,17 @@ function parseFechaLocal(valor) {
     if (Number.isNaN(fecha.getTime())) return null;
     fecha.setHours(0,0,0,0);
     return fecha;
+}
+
+function partesFechaSegura(valor) {
+    if (!valor) return null;
+    const texto = String(valor).trim();
+    let partes = texto.match(/^(\d{4})-(\d{2})-(\d{2})(?=$|[T\s])/);
+    if (partes) return { anio: Number(partes[1]), mes: Number(partes[2]), dia: Number(partes[3]) };
+    partes = texto.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    if (partes) return { anio: Number(partes[3]), mes: Number(partes[2]), dia: Number(partes[1]) };
+    const fecha = parseFechaLocal(valor);
+    return fecha ? { anio: fecha.getFullYear(), mes: fecha.getMonth() + 1, dia: fecha.getDate() } : null;
 }
 
 function diasRestantes(fechaStr) {
@@ -56,12 +70,15 @@ function alertaVigencia(dias) {
 }
 
 function formatFecha(str) {
-    if (!str) return '—';
-    const [y,m,d] = String(str).split('-');
-    return `${d}/${m}/${y}`;
+    const fecha = partesFechaSegura(str);
+    if (!fecha) return '—';
+    return `${String(fecha.dia).padStart(2,'0')}/${String(fecha.mes).padStart(2,'0')}/${fecha.anio}`;
 }
 
 // Antepone una columna "N°" a cada fila de una tabla de reporte PDF
 function numerarFilas(filas) {
+    return filas.map((f, i) => [String(i + 1), ...f]);
+}
+
     return filas.map((f, i) => [String(i + 1), ...f]);
 }
