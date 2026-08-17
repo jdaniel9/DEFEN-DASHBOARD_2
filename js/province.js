@@ -811,7 +811,7 @@ function aplicarFiltro(tipo) {
 const MARGEN_PDF = 25; // 2.5 cm en mm (header y footer)
 
 // Dibuja el membrete (encabezado 2.5cm) y el pie de página (2.5cm) en la página actual
-function dibujarMembretePDF(doc, subtitulo, fechaHoy) {
+function dibujarMembretePDF(doc, subtitulo, fechaHoy, opciones = {}) {
     // Usar el tamaño REAL de la página actual (vertical u horizontal),
     // en vez de asumir siempre 210x297 — así el membrete se ve completo
     // también en reportes horizontales como el de Armamento.
@@ -819,6 +819,8 @@ function dibujarMembretePDF(doc, subtitulo, fechaHoy) {
     const H = doc.internal.pageSize.getHeight();
     const DARK = [15,15,15], ORANGE = [245,158,11];
     const LOGO_B64 = window._LOGO_B64 || '';
+    const mayusculas = Boolean(opciones.mayusculas);
+    const texto = valor => mayusculas ? String(valor || '').toLocaleUpperCase('es-EC') : String(valor || '');
 
     // ── Encabezado (0 a 25mm) ──
     doc.setFillColor(209,213,219);
@@ -830,17 +832,17 @@ function dibujarMembretePDF(doc, subtitulo, fechaHoy) {
     doc.setFontSize(12); doc.setFont('helvetica','bold');
     doc.text('DEFEN CIA. LTDA.', 8, 12);
     doc.setFontSize(7.5); doc.setFont('helvetica','normal'); doc.setTextColor(71,85,105);
-    doc.text(subtitulo, 8, 18);
+    doc.text(texto(subtitulo), 8, 18);
     doc.setFontSize(6.5);
-    doc.text(`Generado: ${fechaHoy}`, 8, 23);
+    doc.text(texto(`Generado: ${fechaHoy}`), 8, 23);
 
     // ── Pie de página (últimos 25mm) ──
     const yFooter = H - MARGEN_PDF;
     doc.setDrawColor(...ORANGE); doc.setLineWidth(0.8);
     doc.line(14, yFooter + 4, W-14, yFooter + 4);
     doc.setFontSize(7); doc.setFont('helvetica','normal'); doc.setTextColor(71,85,105);
-    doc.text('Dirección: Cdla. Álamos II Mz K Solar 09', W/2, yFooter + 9, {align:'center'});
-    doc.text('Correo Electrónico: info@defen.com.ec  ·  Guayaquil - Ecuador', W/2, yFooter + 14, {align:'center'});
+    doc.text(texto('Dirección: Cdla. Álamos II Mz K Solar 09'), W/2, yFooter + 9, {align:'center'});
+    doc.text(texto('Correo Electrónico: info@defen.com.ec  ·  Guayaquil - Ecuador'), W/2, yFooter + 14, {align:'center'});
 }
 
 // Paleta de colores por índice de proyecto (para el mapa esquemático)
