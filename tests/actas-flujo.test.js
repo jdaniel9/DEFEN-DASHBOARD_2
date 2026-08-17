@@ -113,6 +113,7 @@ const subsanarMovimiento = contexto.subsanarGuiaMovimiento;
 const regularizar = contexto.regularizarArmas;
 const registrarNovedad = contexto.registrarNovedadArma;
 const iniciarRecuperacion = contexto.iniciarRecuperacionArma;
+const listarHistorialMovimientos = contexto.listarHistorialMovimientos;
 const primera = crear({ token: 'ok', idSolicitud: 'solicitud-00000001', acta });
 if (!primera.ok || primera.reutilizada || hoja.getLastRow() !== 2) throw new Error('Falló la creación inicial.');
 if (hoja.datos[0].length !== hoja.datos[1].length) throw new Error(`Encabezados (${hoja.datos[0].length}) y fila (${hoja.datos[1].length}) no coinciden.`);
@@ -199,6 +200,13 @@ if (!filaActaRecuperada || filaActaRecuperada[columnasActaRegularizada.estado_ac
 const confiscada = registrarNovedad({ token:'ok', idSolicitud:'novedad-confisca-001', series:['SERIE-3'], tipo:'Confiscada', fecha:'2026-08-16', observacion:'Retenida por autoridad' });
 const filaSerie3 = hojaInventario.datos.find(r => r[columnasInventario.serie] === 'SERIE-3');
 if (!confiscada.ok || filaSerie3[columnasInventario.estado] !== 'Confiscada') throw new Error('Falló la declaración de arma confiscada.');
+const historialCompleto = listarHistorialMovimientos({ token:'ok', pagina:1, limite:25 });
+if (!historialCompleto.ok || historialCompleto.total < 6 || !historialCompleto.catalogos.tipos.includes('RECUPERACION') || !historialCompleto.catalogos.tipos.includes('CONFISCACION')) throw new Error('El historial no devolvió los movimientos y catálogos esperados.');
+const historialSerie2 = listarHistorialMovimientos({ token:'ok', consulta:'SERIE-2', tipo:'RECUPERACION', provincia:'PICHINCHA', desde:'2026-08-17', hasta:'2026-08-17' });
+if (!historialSerie2.ok || historialSerie2.total !== 1 || historialSerie2.movimientos[0].serie !== 'SERIE-2') throw new Error('Los filtros del historial no se aplicaron correctamente.');
+const validarSesionGuardada = contexto.validarSesionActas;contexto.validarSesionActas = () => null;
+const historialSinPermiso = listarHistorialMovimientos({ token:'sin-permiso' });contexto.validarSesionActas = validarSesionGuardada;
+if (historialSinPermiso.ok) throw new Error('Un usuario sin permiso pudo consultar el historial de movimientos.');
 
 console.log('OK creación inicial');
 console.log('OK emergencia pendiente y subsanación de guía');
@@ -221,3 +229,5 @@ console.log('OK novedad idempotente sin duplicados');
 console.log('OK recuperación pasa por Transito y termina en Rastrillo');
 console.log('OK recuperación finaliza el acta al confirmar recepción');
 console.log('OK declaración de arma confiscada');
+console.log('OK historial paginado con catálogos y filtros');
+console.log('OK historial restringido a roles autorizados');
