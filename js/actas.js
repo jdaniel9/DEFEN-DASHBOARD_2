@@ -481,8 +481,19 @@ async function generarActaArmamentoLegacyV2(){
 // ----------------------------------------------------------------
 // PDF helpers
 // ----------------------------------------------------------------
-function fechaLargaEspanol(iso){const f=partesFechaSegura(iso),meses=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];return f&&f.mes>=1&&f.mes<=12?`${f.dia} de ${meses[f.mes-1]} del ${f.anio}`:'FECHA NO DISPONIBLE';}
-function fechaPalabrasActa(iso){const f=partesFechaSegura(iso),meses=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];return f&&f.mes>=1&&f.mes<=12?{dia:f.dia,mes:meses[f.mes-1],anio:f.anio}:{dia:'—',mes:'—',anio:'—'};}
+function partesFechaActa(valor){
+    if(!valor)return null;
+    const texto=String(valor).trim();
+    let p=texto.match(/^(\d{4})-(\d{2})-(\d{2})(?=$|[T\s])/);
+    if(p)return {anio:Number(p[1]),mes:Number(p[2]),dia:Number(p[3])};
+    p=texto.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    if(p)return {anio:Number(p[3]),mes:Number(p[2]),dia:Number(p[1])};
+    const fecha=new Date(texto);
+    return Number.isNaN(fecha.getTime())?null:{anio:fecha.getFullYear(),mes:fecha.getMonth()+1,dia:fecha.getDate()};
+}
+function formatearFechaActa(valor){const f=partesFechaActa(valor);return f?`${String(f.dia).padStart(2,'0')}/${String(f.mes).padStart(2,'0')}/${f.anio}`:'—';}
+function fechaLargaEspanol(iso){const f=partesFechaActa(iso),meses=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];return f&&f.mes>=1&&f.mes<=12?`${f.dia} de ${meses[f.mes-1]} del ${f.anio}`:'FECHA NO DISPONIBLE';}
+function fechaPalabrasActa(iso){const f=partesFechaActa(iso),meses=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];return f&&f.mes>=1&&f.mes<=12?{dia:f.dia,mes:meses[f.mes-1],anio:f.anio}:{dia:'—',mes:'—',anio:'—'};}
 function textoPDFMayusculas(valor,alternativa='—'){const texto=String(valor??'').trim()||alternativa;return texto.toLocaleUpperCase('es-EC');}
 function addTextJustificado(doc,text,x,y,w,fontSize=11,lineH=5.4){doc.setFontSize(fontSize);doc.setFont('helvetica','normal');doc.setTextColor(20,20,20);const lines=doc.splitTextToSize(text,w);doc.text(lines,x,y,{align:'justify',maxWidth:w,lineHeightFactor:1.18});return y+lines.length*lineH;}
 function addTextoMixtoJustificado(doc,segmentos,x,y,w,fontSize=10.9,lineH=5.25){
@@ -506,7 +517,7 @@ function textoClaseActa(clase){const n=normalizarTexto(clase).replace(/\s/g,'');
 function generarPDFGuardiaLegacyV2(d,cred,arma){
     const {jsPDF}=window.jspdf;
     const doc=new jsPDF({orientation:'landscape',unit:'mm',format:'a4'});
-    const W=297,DARK=[15,23,42],GRAY=[203,213,225],fechaFmt=formatFecha(d.fecha);
+    const W=297,DARK=[15,23,42],GRAY=[203,213,225],fechaFmt=formatearFechaActa(d.fecha);
     dibujarMembretePDF(doc,`Acta de Recepción de Dotaciones · ${d.codigoActa}`,fechaFmt);
     let y=MARGEN_PDF+7;
     doc.setFont('helvetica','bold');doc.setFontSize(14);doc.setTextColor(...DARK);doc.text('ACTA DE RECEPCIÓN DE DOTACIONES',W/2,y,{align:'center'});y+=8;
@@ -569,7 +580,7 @@ function generarPDFCustodioOriginal(d,cred,arma){
     const {jsPDF}=window.jspdf;
     const doc=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
     const f=fechaPalabrasActa(d.fecha),x=18,w=174;
-    dibujarPlantillaCustodio(doc,d.codigoActa,formatFecha(d.fecha));
+    dibujarPlantillaCustodio(doc,d.codigoActa,formatearFechaActa(d.fecha));
 
     // El Word original usa Arial; Helvetica de jsPDF es su equivalente métrico más cercano.
     doc.setTextColor(15,15,15);doc.setFont('helvetica','bold');doc.setFontSize(11.2);
@@ -601,7 +612,7 @@ function generarPDFCustodioOriginal(d,cred,arma){
     y=addTextJustificado(doc,p4,x,y,w,10.9,5.25)+5;
     y=addTextJustificado(doc,p5,x,y,w,10.9,5.25)+5;
 
-    doc.addPage();dibujarPlantillaCustodio(doc,d.codigoActa,formatFecha(d.fecha));
+    doc.addPage();dibujarPlantillaCustodio(doc,d.codigoActa,formatearFechaActa(d.fecha));
     y=42;doc.setTextColor(20,20,20);doc.setFont('helvetica','bold');doc.setFontSize(10.5);doc.text('Arma de dotación:',18,y);y+=5;
     doc.autoTable({startY:y,margin:{left:18,right:18},head:[['N°','CLASE','CATEGORÍA','TIPO','MARCA','CALIBRE','SERIE','ALIMENT.','MUNICIONES','PERMISO (CREDENCIAL)']],body:[[1,d.clase,d.categoria,d.tipoArma,d.marca,d.calibre,d.serie,d.alimentadoras||1,d.municiones,d.permiso]],headStyles:{fillColor:[145,145,145],textColor:[255,255,255],fontSize:6,halign:'center'},styles:{fontSize:6.1,cellPadding:1.6,halign:'center',valign:'middle'}});
     y=doc.lastAutoTable.finalY+8;
@@ -872,20 +883,20 @@ async function generarActaArmamentoLegacyV3Inicial(){if(actaGenerando)return;con
 function generarPDFGuardia(d,evidencias){
  const {jsPDF}=window.jspdf,doc=new jsPDF({orientation:'landscape',unit:'mm',format:'a4'}),armas=d.armas||[],W=297,H=210;
  const opcionesMembrete={mayusculas:true},subtitulo=`ACTA DE RECEPCIÓN DE DOTACIONES · ${d.codigoActa}`,topeContenido=H-MARGEN_PDF-4,inicioContenido=MARGEN_PDF+8;
- const nuevaPagina=()=>{doc.addPage();dibujarMembretePDF(doc,subtitulo,formatFecha(d.fecha),opcionesMembrete);return inicioContenido;};
- dibujarMembretePDF(doc,subtitulo,formatFecha(d.fecha),opcionesMembrete);let y=inicioContenido;doc.setFont('helvetica','bold');doc.setFontSize(14);doc.setTextColor(15,23,42);doc.text('ACTA DE RECEPCIÓN DE DOTACIONES',W/2,y,{align:'center'});y+=8;
+ const nuevaPagina=()=>{doc.addPage();dibujarMembretePDF(doc,subtitulo,formatearFechaActa(d.fecha),opcionesMembrete);return inicioContenido;};
+ dibujarMembretePDF(doc,subtitulo,formatearFechaActa(d.fecha),opcionesMembrete);let y=inicioContenido;doc.setFont('helvetica','bold');doc.setFontSize(14);doc.setTextColor(15,23,42);doc.text('ACTA DE RECEPCIÓN DE DOTACIONES',W/2,y,{align:'center'});y+=8;
  const fechaActa=textoPDFMayusculas(fechaLargaEspanol(d.fecha));
  const encabezado=armas.length>1?['FECHA',fechaActa,'CANTIDAD',armas.length]:['FECHA',fechaActa,'CATEGORÍA',`ARMAMENTO - ${textoClaseActa(armas[0]?.clase)}`];doc.autoTable({startY:y,margin:{left:14,right:14},theme:'grid',styles:{fontSize:7.8,cellPadding:2.7},columnStyles:{0:{fontStyle:'bold',fillColor:[203,213,225],cellWidth:22},2:{fontStyle:'bold',fillColor:[203,213,225],cellWidth:26}},body:[encabezado,['NOMBRE',textoPDFMayusculas(d.receptorNombre),'CÉDULA',d.receptorCedula],['CARGO',textoPDFMayusculas(d.cargo),'ÁREA / PROYECTO',textoPDFMayusculas(d.proyecto)]]});y=doc.lastAutoTable.finalY+6;
- doc.autoTable({startY:y,margin:{left:8,right:8,top:inicioContenido,bottom:MARGEN_PDF+4},head:[['N°','CLASE','CATEGORÍA','TIPO','MARCA','MODELO','CALIBRE','SERIE','ALIMENT.','MUNICIONES','PERMISO','COMENTARIO','NOVEDAD']],body:armas.map((a,i)=>[i+1,textoPDFMayusculas(a.clase),textoPDFMayusculas(a.categoria),textoPDFMayusculas(a.tipoArma),textoPDFMayusculas(a.marca),textoPDFMayusculas(d.modelo),textoPDFMayusculas(a.calibre),textoPDFMayusculas(a.serie),d.alimentadoras||1,d.municiones,textoPDFMayusculas(d.permiso),textoPDFMayusculas(d.comentario),textoPDFMayusculas(d.novedad)]),headStyles:{fillColor:[71,85,105],textColor:[255,255,255],fontSize:5.9,halign:'center'},styles:{fontSize:5.8,cellPadding:1.5,halign:'center',valign:'middle'},didDrawPage:()=>dibujarMembretePDF(doc,subtitulo,formatFecha(d.fecha),opcionesMembrete)});y=doc.lastAutoTable.finalY+7;
+ doc.autoTable({startY:y,margin:{left:8,right:8,top:inicioContenido,bottom:MARGEN_PDF+4},head:[['N°','CLASE','CATEGORÍA','TIPO','MARCA','MODELO','CALIBRE','SERIE','ALIMENT.','MUNICIONES','PERMISO','COMENTARIO','NOVEDAD']],body:armas.map((a,i)=>[i+1,textoPDFMayusculas(a.clase),textoPDFMayusculas(a.categoria),textoPDFMayusculas(a.tipoArma),textoPDFMayusculas(a.marca),textoPDFMayusculas(d.modelo),textoPDFMayusculas(a.calibre),textoPDFMayusculas(a.serie),d.alimentadoras||1,d.municiones,textoPDFMayusculas(d.permiso),textoPDFMayusculas(d.comentario),textoPDFMayusculas(d.novedad)]),headStyles:{fillColor:[71,85,105],textColor:[255,255,255],fontSize:5.9,halign:'center'},styles:{fontSize:5.8,cellPadding:1.5,halign:'center',valign:'middle'},didDrawPage:()=>dibujarMembretePDF(doc,subtitulo,formatearFechaActa(d.fecha),opcionesMembrete)});y=doc.lastAutoTable.finalY+7;
  const altoEvidencia=32,pasoEvidencia=35;
  armas.forEach((a,i)=>{if(y+altoEvidencia>topeContenido)y=nuevaPagina();const e=evidencias[i]||{},bw=82,g=12,x1=(W-(bw*2+g))/2,x2=x1+bw+g;doc.setDrawColor(203,213,225);doc.rect(x1,y,bw,altoEvidencia);doc.rect(x2,y,bw,altoEvidencia);doc.setFont('helvetica','normal');doc.setFontSize(6.5);doc.text(`CREDENCIAL · ARMA ${i+1}`,x1+bw/2,y+4,{align:'center'});doc.text(`ARMA · SERIE ${textoPDFMayusculas(a.serie)}`,x2+bw/2,y+4,{align:'center'});if(!addImagenAjustada(doc,e.cred,x1+3,y+6,bw-6,23))doc.text('SIN IMAGEN DISPONIBLE',x1+bw/2,y+19,{align:'center'});if(!addImagenAjustada(doc,e.arma,x2+3,y+6,bw-6,23))doc.text('SIN IMAGEN DISPONIBLE',x2+bw/2,y+19,{align:'center'});y+=pasoEvidencia;});
  const altoFirma=29,separacionFirma=4;if(y+separacionFirma+altoFirma>topeContenido)y=nuevaPagina();const sy=y+separacionFirma,sw=96,sg=12,sx=(W-(sw*2+sg))/2;dibujarFirmaGuardia(doc,sx,sy,sw,'ENTREGA','SUPERVISOR',d.supervisorNombre||'—',d.supervisorCedula||'—');dibujarFirmaGuardia(doc,sx+sw+sg,sy,sw,'RECIBE',d.cargo,d.receptorNombre,d.receptorCedula);return doc;
 }
 function generarPDFCustodioMultiple(d,evidencias){
- const {jsPDF}=window.jspdf,doc=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'}),armas=d.armas||[],f=fechaPalabrasActa(d.fecha),x=18,w=174;dibujarPlantillaCustodio(doc,d.codigoActa,formatFecha(d.fecha));doc.setTextColor(15,15,15);doc.setFont('helvetica','bold');doc.setFontSize(11.2);doc.text('DEFEN CIA LTDA',105,34,{align:'center'});doc.text('GUAYAQUIL – ECUADOR',105,40,{align:'center'});doc.setFontSize(11.5);doc.text('ACTA DE ENTREGA, RECEPCIÓN',105,51,{align:'center'});doc.text('Y USO DE ARMAMENTO',105,57,{align:'center'});doc.setFontSize(10.5);doc.text(`NO.: ${d.codigoActa}`,18,70);let y=83;
+ const {jsPDF}=window.jspdf,doc=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'}),armas=d.armas||[],f=fechaPalabrasActa(d.fecha),x=18,w=174;dibujarPlantillaCustodio(doc,d.codigoActa,formatearFechaActa(d.fecha));doc.setTextColor(15,15,15);doc.setFont('helvetica','bold');doc.setFontSize(11.2);doc.text('DEFEN CIA LTDA',105,34,{align:'center'});doc.text('GUAYAQUIL – ECUADOR',105,40,{align:'center'});doc.setFontSize(11.5);doc.text('ACTA DE ENTREGA, RECEPCIÓN',105,51,{align:'center'});doc.text('Y USO DE ARMAMENTO',105,57,{align:'center'});doc.setFontSize(10.5);doc.text(`NO.: ${d.codigoActa}`,18,70);let y=83;
  const cargoLegal=d.cargo||'CUSTODIO VIP';y=addTextJustificado(doc,`En la ciudad de ${d.ciudad}, a los ${f.dia} días del mes de ${f.mes} del año ${f.anio}, se suscribe la presente ACTA DE ENTREGA, RECEPCIÓN Y USO DE ARMAMENTO. Se entrega(n) ${armas.length} arma(s) perteneciente(s) a DEFEN CIA. LTDA., con serie(s): ${armas.map(a=>a.serie).join(', ')}.`,x,y,w,10.9,5.25)+7;y=addTextJustificado(doc,`El Sr. ${d.receptorNombre}, con CI. ${d.receptorCedula}, en calidad de ${cargoLegal}, declara haber recibido el equipo en buenas condiciones de funcionamiento y se compromete a su correcta utilización, custodia y conservación.`,x,y,w,10.9,5.25)+8;doc.setFont('helvetica','bold');doc.text(String(cargoLegal).toUpperCase(),18,y);y+=32;doc.setLineWidth(.3);doc.line(18,y,92,y);doc.setFont('helvetica','normal');doc.setFontSize(9.5);doc.text(`Nombre: ${d.receptorNombre}`,18,y+6);doc.text(`CI.: ${d.receptorCedula}`,18,y+12);
- doc.addPage();dibujarPlantillaCustodio(doc,d.codigoActa,formatFecha(d.fecha));y=42;doc.setFont('helvetica','bold');doc.setFontSize(10.5);doc.text('Armamento de dotación:',18,y);y+=5;doc.autoTable({startY:y,margin:{left:18,right:18},head:[['N°','CLASE','CATEGORÍA','TIPO','MARCA','CALIBRE','SERIE','ALIMENT.','MUNICIONES','PERMISO']],body:armas.map((a,i)=>[i+1,a.clase,a.categoria,a.tipoArma,a.marca,a.calibre,a.serie,d.alimentadoras||1,d.municiones,d.permiso]),headStyles:{fillColor:[145,145,145],textColor:[255,255,255],fontSize:6,halign:'center'},styles:{fontSize:6.1,cellPadding:1.6,halign:'center',valign:'middle'}});y=doc.lastAutoTable.finalY+8;
- armas.forEach((a,i)=>{if(y+52>250){doc.addPage();dibujarPlantillaCustodio(doc,d.codigoActa,formatFecha(d.fecha));y=42;}const e=evidencias[i]||{},bw=78,g=18,x1=(210-(bw*2+g))/2,x2=x1+bw+g;doc.setFontSize(7);doc.text(`CREDENCIAL · ARMA ${i+1}`,x1+bw/2,y,{align:'center'});doc.text(`ARMA · ${a.serie}`,x2+bw/2,y,{align:'center'});doc.setDrawColor(226,232,240);doc.rect(x1,y+2,bw,45);doc.rect(x2,y+2,bw,45);if(!addImagenAjustada(doc,e.cred,x1+2,y+4,bw-4,41))doc.text('Sin imagen disponible',x1+bw/2,y+25,{align:'center'});if(!addImagenAjustada(doc,e.arma,x2+2,y+4,bw-4,41))doc.text('Sin imagen disponible',x2+bw/2,y+25,{align:'center'});y+=53;});return doc;
+ doc.addPage();dibujarPlantillaCustodio(doc,d.codigoActa,formatearFechaActa(d.fecha));y=42;doc.setFont('helvetica','bold');doc.setFontSize(10.5);doc.text('Armamento de dotación:',18,y);y+=5;doc.autoTable({startY:y,margin:{left:18,right:18},head:[['N°','CLASE','CATEGORÍA','TIPO','MARCA','CALIBRE','SERIE','ALIMENT.','MUNICIONES','PERMISO']],body:armas.map((a,i)=>[i+1,a.clase,a.categoria,a.tipoArma,a.marca,a.calibre,a.serie,d.alimentadoras||1,d.municiones,d.permiso]),headStyles:{fillColor:[145,145,145],textColor:[255,255,255],fontSize:6,halign:'center'},styles:{fontSize:6.1,cellPadding:1.6,halign:'center',valign:'middle'}});y=doc.lastAutoTable.finalY+8;
+ armas.forEach((a,i)=>{if(y+52>250){doc.addPage();dibujarPlantillaCustodio(doc,d.codigoActa,formatearFechaActa(d.fecha));y=42;}const e=evidencias[i]||{},bw=78,g=18,x1=(210-(bw*2+g))/2,x2=x1+bw+g;doc.setFontSize(7);doc.text(`CREDENCIAL · ARMA ${i+1}`,x1+bw/2,y,{align:'center'});doc.text(`ARMA · ${a.serie}`,x2+bw/2,y,{align:'center'});doc.setDrawColor(226,232,240);doc.rect(x1,y+2,bw,45);doc.rect(x2,y+2,bw,45);if(!addImagenAjustada(doc,e.cred,x1+2,y+4,bw-4,41))doc.text('Sin imagen disponible',x1+bw/2,y+25,{align:'center'});if(!addImagenAjustada(doc,e.arma,x2+2,y+4,bw-4,41))doc.text('Sin imagen disponible',x2+bw/2,y+25,{align:'center'});y+=53;});return doc;
 }
 // Ajustes de presentación y reglas específicas de Custodio.
 function actasV3ActualizarTipo(){const t=document.getElementById('acta-tipo').value;actasV3LimpiarAgenteSeleccionado();armasActaSeleccionadas=[];document.getElementById('acta-comentario').value=t==='guardia'?'SE ENTREGA PERMISO ORIGINAL DEL ARMA':'EQUIPO ENTREGADO EN BUENAS CONDICIONES';document.getElementById('acta-seccion-entrega').style.display=t==='guardia'?'block':'none';const cargo=document.getElementById('acta-cargo-select');if(cargo)cargo.value=t==='guardia'?'GUARDIA DE SEGURIDAD':'';actasV3BuscarAgentes(document.getElementById('acta-agente-busqueda').value||'');actasV3CantidadArmas();actasV3ActualizarMuniciones(true);}
@@ -928,7 +939,7 @@ async function generarActaArmamento(){
     const hoy=fechaISOHoy();
     if(d.fecha!==hoy){
         const relacion=d.fecha<hoy?'anterior':'futura';
-        if(!confirm(`La fecha seleccionada (${formatFecha(d.fecha)}) es ${relacion} a la fecha actual (${formatFecha(hoy)}).\n\n¿Confirmas que deseas generar el acta con esta novedad?`))return;
+        if(!confirm(`La fecha seleccionada (${formatearFechaActa(d.fecha)}) es ${relacion} a la fecha actual (${formatearFechaActa(hoy)}).\n\n¿Confirmas que deseas generar el acta con esta novedad?`))return;
     }
     mostrarErrorActa('');
     const b=document.getElementById('acta-btn-generar');actaGenerando=true;b.disabled=true;
