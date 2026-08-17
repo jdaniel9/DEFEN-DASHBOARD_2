@@ -79,6 +79,3 @@ function formatFecha(str) {
 function numerarFilas(filas) {
     return filas.map((f, i) => [String(i + 1), ...f]);
 }
-
-    return filas.map((f, i) => [String(i + 1), ...f]);
-}
