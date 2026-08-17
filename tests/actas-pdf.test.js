@@ -36,11 +36,11 @@ class DocumentoFalso {
 }
 
 const raiz = path.join(__dirname, '..');
-const utils = fs.readFileSync(path.join(raiz, 'js', 'utils.js'), 'utf8');
 const actas = fs.readFileSync(path.join(raiz, 'js', 'actas.js'), 'utf8');
 const contexto = vm.createContext({ console, Date, Number, String, Math });
-vm.runInContext(utils, contexto);
 vm.runInContext([
+  extraerFuncion(actas, 'partesFechaActa'),
+  extraerFuncion(actas, 'formatearFechaActa'),
   extraerFuncion(actas, 'fechaLargaEspanol'),
   extraerFuncion(actas, 'textoPDFMayusculas'),
   extraerFuncion(actas, 'dibujarFirmaGuardia'),
@@ -80,7 +80,7 @@ const datos = {
 const generar = vm.runInContext('generarPDFGuardia', contexto);
 generar(datos, datos.armas.map(() => ({})));
 
-if (vm.runInContext("formatFecha('2026-08-11T07:00:00.000Z')", contexto) !== '11/08/2026') {
+if (vm.runInContext("formatearFechaActa('2026-08-11T07:00:00.000Z')", contexto) !== '11/08/2026') {
   throw new Error('La fecha ISO completa no se formateó como 11/08/2026.');
 }
 if (doc.tablas[0].body[0][1] !== '11 DE AGOSTO DEL 2026') {
