@@ -111,6 +111,7 @@ function procesarDatosAPI(json) {
     detalleProvincias = {};
     puestosData       = {};
     personalActas     = [];
+    supervisoresActas = [];
     armamentoDetalle  = [];
     radiosDetalle     = [];
     cedulasPorPuesto  = {};
@@ -156,6 +157,12 @@ function procesarDatosAPI(json) {
     if (json.__personal_actas__) {
         personalActas = Array.isArray(json.__personal_actas__) ? json.__personal_actas__ : [];
         delete json.__personal_actas__;
+    }
+
+    // ── Supervisores: fuente independiente de la hoja proyectos ──
+    if (json.__supervisores__) {
+        supervisoresActas = Array.isArray(json.__supervisores__) ? json.__supervisores__ : [];
+        delete json.__supervisores__;
     }
 
     // ── Asistencia: quién está de turno HOY por puesto ──
