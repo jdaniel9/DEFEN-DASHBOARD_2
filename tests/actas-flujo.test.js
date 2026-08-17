@@ -110,6 +110,7 @@ const listarTransito = contexto.listarMovimientosTransito;
 const confirmarLlegada = contexto.confirmarLlegadaArmas;
 const iniciarRetorno = contexto.iniciarRetornoArmas;
 const subsanarMovimiento = contexto.subsanarGuiaMovimiento;
+const regularizar = contexto.regularizarArmas;
 const primera = crear({ token: 'ok', idSolicitud: 'solicitud-00000001', acta });
 if (!primera.ok || primera.reutilizada || hoja.getLastRow() !== 2) throw new Error('Falló la creación inicial.');
 if (hoja.datos[0].length !== hoja.datos[1].length) throw new Error(`Encabezados (${hoja.datos[0].length}) y fila (${hoja.datos[1].length}) no coinciden.`);
@@ -162,6 +163,23 @@ const eliminaFinalizada = eliminar({ token: 'ok', codigo: primera.codigo });
 columnasInventario = contexto.estructuraHojaControl(hojaInventario).cols;
 if (!eliminaFinalizada.ok || hojaInventario.datos[1][columnasInventario.estado] !== 'Activo' || hojaInventario.datos[1][columnasInventario.proyecto] !== 'PROYECTO ANTERIOR') throw new Error('No se restauró el origen al eliminar un acta finalizada.');
 
+hojaInventario.datos[1][columnasInventario.url_guia_envio] = 'https://drive.google.com/file/d/guia-existente/view';
+const solicitudRegularizacion = { token: 'ok', idSolicitud: 'regulariza-00000001', modo: 'LOTE', fecha: '2026-08-16', ciudad: 'Guayaquil', provincia: 'GUAYAS', proyecto: 'PROYECTO ANTERIOR', entregaNombre: 'Jefe de Operaciones', registros: [{ serie: 'SERIE-1', tipoActa: 'GUARDIA', responsableNombre: 'Supervisor Regularización', responsableCedula: '0912345678', cargo: 'SUPERVISOR', puesto: 'PUESTO ANTERIOR', alimentadoras: 1, municiones: 5 }] };
+const regularizada = regularizar(solicitudRegularizacion);
+columnasInventario = contexto.estructuraHojaControl(hojaInventario).cols;
+const columnasActaRegularizada = contexto.columnasActas(hoja);
+if (!regularizada.ok || regularizada.codigos.length !== 1 || hojaInventario.datos[1][columnasInventario.estado] !== 'Activo' || hojaInventario.datos[1][columnasInventario.acta_vigente] !== regularizada.codigos[0]) throw new Error('Falló la regularización en lote.');
+if (hoja.datos[1][columnasActaRegularizada.estado_documental] !== 'RESPALDO_EXISTENTE') throw new Error('No se reutilizó la guía existente durante la regularización.');
+const regularizadaRepetida = regularizar(solicitudRegularizacion);
+if (!regularizadaRepetida.ok || !regularizadaRepetida.reutilizada || hoja.getLastRow() !== 2) throw new Error('La regularización repetida creó duplicados.');
+const crearFilaInventario = (codigo, serie) => { const fila = Array(hojaInventario.datos[0].length).fill(''); fila[columnasInventario.codigo_arma] = codigo; fila[columnasInventario.serie] = serie; fila[columnasInventario.clase] = 'LETAL'; fila[columnasInventario.categoria] = 'MOVIL'; fila[columnasInventario.tipo] = 'PISTOLA'; fila[columnasInventario.marca] = 'PRUEBA'; fila[columnasInventario.calibre] = '9MM'; fila[columnasInventario.estado] = 'Activo'; fila[columnasInventario.proyecto] = 'PROYECTO ANTERIOR'; fila[columnasInventario.provincia] = 'GUAYAS'; fila[columnasInventario.puesto] = 'PUESTO 2'; fila[columnasInventario.ubicacion] = 'PUESTO 2'; return fila; };
+hojaInventario.datos.push(crearFilaInventario('AR-2', 'SERIE-2'), crearFilaInventario('AR-3', 'SERIE-3'));
+const regularizacionIndividual = regularizar({ token: 'ok', idSolicitud: 'regulariza-ind-0001', modo: 'INDIVIDUAL', fecha: '2026-08-16', ciudad: 'Guayaquil', provincia: 'GUAYAS', proyecto: 'PROYECTO ANTERIOR', entregaNombre: 'Jefe de Operaciones', registros: [
+  { serie: 'SERIE-2', tipoActa: 'GUARDIA', responsableNombre: 'Responsable Dos', responsableCedula: '0912345678', puesto: 'PUESTO 2', alimentadoras: 1, municiones: 5 },
+  { serie: 'SERIE-3', tipoActa: 'CUSTODIO VIP', responsableNombre: 'Responsable Tres', responsableCedula: '0912345679', puesto: 'PUESTO 2', alimentadoras: 1, municiones: 10 }
+] });
+if (!regularizacionIndividual.ok || regularizacionIndividual.codigos.length !== 2 || new Set(regularizacionIndividual.codigos).size !== 2) throw new Error('Falló la regularización individual con consecutivos separados.');
+
 console.log('OK creación inicial');
 console.log('OK emergencia pendiente y subsanación de guía');
 console.log('OK guía obligatoria para Operaciones');
@@ -175,3 +193,6 @@ console.log('OK retorno individual a Rastrillo y acta FINALIZADA');
 console.log('OK guía pendiente/subsanada en retorno');
 console.log('OK guía obligatoria para Operaciones en retorno');
 console.log('OK eliminación posterior a retorno restaura el origen inicial');
+console.log('OK regularización en lote mantiene Activo y reutiliza guía');
+console.log('OK regularización idempotente sin duplicados');
+console.log('OK regularización individual genera un acta por arma');
