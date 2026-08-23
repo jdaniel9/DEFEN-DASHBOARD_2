@@ -114,6 +114,7 @@ const regularizar = contexto.regularizarArmas;
 const registrarNovedad = contexto.registrarNovedadArma;
 const iniciarRecuperacion = contexto.iniciarRecuperacionArma;
 const listarHistorialMovimientos = contexto.listarHistorialMovimientos;
+const eliminarMovimientoHistorial = contexto.eliminarMovimientoHistorial;
 const supervisoresMigrados = contexto.obtenerSupervisoresConfigurados(ss, [{ provincia:'GUAYAS', nombre:'PROYECTO SUPERVISADO', supervisores:'Supervisor Uno, Supervisor Dos' }]);
 const hojaSupervisores = hojas.get('supervisores');
 if (supervisoresMigrados.length !== 2 || !hojaSupervisores || hojaSupervisores.getLastRow() !== 3) throw new Error('No se creó o migró correctamente la hoja supervisores.');
@@ -216,6 +217,22 @@ const validarSesionGuardada = contexto.validarSesionActas;contexto.validarSesion
 const historialSinPermiso = listarHistorialMovimientos({ token:'sin-permiso' });contexto.validarSesionActas = validarSesionGuardada;
 if (historialSinPermiso.ok) throw new Error('Un usuario sin permiso pudo consultar el historial de movimientos.');
 
+const hojaMovimientos = hojas.get('movimientos_armamento'), estructuraMovimientos = contexto.estructuraHojaControl(hojaMovimientos);
+const filaAnulada = hojaMovimientos.datos.find(r => String(r[estructuraMovimientos.cols.estado_movimiento]||'') === 'ANULADO_POR_ELIMINACION');
+if (!filaAnulada) throw new Error('No quedó un movimiento anulado disponible para probar la limpieza administrativa.');
+const idMovimientoAnulado = String(filaAnulada[estructuraMovimientos.cols.id_movimiento]||''), filasMovimientosAntes = hojaMovimientos.getLastRow(), inventarioAntesBorrarHistorial = JSON.stringify(hojaInventario.datos);
+contexto.validarSesionActas = () => ({ usuario:'operaciones', rol:'operaciones' });
+const borradoPorOperaciones = eliminarMovimientoHistorial({ token:'ok', idMovimiento:idMovimientoAnulado, motivo:'Registro de prueba' });
+if (borradoPorOperaciones.ok || hojaMovimientos.getLastRow() !== filasMovimientosAntes) throw new Error('Operaciones pudo borrar un movimiento del historial.');
+contexto.validarSesionActas = () => ({ usuario:'admin', rol:'admin' });
+const movimientoActual = String(filaSerie3[columnasInventario.id_movimiento_actual]||'');
+const borradoMovimientoActual = eliminarMovimientoHistorial({ token:'ok', idMovimiento:movimientoActual, motivo:'Intento de prueba' });
+if (borradoMovimientoActual.ok) throw new Error('Se permitió borrar un movimiento que todavía está vinculado al inventario.');
+const borradoAdministrativo = eliminarMovimientoHistorial({ token:'ok', idMovimiento:idMovimientoAnulado, motivo:'Movimiento generado durante pruebas' });
+if (!borradoAdministrativo.ok || hojaMovimientos.getLastRow() !== filasMovimientosAntes-1 || JSON.stringify(hojaInventario.datos) !== inventarioAntesBorrarHistorial) throw new Error('La eliminación administrativa no fue segura o modificó el inventario.');
+const auditoriaBorrados = hojas.get('auditoria_eliminaciones_movimientos');
+if (!auditoriaBorrados || auditoriaBorrados.getLastRow() !== 2 || !String(auditoriaBorrados.datos[1][1]||'').includes(idMovimientoAnulado)) throw new Error('No se registró la auditoría de la eliminación administrativa.');
+
 console.log('OK creación inicial');
 console.log('OK emergencia pendiente y subsanación de guía');
 console.log('OK guía obligatoria para Operaciones');
@@ -239,5 +256,7 @@ console.log('OK recuperación finaliza el acta al confirmar recepción');
 console.log('OK declaración de arma confiscada');
 console.log('OK historial paginado con catálogos y filtros');
 console.log('OK historial restringido a roles autorizados');
+console.log('OK eliminación de historial restringida a Administrador');
+console.log('OK bloqueo de movimientos vigentes y auditoría de eliminaciones');
 console.log('OK hoja supervisores creada y migrada sin depender de proyectos');
 console.log('OK cédula de supervisor normalizada a 10 dígitos');
