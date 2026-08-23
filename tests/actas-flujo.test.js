@@ -115,6 +115,13 @@ const registrarNovedad = contexto.registrarNovedadArma;
 const iniciarRecuperacion = contexto.iniciarRecuperacionArma;
 const listarHistorialMovimientos = contexto.listarHistorialMovimientos;
 const eliminarMovimientoHistorial = contexto.eliminarMovimientoHistorial;
+const reportarEstadoTecnico = contexto.reportarEstadoTecnicoArma;
+const iniciarMantenimiento = contexto.iniciarMantenimientoArma;
+const confirmarRecepcionArmero = contexto.confirmarRecepcionArmero;
+const finalizarMantenimiento = contexto.finalizarMantenimientoArma;
+const iniciarRetornoMantenimiento = contexto.iniciarRetornoMantenimiento;
+const confirmarRetornoMantenimiento = contexto.confirmarRetornoMantenimiento;
+const listarMantenimientos = contexto.listarMantenimientosArmamento;
 const supervisoresMigrados = contexto.obtenerSupervisoresConfigurados(ss, [{ provincia:'GUAYAS', nombre:'PROYECTO SUPERVISADO', supervisores:'Supervisor Uno, Supervisor Dos' }]);
 const hojaSupervisores = hojas.get('supervisores');
 if (supervisoresMigrados.length !== 2 || !hojaSupervisores || hojaSupervisores.getLastRow() !== 3) throw new Error('No se creó o migró correctamente la hoja supervisores.');
@@ -217,6 +224,38 @@ const validarSesionGuardada = contexto.validarSesionActas;contexto.validarSesion
 const historialSinPermiso = listarHistorialMovimientos({ token:'sin-permiso' });contexto.validarSesionActas = validarSesionGuardada;
 if (historialSinPermiso.ok) throw new Error('Un usuario sin permiso pudo consultar el historial de movimientos.');
 
+// Mantenimiento local: conserva asignación y reactiva la misma acta.
+const crearActaPruebaMantenimiento = (codigo,serie) => { const headers=hoja.datos[0],fila=Array(headers.length).fill(''),set=(n,v)=>{const i=headers.indexOf(n);if(i>=0)fila[i]=v;};set('codigo_acta',codigo);set('serie',serie);set('estado_acta','VIGENTE');set('fecha_acta','2026-08-18');return fila; };
+const filaLocal = crearFilaInventario('AR-4','SERIE-4'); hojaInventario.datos.push(filaLocal); hoja.datos.push(crearActaPruebaMantenimiento('ACT-G-2026-000010','SERIE-4'));
+columnasInventario = contexto.estructuraHojaControl(hojaInventario).cols;
+filaLocal[columnasInventario.acta_vigente]='ACT-G-2026-000010';filaLocal[columnasInventario.responsable_nombre]='RESPONSABLE LOCAL';
+const novedadTecnica = reportarEstadoTecnico({token:'ok',serie:'SERIE-4',fecha:'2026-08-18',condicion:'MAL ESTADO',observacion:'Falla en mecanismo de alimentación'});
+if(!novedadTecnica.ok||filaLocal[columnasInventario.bloqueada_asignacion]!=='SI'||filaLocal[columnasInventario.condicion_tecnica]!=='MAL ESTADO')throw new Error('No se bloqueó el arma con mala condición técnica.');
+const colsActasMtto=contexto.columnasActas(hoja),filaActaLocal=hoja.datos.find(r=>r[colsActasMtto.codigo_acta]==='ACT-G-2026-000010');
+if(filaActaLocal[colsActasMtto.estado_acta]!=='SUSPENDIDA_MANTENIMIENTO')throw new Error('La novedad técnica grave no suspendió el acta.');
+const mttoLocal=iniciarMantenimiento({token:'ok',idSolicitud:'mtto-local-0001',serie:'SERIE-4',tipoServicio:'CORRECTIVO',modalidad:'LOCAL',armeroTipo:'INTERNO',armeroNombre:'ARMERO INTERNO',armeroUbicacion:'PROYECTO ANTERIOR',fecha:'2026-08-18',problema:'Falla en mecanismo de alimentación'});
+if(!mttoLocal.ok||filaLocal[columnasInventario.estado]!=='Activo'||filaLocal[columnasInventario.condicion_tecnica]!=='EN MANTENIMIENTO')throw new Error('Falló el inicio del mantenimiento local.');
+const finLocal=finalizarMantenimiento({token:'ok',idMantenimiento:mttoLocal.idMantenimiento,fecha:'2026-08-19',resultado:'APTA',diagnostico:'Limpieza y ajuste del mecanismo',observacion:'Prueba funcional satisfactoria'});
+if(!finLocal.ok||filaLocal[columnasInventario.estado]!=='Activo'||filaLocal[columnasInventario.proyecto]!=='PROYECTO ANTERIOR'||filaLocal[columnasInventario.condicion_tecnica]!=='BUEN ESTADO'||filaLocal[columnasInventario.bloqueada_asignacion]!=='NO'||filaActaLocal[colsActasMtto.estado_acta]!=='VIGENTE')throw new Error('El mantenimiento local no restauró asignación, condición y acta.');
+
+// Mantenimiento externo: guía de salida, recepción, reparación, guía de retorno y cierre en rastrillo.
+const filaExterna=crearFilaInventario('AR-5','SERIE-5');hojaInventario.datos.push(filaExterna);hoja.datos.push(crearActaPruebaMantenimiento('ACT-G-2026-000011','SERIE-5'));filaExterna[columnasInventario.acta_vigente]='ACT-G-2026-000011';filaExterna[columnasInventario.responsable_nombre]='RESPONSABLE EXTERNO';
+const pdfPrueba={nombre:'guia.pdf',mime:'application/pdf',base64:Buffer.from('%PDF-mantenimiento').toString('base64')};
+const externoSinGuia=iniciarMantenimiento({token:'ok',idSolicitud:'mtto-ext-sin-guia',serie:'SERIE-5',tipoServicio:'PREVENTIVO',modalidad:'EXTERNO',armeroTipo:'EXTERNO',armeroNombre:'TALLER AUTORIZADO',armeroUbicacion:'GUAYAQUIL',fecha:'2026-08-20',problema:'Inspección preventiva programada'});
+if(externoSinGuia.ok)throw new Error('Se inició mantenimiento externo sin guía PDF.');
+const mttoExterno=iniciarMantenimiento({token:'ok',idSolicitud:'mtto-ext-0001',serie:'SERIE-5',tipoServicio:'PREVENTIVO',modalidad:'EXTERNO',armeroTipo:'EXTERNO',armeroNombre:'TALLER AUTORIZADO',armeroUbicacion:'GUAYAQUIL',fecha:'2026-08-20',problema:'Inspección preventiva programada',guia:pdfPrueba});
+if(!mttoExterno.ok||filaExterna[columnasInventario.estado]!=='Transito')throw new Error('Falló el envío externo a mantenimiento.');
+const recepcionArmero=confirmarRecepcionArmero({token:'ok',idMantenimiento:mttoExterno.idMantenimiento,fecha:'2026-08-20'});
+if(!recepcionArmero.ok||filaExterna[columnasInventario.estado]!=='Mantenimiento'||filaExterna[columnasInventario.condicion_tecnica]!=='EN DIAGNÓSTICO')throw new Error('Falló la recepción por el armero.');
+const finExterno=finalizarMantenimiento({token:'ok',idMantenimiento:mttoExterno.idMantenimiento,fecha:'2026-08-21',resultado:'APTA',diagnostico:'Inspección, limpieza y prueba funcional',observacion:'Sin fallas'});
+if(!finExterno.ok||filaExterna[columnasInventario.estado_mantenimiento]!=='REPARADA_PENDIENTE_RETORNO')throw new Error('Falló el resultado del mantenimiento externo.');
+const retornoMtto=iniciarRetornoMantenimiento({token:'ok',idSolicitud:'mtto-ret-0001',idMantenimiento:mttoExterno.idMantenimiento,fecha:'2026-08-21',destino:'GUAYAS',guia:pdfPrueba});
+if(!retornoMtto.ok||filaExterna[columnasInventario.estado]!=='Transito')throw new Error('Falló el retorno desde mantenimiento.');
+const llegadaMtto=confirmarRetornoMantenimiento({token:'ok',idMantenimiento:mttoExterno.idMantenimiento,fecha:'2026-08-22'}),filaActaExterna=hoja.datos.find(r=>r[colsActasMtto.codigo_acta]==='ACT-G-2026-000011');
+if(!llegadaMtto.ok||filaExterna[columnasInventario.estado]!=='Rastrillo'||filaExterna[columnasInventario.condicion_tecnica]!=='BUEN ESTADO'||filaExterna[columnasInventario.acta_vigente]!==''||filaActaExterna[colsActasMtto.estado_acta]!=='FINALIZADA')throw new Error('El retorno de mantenimiento no cerró inventario y acta correctamente.');
+const mantenimientosRegistrados=listarMantenimientos({token:'ok'});
+if(!mantenimientosRegistrados.ok||mantenimientosRegistrados.total<2||!mantenimientosRegistrados.mantenimientos.some(m=>m.estadoMantenimiento==='CERRADO'))throw new Error('El expediente de mantenimientos no quedó disponible.');
+
 const hojaMovimientos = hojas.get('movimientos_armamento'), estructuraMovimientos = contexto.estructuraHojaControl(hojaMovimientos);
 const filaAnulada = hojaMovimientos.datos.find(r => String(r[estructuraMovimientos.cols.estado_movimiento]||'') === 'ANULADO_POR_ELIMINACION');
 if (!filaAnulada) throw new Error('No quedó un movimiento anulado disponible para probar la limpieza administrativa.');
@@ -256,6 +295,9 @@ console.log('OK recuperación finaliza el acta al confirmar recepción');
 console.log('OK declaración de arma confiscada');
 console.log('OK historial paginado con catálogos y filtros');
 console.log('OK historial restringido a roles autorizados');
+console.log('OK condición técnica y bloqueo de asignación');
+console.log('OK mantenimiento local conserva asignación y reactiva acta');
+console.log('OK mantenimiento externo con guías finaliza en Rastrillo');
 console.log('OK eliminación de historial restringida a Administrador');
 console.log('OK bloqueo de movimientos vigentes y auditoría de eliminaciones');
 console.log('OK hoja supervisores creada y migrada sin depender de proyectos');
