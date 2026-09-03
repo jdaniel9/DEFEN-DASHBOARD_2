@@ -23,6 +23,8 @@ const AUTH_ROL_KEY      = 'defen_auth_rol';
 const AUTH_TOKEN_KEY    = 'defen_auth_token';
 const FONDOS_DISPONIBLES = ['img/fondo1.png', 'img/fondo2.png', 'img/fondo3.png', 'img/fondo4.png'];
 const ULTIMO_FONDO_KEY = 'defen_ultimo_fondo';
+let loginEnCurso = false;
+let formularioLoginConfigurado = false;
 
 // Roles que NO pueden abrir el detalle de Armamento
 const ROLES_SIN_ARMAMENTO = ['sistemas', 'gdp', 'inventario', 'financiero'];
@@ -128,17 +130,15 @@ function mostrarErrorLogin(msg) {
 }
 
 async function intentarLogin(usuario, password, departamento) {
+    if(loginEnCurso)return;
     const btn = document.getElementById('login-btn');
+    loginEnCurso=true;
     btn.disabled = true;
     btn.textContent = 'Verificando…';
     document.getElementById('login-error').style.display = 'none';
 
     try {
-        const res = await fetch(APPS_SCRIPT_URL, {
-            method: 'POST',
-            body: JSON.stringify({ usuario, password, departamento })
-        });
-        const json = await res.json();
+        const json = await solicitarLoginConReintento({ usuario, password, departamento });
 
         if (json.ok) {
             sessionStorage.setItem(AUTH_SESSION_KEY, '1');
@@ -147,40 +147,58 @@ async function intentarLogin(usuario, password, departamento) {
             sessionStorage.setItem(AUTH_ROL_KEY, json.rol || '');
             sessionStorage.setItem(AUTH_TOKEN_KEY, json.token || '');
             ocultarLogin();
-            iniciarDashboard();
+            iniciarDashboard({usarCachePrimero:false});
             aplicarPermisosUI();
         } else {
             mostrarErrorLogin(json.mensaje || 'Usuario o contraseña incorrectos');
         }
     } catch (e) {
-        mostrarErrorLogin('No se pudo conectar. Revisa tu conexión a internet.');
+        console.error('Error de autenticación:',e);
+        mostrarErrorLogin(e.message||'No se pudo conectar. Revisa tu conexión a internet.');
     } finally {
+        loginEnCurso=false;
         btn.disabled = false;
         btn.textContent = 'Ingresar';
     }
 }
 
-function inicializarLogin() {
-    if (estaAutenticado()) {
-        ocultarLogin();
-        iniciarDashboard();
-        aplicarPermisosUI();
-        return;
+async function solicitarLoginConReintento(payload){
+    let ultimoError=null;
+    for(let intento=1;intento<=2;intento++){
+        const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),20000),url=new URL(APPS_SCRIPT_URL);url.searchParams.set('_t',Date.now()+'_'+intento);
+        try{
+            const res=await fetch(url.toString(),{method:'POST',body:JSON.stringify(payload),redirect:'follow',cache:'no-store',signal:controller.signal});
+            if(!res.ok)throw new Error(`El servicio de acceso respondió HTTP ${res.status}.`);
+            const texto=await res.text();try{return JSON.parse(texto);}catch(_){throw new Error('El servicio de acceso devolvió una respuesta inválida.');}
+        }catch(e){ultimoError=e;if(intento<2&&e.name!=='AbortError')await new Promise(r=>setTimeout(r,700));}
+        finally{clearTimeout(timeout);}
     }
-    mostrarLogin();
+    if(ultimoError?.name==='AbortError')throw new Error('El inicio de sesión tardó demasiado. Vuelve a intentarlo.');
+    throw ultimoError||new Error('No se pudo conectar con el servicio de acceso.');
+}
 
+function configurarFormularioLogin(){
+    if(formularioLoginConfigurado)return;formularioLoginConfigurado=true;
     document.getElementById('login-form').addEventListener('submit', (e) => {
         e.preventDefault();
         const departamento = document.getElementById('login-departamento').value;
         const usuario  = document.getElementById('login-usuario').value.trim();
         const password = document.getElementById('login-password').value;
-        if (!departamento) {
-            mostrarErrorLogin('Selecciona tu departamento antes de ingresar.');
-            return;
-        }
+        if (!departamento) { mostrarErrorLogin('Selecciona tu departamento antes de ingresar.'); return; }
         if (!usuario || !password) return;
         intentarLogin(usuario, password, departamento);
     });
+}
+
+function inicializarLogin() {
+    configurarFormularioLogin();
+    if (estaAutenticado()) {
+        ocultarLogin();
+        iniciarDashboard({usarCachePrimero:true});
+        aplicarPermisosUI();
+        return;
+    }
+    mostrarLogin();
 }
 
 function cerrarSesion() {
