@@ -645,22 +645,22 @@
     </div>
 
     <!-- ── Módulos JS (orden importa: config → utils → data → map → filters → province → pdf → auth) ── -->
-    <script src="js/config.js"></script>
-    <script src="js/auth.js"></script>
+    <script src="js/config.js?v=20260902-rendimiento1"></script>
+    <script src="js/auth.js?v=20260902-rendimiento1"></script>
     <script src="js/utils.js?v=20260816-fechas2"></script>
-    <script src="js/data.js"></script>
+    <script src="js/data.js?v=20260902-rendimiento1"></script>
     <script src="js/map.js"></script>
     <script src="js/filters.js"></script>
     <script src="js/province.js?v=20260816-pdf2"></script>
-    <script src="js/armamento.js?v=20260822-mantenimiento1"></script>
-    <script src="js/actas.js?v=20260822-mantenimiento1"></script>
+    <script src="js/armamento.js?v=20260822-historial2"></script>
+    <script src="js/actas.js?v=20260822-historial2"></script>
     <script src="js/historico.js"></script>
     <script src="js/novedades.js"></script>
     <script src="js/pdf.js"></script>
 
     <script>
     // ── Arranque real del dashboard (solo tras login exitoso) ──────
-    async function iniciarDashboard() {
+    async function iniciarDashboard(opciones = {}) {
         // Fondo de página — varía cada vez, nunca repite el anterior
         document.body.style.backgroundImage = 'url(' + elegirFondoAleatorio() + ')';
 
@@ -684,7 +684,7 @@
             }
         })();
 
-        await Promise.all([precargarLogo, cargarDatos()]);
+        await Promise.all([precargarLogo, cargarDatos(opciones)]);
     }
 
     // ── Punto de entrada: primero exige login ──────────────────────
