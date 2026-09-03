@@ -5,17 +5,41 @@
 const API_TIMEOUT_MS = 60000;
 const API_AVISO_DEMORA_MS = 15000;
 const CACHE_DATOS_PREFIJO = 'defen_dashboard_datos_v1_';
+let cargaDatosEnCurso = null;
+let cargaImagenesEnCurso = null;
 
-async function cargarDatos() {
+async function cargarDatos(opciones={}) {
+    if (cargaDatosEnCurso) return cargaDatosEnCurso;
+    cargaDatosEnCurso = ejecutarCargaDatos(opciones);
+    try { return await cargaDatosEnCurso; }
+    finally { cargaDatosEnCurso = null; }
+}
+
+function aplicarDatosDashboard(json, origen) {
+    validarRespuestaDatos(json);
+    if(json.__meta__?.duracionServidorMs!==undefined)console.info(`Servidor: ${json.__meta__.duracionServidorMs} ms · origen: ${origen}`);
+    procesarDatosAPI(json);
+    init();
+    document.querySelectorAll('.chip[data-val="todos"]').forEach(c => c.classList.add('active-blue'));
+    console.log(`Datos cargados desde ${origen}`);
+    programarCargaImagenesArmamento();
+}
+
+async function ejecutarCargaDatos(opciones={}) {
+    const cacheInicial = opciones.usarCachePrimero ? leerCacheDatos() : null;
+    if (cacheInicial) {
+        try {
+            aplicarDatosDashboard(cacheInicial, 'la copia rápida de sesión');
+            mostrarCargando(false);
+            setTimeout(refrescarDatosSilenciosamente, 0);
+            return;
+        } catch (_) { sessionStorage.removeItem(claveCacheDatos()); }
+    }
     mostrarCargando(true);
     try {
         const json = await solicitarDatosAPI();
-        validarRespuestaDatos(json);
-        procesarDatosAPI(json);
+        aplicarDatosDashboard(json, 'Google Sheets');
         guardarCacheDatos(json);
-        init();
-        document.querySelectorAll('.chip[data-val="todos"]').forEach(c => c.classList.add('active-blue'));
-        console.log('Datos cargados desde Google Sheets');
     } catch (error) {
         console.error('No se pudieron cargar los datos:', error);
         if (error.codigo === 'SESION_INVALIDA') {
@@ -25,9 +49,7 @@ async function cargarDatos() {
         const cache = leerCacheDatos();
         if (cache) {
             try {
-                validarRespuestaDatos(cache);
-                procesarDatosAPI(cache);
-                init();
+                aplicarDatosDashboard(cache, 'la última copia válida');
                 console.warn('Se muestran los últimos datos válidos guardados en esta sesión.');
                 return;
             } catch (_) { sessionStorage.removeItem(claveCacheDatos()); }
@@ -38,32 +60,49 @@ async function cargarDatos() {
     }
 }
 
+async function refrescarDatosSilenciosamente() {
+    try {
+        const json=await solicitarDatosAPI();validarRespuestaDatos(json);guardarCacheDatos(json);procesarDatosAPI(json);init();programarCargaImagenesArmamento();
+        console.log('Datos actualizados silenciosamente desde Google Sheets');
+    } catch (error) {
+        if(error.codigo==='SESION_INVALIDA')limpiarSesionVencida();
+        else console.warn('La actualización en segundo plano no estuvo disponible:',error.message);
+    }
+}
+
 async function solicitarDatosAPI() {
     if (!tokenSesionActual()) {
         const error = new Error('Tu sesión no es válida. Ingresa nuevamente.');
         error.codigo = 'SESION_INVALIDA';
         throw error;
     }
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
     const avisoDemora = setTimeout(() => {
         const texto = document.querySelector('#loading-overlay p');
         if (texto) texto.textContent = 'La información sigue cargando; puede tardar hasta un minuto…';
     }, API_AVISO_DEMORA_MS);
-    const url = new URL(APPS_SCRIPT_URL);
-    url.searchParams.set('accion', 'datos');
-    url.searchParams.set('token', tokenSesionActual());
     try {
-        const res = await fetch(url.toString(), { method: 'GET', redirect: 'follow', cache: 'no-store', signal: controller.signal });
-        if (!res.ok) throw new Error(`El servidor respondió HTTP ${res.status}.`);
-        return await res.json();
-    } catch (e) {
-        if (e.name === 'AbortError') throw new Error('La carga tardó demasiado. Intenta nuevamente.');
-        throw e;
+        let ultimoError=null;
+        for(let intento=1;intento<=2;intento++){
+            const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),API_TIMEOUT_MS),url=new URL(APPS_SCRIPT_URL);
+            url.searchParams.set('accion','datos');url.searchParams.set('token',tokenSesionActual());url.searchParams.set('_t',Date.now()+'_'+intento);
+            try{
+                const res=await fetch(url.toString(),{method:'GET',redirect:'follow',cache:'no-store',signal:controller.signal});
+                if(!res.ok)throw new Error(`El servidor respondió HTTP ${res.status}.`);
+                const texto=await res.text();try{return JSON.parse(texto);}catch(_){throw new Error('El servidor devolvió una respuesta que no es JSON.');}
+            }catch(e){ultimoError=e;if(intento<2&&e.name!=='AbortError')await new Promise(r=>setTimeout(r,800));}
+            finally{clearTimeout(timeout);}
+        }
+        if(ultimoError?.name==='AbortError')throw new Error('La carga tardó demasiado. Intenta nuevamente.');
+        throw ultimoError||new Error('No se pudo consultar el servidor.');
     } finally {
-        clearTimeout(timeout);
         clearTimeout(avisoDemora);
     }
+}
+
+function programarCargaImagenesArmamento(){
+    if(cargaImagenesEnCurso||!usuarioPuedeVerArmamentoDetalle()||!armamentoDetalle.length)return;
+    const pendientes=armamentoDetalle.filter(a=>a.serie&&(!a.urlCredencial||!a.urlImagenArma)).map(a=>a.serie);if(!pendientes.length)return;
+    cargaImagenesEnCurso=(async()=>{const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),75000);try{const url=new URL(APPS_SCRIPT_URL);url.searchParams.set('_t',Date.now());const res=await fetch(url.toString(),{method:'POST',body:JSON.stringify({accion:'cargar_imagenes_armamento',token:tokenSesionActual(),series:pendientes}),redirect:'follow',cache:'no-store',signal:controller.signal});if(!res.ok)throw new Error('HTTP '+res.status);const json=await res.json();if(!json.ok)throw new Error(json.mensaje||'Índice no disponible');armamentoDetalle.forEach(a=>{const img=json.imagenes?.[a.serie];if(img){a.urlCredencial=a.urlCredencial||img.urlCredencial||'';a.urlImagenArma=a.urlImagenArma||img.urlImagenArma||'';}});console.log('Evidencias de armamento preparadas en segundo plano.');}catch(e){console.warn('Las imágenes se cargarán en un próximo intento:',e.message);}finally{clearTimeout(timeout);cargaImagenesEnCurso=null;}})();
 }
 
 function validarRespuestaDatos(json) {
