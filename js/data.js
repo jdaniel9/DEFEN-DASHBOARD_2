@@ -254,6 +254,16 @@ function procesarDatosAPI(json) {
 
     // ── Puestos: indexar por provincia → proyecto → array ──
     if (json.__puestos__) {
+        const radiosPorPuesto = new Map();
+        radiosDetalle
+            .filter(r => !r.estado || String(r.estado).toUpperCase() === 'ASIGNADO')
+            .forEach(r => {
+                const clave = [r.provincia, r.proyecto, r.puesto]
+                    .map(valor => String(valor || '').toUpperCase().trim())
+                    .join('|');
+                if (!radiosPorPuesto.has(clave)) radiosPorPuesto.set(clave, []);
+                radiosPorPuesto.get(clave).push(r);
+            });
         json.__puestos__.forEach(p => {
             const prov = (p.provincia || '').toUpperCase().trim();
             const proy = (p.proyecto  || '').toUpperCase().trim();
@@ -264,6 +274,14 @@ function procesarDatosAPI(json) {
             const nombrePuesto = p.nombre_puesto || p.nombre || '';
             // Buscar info de asistencia para este puesto (por nombre, case-insensitive)
             const asistInfo = asistenciaHoy[nombrePuesto.toUpperCase().trim()] || null;
+            const claveRadio = [prov, proy, nombrePuesto]
+                .map(valor => String(valor || '').toUpperCase().trim())
+                .join('|');
+            const radiosAsignados = radiosPorPuesto.get(claveRadio) || [];
+            const tieneRadioRegistrado = radiosAsignados.length > 0;
+            const resumenRadios = radiosAsignados
+                .map(r => `${r.modelo || 'RADIO'} · SERIE: ${r.serie || '—'}`)
+                .join(' | ');
 
             puestosData[prov][proy].push({
                 nombre:     nombrePuesto,
@@ -275,8 +293,8 @@ function procesarDatosAPI(json) {
                 arma:       p.arma          || null,
                 tieneLetal:   p.tieneLetal   === true,
                 tieneNoLetal: p.tieneNoLetal === true,
-                radio:      (p.radio  || '').toLowerCase() === 'si' || p.radio  === true,
-                radio_info: p.radio_info    || '',
+                radio:      tieneRadioRegistrado || String(p.radio || '').toLowerCase() === 'si' || p.radio === true,
+                radio_info: resumenRadios || p.radio_info || '',
                 turno:      p.turno         || '',
                 dias:       p.dias          || '',
                 obs:        p.observacion   || p.obs || '',
