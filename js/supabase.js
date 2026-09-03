@@ -131,6 +131,31 @@ async function supabaseRpc(nombre, payload = {}) {
     }
 }
 
+async function supabaseCargarRadiosDetalle() {
+    let token = await supabaseTokenVigente();
+    const ruta = '/rest/v1/radio_inventory_detail'
+        + '?select=serial_number,model,state,province_name,project_name,post_name,observation'
+        + '&active=eq.true'
+        + '&order=province_name.asc,project_name.asc,post_name.asc,serial_number.asc';
+    let filas;
+    try {
+        filas = await supabasePeticion(ruta, { headers: supabaseHeaders(token) });
+    } catch (error) {
+        if (error.status !== 401) throw error;
+        token = await supabaseRenovarSesion();
+        filas = await supabasePeticion(ruta, { headers: supabaseHeaders(token) });
+    }
+    return (Array.isArray(filas) ? filas : []).map(radio => ({
+        provincia: String(radio.province_name || '').toUpperCase().trim(),
+        proyecto: radio.project_name || '',
+        puesto: radio.post_name || '',
+        modelo: radio.model || '',
+        serie: radio.serial_number || '',
+        estado: radio.state || '',
+        observacion: radio.observation || ''
+    }));
+}
+
 function agruparNovedadesSupabase(novedades) {
     const ingresos = [];
     const salidas = [];
@@ -262,6 +287,14 @@ function adaptarSnapshotSupabase(snapshot) {
 }
 
 async function supabaseCargarDashboardLegacy() {
-    const snapshot = await supabaseRpc('get_dashboard_snapshot_v2');
-    return adaptarSnapshotSupabase(snapshot);
+    const puedeVerRadios = typeof usuarioPuedeVerRadiosDetalle === 'function'
+        ? usuarioPuedeVerRadiosDetalle()
+        : ['admin', 'operaciones', 'sistemas'].includes((sessionStorage.getItem('defen_auth_rol') || '').toLowerCase());
+    const [snapshot, radios] = await Promise.all([
+        supabaseRpc('get_dashboard_snapshot_v2'),
+        puedeVerRadios ? supabaseCargarRadiosDetalle() : Promise.resolve([])
+    ]);
+    const salida = adaptarSnapshotSupabase(snapshot);
+    if (puedeVerRadios) salida.__radios_detalle__ = radios;
+    return salida;
 }
