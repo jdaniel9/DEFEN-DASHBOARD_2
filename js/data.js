@@ -20,6 +20,7 @@ function aplicarDatosDashboard(json, origen) {
     if(json.__meta__?.duracionServidorMs!==undefined)console.info(`Servidor: ${json.__meta__.duracionServidorMs} ms · origen: ${origen}`);
     procesarDatosAPI(json);
     init();
+    if (typeof aplicarPermisosUI === 'function') aplicarPermisosUI();
     document.querySelectorAll('.chip[data-val="todos"]').forEach(c => c.classList.add('active-blue'));
     console.log(`Datos cargados desde ${origen}`);
     programarCargaImagenesArmamento();
@@ -38,7 +39,7 @@ async function ejecutarCargaDatos(opciones={}) {
     mostrarCargando(true);
     try {
         const json = await solicitarDatosAPI();
-        aplicarDatosDashboard(json, 'Google Sheets');
+        aplicarDatosDashboard(json, backendUsaSupabase() ? 'Supabase PostgreSQL' : 'Google Sheets');
         guardarCacheDatos(json);
     } catch (error) {
         console.error('No se pudieron cargar los datos:', error);
@@ -63,7 +64,7 @@ async function ejecutarCargaDatos(opciones={}) {
 async function refrescarDatosSilenciosamente() {
     try {
         const json=await solicitarDatosAPI();validarRespuestaDatos(json);guardarCacheDatos(json);procesarDatosAPI(json);init();programarCargaImagenesArmamento();
-        console.log('Datos actualizados silenciosamente desde Google Sheets');
+        console.log(`Datos actualizados silenciosamente desde ${backendUsaSupabase() ? 'Supabase PostgreSQL' : 'Google Sheets'}`);
     } catch (error) {
         if(error.codigo==='SESION_INVALIDA')limpiarSesionVencida();
         else console.warn('La actualización en segundo plano no estuvo disponible:',error.message);
@@ -78,9 +79,17 @@ async function solicitarDatosAPI() {
     }
     const avisoDemora = setTimeout(() => {
         const texto = document.querySelector('#loading-overlay p');
-        if (texto) texto.textContent = 'La información sigue cargando; puede tardar hasta un minuto…';
+        if (texto) texto.textContent = 'La información sigue cargando…';
     }, API_AVISO_DEMORA_MS);
     try {
+        if (backendUsaSupabase()) {
+            try {
+                return await supabaseCargarDashboardLegacy();
+            } catch (error) {
+                if ([400, 401, 403].includes(error.status)) error.codigo = 'SESION_INVALIDA';
+                throw error;
+            }
+        }
         let ultimoError=null;
         for(let intento=1;intento<=2;intento++){
             const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),API_TIMEOUT_MS),url=new URL(APPS_SCRIPT_URL);
@@ -100,6 +109,7 @@ async function solicitarDatosAPI() {
 }
 
 function programarCargaImagenesArmamento(){
+    if(backendUsaSupabase())return;
     if(cargaImagenesEnCurso||!usuarioPuedeVerArmamentoDetalle()||!armamentoDetalle.length)return;
     const pendientes=armamentoDetalle.filter(a=>a.serie&&(!a.urlCredencial||!a.urlImagenArma)).map(a=>a.serie);if(!pendientes.length)return;
     cargaImagenesEnCurso=(async()=>{const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),75000);try{const url=new URL(APPS_SCRIPT_URL);url.searchParams.set('_t',Date.now());const res=await fetch(url.toString(),{method:'POST',body:JSON.stringify({accion:'cargar_imagenes_armamento',token:tokenSesionActual(),series:pendientes}),redirect:'follow',cache:'no-store',signal:controller.signal});if(!res.ok)throw new Error('HTTP '+res.status);const json=await res.json();if(!json.ok)throw new Error(json.mensaje||'Índice no disponible');armamentoDetalle.forEach(a=>{const img=json.imagenes?.[a.serie];if(img){a.urlCredencial=a.urlCredencial||img.urlCredencial||'';a.urlImagenArma=a.urlImagenArma||img.urlImagenArma||'';}});console.log('Evidencias de armamento preparadas en segundo plano.');}catch(e){console.warn('Las imágenes se cargarán en un próximo intento:',e.message);}finally{clearTimeout(timeout);cargaImagenesEnCurso=null;}})();
@@ -119,13 +129,17 @@ function validarRespuestaDatos(json) {
 function claveCacheDatos() {
     const usuario = sessionStorage.getItem('defen_auth_usuario') || 'anonimo';
     const rol = sessionStorage.getItem(AUTH_ROL_KEY) || 'sin_rol';
-    return `${CACHE_DATOS_PREFIJO}${usuario}_${rol}`;
+    const backend = backendUsaSupabase() ? 'supabase' : 'apps_script';
+    return `${CACHE_DATOS_PREFIJO}${backend}_${usuario}_${rol}`;
 }
 function guardarCacheDatos(json) { try { sessionStorage.setItem(claveCacheDatos(), JSON.stringify(json)); } catch (e) { console.warn('No fue posible guardar la copia temporal de datos:', e.message); } }
 function leerCacheDatos() { try { const raw = sessionStorage.getItem(claveCacheDatos()); return raw ? JSON.parse(raw) : null; } catch (_) { return null; } }
 function limpiarSesionVencida() {
-    sessionStorage.removeItem(AUTH_SESSION_KEY);
-    sessionStorage.removeItem(AUTH_TOKEN_KEY);
+    if (typeof cerrarSesionLocal === 'function') cerrarSesionLocal();
+    else {
+        sessionStorage.removeItem(AUTH_SESSION_KEY);
+        sessionStorage.removeItem(AUTH_TOKEN_KEY);
+    }
     mostrarErrorCarga('Tu sesión venció. Ingresa nuevamente para consultar el dashboard.');
     if (typeof mostrarLogin === 'function') mostrarLogin();
 }
@@ -139,7 +153,7 @@ function mostrarCargando(activo) {
     if (!el) return;
     el.style.display = activo ? 'flex' : 'none';
     const texto = el.querySelector('p');
-    if (texto && !activo) texto.textContent = 'Cargando datos desde Google Sheets…';
+    if (texto && !activo) texto.textContent = backendUsaSupabase() ? 'Cargando datos desde Supabase…' : 'Cargando datos desde Google Sheets…';
 }
 
 // Procesa JSON de la API → llena data, detalleProvincias, armamento y puestosData
