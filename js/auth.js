@@ -1,13 +1,11 @@
 // ================================================================
-// auth.js — Login contra Apps Script (doPost) con sessionStorage
-// La contraseña nunca se guarda en el código; se valida en el
-// servidor (Apps Script) contra un hash SHA-256 guardado en Sheets.
+// auth.js — Login configurable con sessionStorage.
+// La fase actual utiliza Supabase Auth y conserva Apps Script como
+// alternativa temporal de reversión.
 // ================================================================
 
 // ================================================================
-// auth.js — Login contra Apps Script (doPost) con sessionStorage
-// La contraseña nunca se guarda en el código; se valida en el
-// servidor (Apps Script) contra un hash SHA-256 guardado en Sheets.
+// La contraseña nunca se guarda en el código del navegador.
 //
 // PERMISOS POR ROL (primera fase — se irá ampliando):
 //   admin, operaciones  → ven todo, sin restricciones
@@ -44,6 +42,7 @@ function tokenSesionActual() {
 }
 
 function usuarioPuedeGenerarActas() {
+    if (backendUsaSupabase() && SUPABASE_READ_ONLY_PHASE) return false;
     return ['admin','operaciones'].includes(rolActual());
 }
 
@@ -94,6 +93,21 @@ function aplicarPermisosUI() {
             }
         });
     }
+    if (backendUsaSupabase() && SUPABASE_READ_ONLY_PHASE) {
+        document.querySelectorAll('[onclick^="archivarProyectoActivo"]').forEach(el => {
+            el.style.display = 'none';
+        });
+        mostrarAvisoSupabaseLectura();
+    }
+}
+
+function mostrarAvisoSupabaseLectura() {
+    if (document.getElementById('supabase-readonly-badge')) return;
+    const aviso = document.createElement('div');
+    aviso.id = 'supabase-readonly-badge';
+    aviso.textContent = 'SUPABASE DEV · PRUEBA DE LECTURA';
+    aviso.style.cssText = 'position:fixed;right:14px;bottom:14px;z-index:30000;background:#1e3a8a;color:#dbeafe;border:1px solid #60a5fa;border-radius:999px;padding:7px 11px;font-size:9px;font-weight:900;letter-spacing:.04em;box-shadow:0 8px 24px rgba(15,23,42,.3)';
+    document.body.appendChild(aviso);
 }
 
 // Elige un fondo al azar EXCLUYENDO el último mostrado (guardado en localStorage,
@@ -146,6 +160,10 @@ async function intentarLogin(usuario, password, departamento) {
             sessionStorage.setItem('defen_auth_usuario', usuario);
             sessionStorage.setItem(AUTH_ROL_KEY, json.rol || '');
             sessionStorage.setItem(AUTH_TOKEN_KEY, json.token || '');
+            if (backendUsaSupabase()) {
+                sessionStorage.setItem(SUPABASE_REFRESH_TOKEN_KEY, json.refreshToken || '');
+                sessionStorage.setItem(SUPABASE_EXPIRES_AT_KEY, String(json.expiresAt || 0));
+            }
             ocultarLogin();
             iniciarDashboard({usarCachePrimero:false});
             aplicarPermisosUI();
@@ -163,6 +181,9 @@ async function intentarLogin(usuario, password, departamento) {
 }
 
 async function solicitarLoginConReintento(payload){
+    if (backendUsaSupabase()) {
+        return supabaseIniciarSesion(payload.usuario, payload.password, payload.departamento);
+    }
     let ultimoError=null;
     for(let intento=1;intento<=2;intento++){
         const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),20000),url=new URL(APPS_SCRIPT_URL);url.searchParams.set('_t',Date.now()+'_'+intento);
@@ -190,9 +211,18 @@ function configurarFormularioLogin(){
     });
 }
 
-function inicializarLogin() {
+async function inicializarLogin() {
     configurarFormularioLogin();
     if (estaAutenticado()) {
+        if (backendUsaSupabase()) {
+            const restaurada = await supabaseRestaurarSesion();
+            if (!restaurada) {
+                cerrarSesionLocal();
+                mostrarLogin();
+                mostrarErrorLogin('Tu sesión venció. Ingresa nuevamente.');
+                return;
+            }
+        }
         ocultarLogin();
         iniciarDashboard({usarCachePrimero:true});
         aplicarPermisosUI();
@@ -202,6 +232,12 @@ function inicializarLogin() {
 }
 
 function cerrarSesion() {
+    if (backendUsaSupabase()) supabaseCerrarSesionRemota(tokenSesionActual());
+    cerrarSesionLocal();
+    location.reload();
+}
+
+function cerrarSesionLocal() {
     // El caché contiene una copia temporal de la respuesta del dashboard.
     // Se elimina al salir para que nunca quede disponible para otro usuario del mismo equipo.
     Object.keys(sessionStorage)
@@ -212,5 +248,6 @@ function cerrarSesion() {
     sessionStorage.removeItem('defen_auth_usuario');
     sessionStorage.removeItem(AUTH_ROL_KEY);
     sessionStorage.removeItem(AUTH_TOKEN_KEY);
-    location.reload();
+    sessionStorage.removeItem(SUPABASE_REFRESH_TOKEN_KEY);
+    sessionStorage.removeItem(SUPABASE_EXPIRES_AT_KEY);
 }
