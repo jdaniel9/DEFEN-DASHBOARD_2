@@ -2,7 +2,18 @@
 // config.js — Configuración global, estado de la aplicación
 // ================================================================
 
-// ► CONFIGURACIÓN — pega aquí tu URL de Apps Script
+// ► BACKEND ACTIVO
+// Cambia temporalmente a "apps_script" para volver al backend anterior.
+const BACKEND_PROVIDER = 'supabase';
+const SUPABASE_READ_ONLY_PHASE = true;
+
+// Supabase: la clave publicable puede estar en el navegador. Nunca colocar
+// aquí la service_role ni la contraseña de la base de datos.
+const SUPABASE_URL = 'https://wnmmqksngujaglosafre.supabase.co';
+const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_s0cx2kjEN3e0Km7SM_PdnQ_Mkky5AZE';
+const SUPABASE_INTERNAL_AUTH_DOMAIN = 'auth.defen.local';
+
+// Backend anterior conservado durante la transición controlada.
 const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwnBgAAvMqpP9fP1XkTZ6YEuwmW2SByFpAYweSNSaVHdho379zSArNvUxeSVDTs_ID9/exec";
 
 // Rutas de imágenes (archivos locales en /img/)
@@ -85,3 +96,4 @@ const PUESTOS_LOCALES = {
         ]
     }
 };
+ 
