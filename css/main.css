@@ -260,3 +260,100 @@
             padding:1px 5px; border-radius:999px;
             margin-left:4px; vertical-align:middle;
         }
+
+/* ================================================================
+   Coberturas temporales de asistencia
+================================================================ */
+#asistencia-modal .as-header { background: #0f172a !important; color: #fff; }
+#asistencia-modal .as-header h2 { color: #fff; }
+#asistencia-modal .as-header p { color: #93c5fd; }
+.as-kpis { grid-template-columns: repeat(6, minmax(100px, 1fr)); }
+.as-table td.as-col-person { height: auto; min-height: 48px; }
+.as-cover-row {
+    display: inline-block; margin-top: 4px; padding: 4px 7px;
+    border: 0; border-radius: 7px; cursor: pointer;
+    background: #dbeafe; color: #1d4ed8;
+    font-size: 7px; font-weight: 900;
+}
+.as-cover-row:hover { background: #bfdbfe; }
+.as-coverage-badge {
+    display: block !important; width: fit-content; margin-top: 4px;
+    padding: 3px 6px; border-radius: 999px;
+    background: #dcfce7; color: #166534 !important;
+    font-size: 7px !important; font-weight: 900;
+}
+.as-coverage-form { width: min(680px, 100%); }
+.as-form-grid {
+    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 11px; margin-top: 14px;
+}
+.as-form-grid label {
+    color: #475569; font-size: 8px; font-weight: 900;
+}
+.as-form-grid .as-form-wide { grid-column: 1 / -1; }
+.as-form-grid input,
+.as-form-grid select,
+.as-form-grid textarea {
+    display: block; width: 100%; margin-top: 5px;
+    border: 1px solid #cbd5e1; border-radius: 8px;
+    background: #fff; color: #0f172a;
+    padding: 9px; font: inherit; font-size: 10px; font-weight: 700;
+}
+.as-form-grid input,
+.as-form-grid select { height: 38px; }
+.as-form-grid textarea { resize: vertical; text-transform: uppercase; }
+.as-editor-actions button.primary { background: #2563eb; color: #fff; }
+.as-coverage-manager {
+    width: min(900px, 100%); max-height: min(86vh, 780px);
+    display: flex; flex-direction: column; overflow: hidden;
+}
+.as-manager-head {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 12px; padding-bottom: 12px; border-bottom: 1px solid #e2e8f0;
+}
+.as-manager-head p { margin: 4px 0 0; }
+.as-manager-head > button {
+    border: 0; border-radius: 8px; padding: 8px 10px;
+    background: #e2e8f0; color: #334155;
+    font-size: 9px; font-weight: 900; cursor: pointer;
+}
+.as-coverage-list {
+    min-height: 120px; overflow: auto; padding: 12px 2px 2px;
+    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px;
+}
+.as-coverage-card {
+    border: 1px solid #e2e8f0; border-radius: 12px;
+    background: #f8fafc; padding: 12px;
+}
+.as-coverage-card-head { display: flex; align-items: center; gap: 7px; }
+.as-coverage-card-head > b { color: #475569; font-size: 8px; }
+.as-coverage-card h4 { margin: 9px 0 6px; color: #0f172a; font-size: 11px; }
+.as-coverage-card h4 span { color: #2563eb; padding: 0 4px; }
+.as-coverage-card p { margin: 4px 0; color: #64748b; font-size: 8px; }
+.as-coverage-card small { display: block; margin-top: 5px; color: #475569; font-size: 7.5px; }
+.as-coverage-card button.danger {
+    margin-top: 9px; border: 0; border-radius: 7px; padding: 6px 8px;
+    background: #fee2e2; color: #b91c1c;
+    font-size: 7px; font-weight: 900; cursor: pointer;
+}
+.as-coverage-state {
+    display: inline-block; padding: 4px 7px; border-radius: 999px;
+    background: #e2e8f0; color: #475569;
+    font-size: 7px; font-weight: 900;
+}
+.as-coverage-state-activa { background: #dcfce7; color: #166534; }
+.as-coverage-state-programada { background: #dbeafe; color: #1d4ed8; }
+.as-coverage-state-finalizada { background: #e2e8f0; color: #475569; }
+.as-coverage-state-cancelada { background: #fee2e2; color: #b91c1c; }
+.as-empty-coverages {
+    grid-column: 1 / -1; padding: 35px; text-align: center;
+    color: #94a3b8; font-size: 10px; font-weight: 850;
+}
+@media (max-width: 900px) {
+    .as-kpis { grid-template-columns: repeat(3, 1fr); }
+    .as-coverage-list { grid-template-columns: 1fr; }
+}
+@media (max-width: 600px) {
+    .as-kpis, .as-form-grid { grid-template-columns: 1fr; }
+    .as-form-grid .as-form-wide { grid-column: auto; }
+}
