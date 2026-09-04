@@ -11,6 +11,7 @@ const asistenciaModulo = {
     proyecto: '',
     estado: '',
     borradorCobertura: null,
+    cierre: { periodId: null, preview: null, pdf: false, excel: false },
     guardando: false
 };
 
@@ -51,7 +52,7 @@ function crearModalAsistencia() {
       <div class="as-shell">
         <header class="as-header">
           <div><h2>CONTROL MENSUAL DE ASISTENCIA</h2><p id="as-periodo-subtitulo">CARGANDO PERIODO…</p></div>
-          <div class="as-header-actions"><button onclick="abrirGestorCoberturasAsistencia()">👥 COBERTURAS</button><button onclick="recargarModuloAsistencia()">↻ ACTUALIZAR</button><button onclick="cerrarModuloAsistencia()">✕ CERRAR</button></div>
+          <div class="as-header-actions"><button id="as-btn-cierre" onclick="abrirCierreMensualAsistencia()">📦 CIERRE MENSUAL</button><button onclick="abrirGestorCoberturasAsistencia()">👥 COBERTURAS</button><button onclick="recargarModuloAsistencia()">↻ ACTUALIZAR</button><button onclick="cerrarModuloAsistencia()">✕ CERRAR</button></div>
         </header>
         <div class="as-body">
           <section class="as-kpis">
@@ -119,7 +120,10 @@ async function cargarWorkspaceAsistencia(periodId) {
         const workspace = await supabaseRpc('get_attendance_workspace', { p_period_id: periodId || null });
         if (!workspace || workspace.schema_version !== 1) throw new Error('CONTRATO DE ASISTENCIA INCOMPATIBLE.');
         asistenciaModulo.workspace = workspace;
-        if (periodoAnterior !== workspace.period.id) asistenciaModulo.coberturas = null;
+        if (periodoAnterior !== workspace.period.id) {
+            asistenciaModulo.coberturas = null;
+            asistenciaModulo.cierre = { periodId: workspace.period.id, preview: null, pdf: false, excel: false };
+        }
         asistenciaModulo.pagina = 1;
         asistenciaModulo.busqueda = '';
         asistenciaModulo.proyecto = '';
@@ -145,6 +149,8 @@ function prepararControlesAsistencia() {
     const proyectos = [...new Set((w.assignments || []).map(a => a.project).filter(Boolean))].sort((a,b) => a.localeCompare(b, 'es'));
     document.getElementById('as-filtro-proyecto').innerHTML = '<option value="">TODOS</option>' + proyectos.map(p => `<option value="${asistenciaEsc(p)}">${asistenciaEsc(p)}</option>`).join('');
     document.getElementById('as-leyenda').innerHTML = (w.codes || []).map(c => `<span class="${asistenciaCodigoClase(c.code)}"><b>${asistenciaEsc(c.code)}</b> ${asistenciaEsc(c.label)}</span>`).join('');
+    const botonCierre = document.getElementById('as-btn-cierre');
+    if (botonCierre) botonCierre.style.display = w.period.status === 'OPEN' ? '' : 'none';
 }
 
 function filtrarModuloAsistencia() {
@@ -514,6 +520,224 @@ async function refrescarCoberturasAsistencia() {
     asistenciaModulo.coberturas = null;
     await cargarWorkspaceAsistencia(periodId);
     await cargarCoberturasAsistencia(true);
+}
+
+function asistenciaFechaEnPeriodo(fecha, inicioMes) {
+    return Boolean(fecha && fecha >= inicioMes && fecha < asistenciaSumarDias(inicioMes, asistenciaDiasMes(inicioMes)));
+}
+
+function asistenciaDatosReporteMensual() {
+    const w = asistenciaModulo.workspace;
+    const coberturas = asistenciaModulo.coberturas?.coverages || [];
+    const apoyos = new Set(coberturas.map(c => c.support_assignment_id).filter(Boolean));
+    const ingresos = [], salidas = [], faltas = [], vacantes = [];
+    (w.assignments || []).forEach(a => {
+        if (!apoyos.has(a.assignment_id) && asistenciaFechaEnPeriodo(a.employment_start_date, w.period.month_start)) ingresos.push(a);
+        if (!apoyos.has(a.assignment_id) && asistenciaFechaEnPeriodo(a.employment_end_date, w.period.month_start)) salidas.push(a);
+        if (a.status === 'VACANTE') vacantes.push(a);
+        const injustificadas = [], medicos = [];
+        Object.entries(a.days || {}).forEach(([dia, codigo]) => {
+            if (codigo === 'F') injustificadas.push(Number(dia));
+            if (codigo === 'PM') medicos.push(Number(dia));
+        });
+        if (injustificadas.length || medicos.length) faltas.push({ ...a, injustificadas, medicos });
+    });
+    return { ingresos, salidas, faltas, vacantes, coberturas };
+}
+
+function asistenciaNombrePeriodoArchivo() {
+    return String(asistenciaModulo.workspace?.period?.month_start || 'PERIODO').slice(0, 7);
+}
+
+function generarPDFCierreAsistencia() {
+    try {
+        if (!window.jspdf?.jsPDF) throw new Error('NO SE ENCONTRÓ EL GENERADOR PDF.');
+        const w = asistenciaModulo.workspace;
+        const datos = asistenciaDatosReporteMensual();
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+        const subtitulo = `REPORTE MENSUAL DE NOVEDADES DE ASISTENCIA · ${asistenciaMesEtiqueta(w.period.month_start)}`;
+        const fechaEmision = asistenciaFechaLocal(asistenciaHoyEcuador());
+        const dibujarPagina = () => dibujarMembretePDF(doc, subtitulo, fechaEmision, { mayusculas: true });
+        dibujarPagina();
+        let y = MARGEN_PDF + 7;
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(15); doc.setTextColor(15, 23, 42);
+        doc.text('REPORTE MENSUAL DE NOVEDADES DE ASISTENCIA', 14, y); y += 7;
+        doc.setFontSize(8); doc.setTextColor(100, 116, 139);
+        doc.text(`${asistenciaMesEtiqueta(w.period.month_start)} · ${w.assignments.length} ASIGNACIONES · ${w.summary?.personnel || 0} PERSONAS`, 14, y); y += 8;
+
+        const seccion = (titulo, encabezados, filas, color) => {
+            if (!filas.length) return;
+            if (y > 170) { doc.addPage(); dibujarPagina(); y = MARGEN_PDF + 7; }
+            doc.setFont('helvetica', 'bold'); doc.setFontSize(10); doc.setTextColor(15, 23, 42);
+            doc.text(`${titulo} (${filas.length})`, 14, y); y += 4;
+            doc.autoTable({
+                startY: y, head: [encabezados], body: filas,
+                margin: { left: 14, right: 14, top: MARGEN_PDF + 5, bottom: MARGEN_PDF + 4 },
+                headStyles: { fillColor: color, textColor: [255,255,255], fontSize: 6.5, halign: 'center' },
+                styles: { fontSize: 6.3, cellPadding: 1.8, valign: 'middle', overflow: 'linebreak' },
+                alternateRowStyles: { fillColor: [248,250,252] },
+                didDrawPage: dibujarPagina
+            });
+            y = doc.lastAutoTable.finalY + 7;
+        };
+
+        seccion('FALTAS Y PERMISOS MÉDICOS', ['PERSONAL','CÉDULA','PROYECTO','PUESTO','F','PM'], datos.faltas.map(a => [a.full_name || '—',a.national_id || '—',a.project || '—',a.post || '—',a.injustificadas.join(', ') || '—',a.medicos.join(', ') || '—']), [217,119,6]);
+        seccion('COBERTURAS TEMPORALES', ['ESTADO','MOTIVO','TITULAR / VACANTE','PERSONA QUE CUBRE','UBICACIÓN','DESDE','HASTA'], datos.coberturas.map(c => [c.status,String(c.reason || '').replaceAll('_',' '),c.target_name || 'VACANTE',c.replacement_name || '—',[c.project,c.post].filter(Boolean).join(' · '),asistenciaFechaLocal(c.start_date),asistenciaFechaLocal(c.actual_end_date || c.planned_end_date)]), [37,99,235]);
+        seccion('VACANTES', ['PROVINCIA','PROYECTO','PUESTO','HORARIO'], datos.vacantes.map(a => [a.province || '—',a.project || '—',a.post || '—',a.schedule || '—']), [220,38,38]);
+        seccion('INGRESOS', ['FECHA','PERSONAL','CÉDULA','PROVINCIA','PROYECTO','PUESTO'], datos.ingresos.map(a => [asistenciaFechaLocal(a.employment_start_date),a.full_name || '—',a.national_id || '—',a.province || '—',a.project || '—',a.post || '—']), [22,163,74]);
+        seccion('SALIDAS', ['FECHA','PERSONAL','CÉDULA','PROVINCIA','PROYECTO','PUESTO'], datos.salidas.map(a => [asistenciaFechaLocal(a.employment_end_date),a.full_name || '—',a.national_id || '—',a.province || '—',a.project || '—',a.post || '—']), [71,85,105]);
+
+        if (![datos.faltas, datos.coberturas, datos.vacantes, datos.ingresos, datos.salidas].some(lista => lista.length)) {
+            doc.setFont('helvetica', 'italic'); doc.setFontSize(10); doc.setTextColor(100,116,139);
+            doc.text('NO EXISTEN NOVEDADES REGISTRADAS EN ESTE PERIODO.', 14, y);
+        }
+        const total = doc.getNumberOfPages();
+        const anchoPagina = doc.internal.pageSize.getWidth();
+        const altoPagina = doc.internal.pageSize.getHeight();
+        for (let pagina = 1; pagina <= total; pagina++) {
+            doc.setPage(pagina); doc.setFontSize(6.5); doc.setTextColor(100,116,139);
+            doc.text(`PÁGINA ${pagina} DE ${total}`, anchoPagina - 14, altoPagina - 5, { align: 'right' });
+        }
+        doc.save(`NOVEDADES_ASISTENCIA_${asistenciaNombrePeriodoArchivo()}_DEFEN.pdf`);
+        asistenciaModulo.cierre.pdf = true;
+        renderAsistenteCierreAsistencia();
+    } catch (error) {
+        alert(`NO SE PUDO GENERAR EL PDF: ${error.message || error}`);
+    }
+}
+
+function generarExcelCierreAsistencia() {
+    try {
+        if (!window.XLSX) throw new Error('NO SE ENCONTRÓ EL GENERADOR EXCEL.');
+        const w = asistenciaModulo.workspace;
+        const datos = asistenciaDatosReporteMensual();
+        const dias = asistenciaDiasMes(w.period.month_start);
+        const libro = XLSX.utils.book_new();
+        const matriz = (w.assignments || []).map((a, indice) => {
+            const fila = {
+                'N°': indice + 1, 'ESTADO': a.status, 'CÉDULA': a.national_id || '',
+                'PERSONAL': a.full_name || 'VACANTE', 'PROVINCIA': a.province || '',
+                'PROYECTO': a.project || '', 'PUESTO': a.post || '', 'HORARIO': a.schedule || '',
+                'INICIO': a.employment_start_date || '', 'FIN': a.employment_end_date || ''
+            };
+            for (let dia = 1; dia <= dias; dia++) fila[`DÍA ${dia}`] = a.days?.[dia] || '';
+            return fila;
+        });
+        const resumen = [{
+            'PERIODO': w.period.month_start, 'ESTADO': w.period.status,
+            'ASIGNACIONES': w.summary?.assignments || 0, 'PERSONAS': w.summary?.personnel || 0,
+            'VACANTES': w.summary?.vacancies || 0, 'SACAFRANCOS': w.summary?.mobile_coverage || 0,
+            'FALTAS INJUSTIFICADAS': w.summary?.unjustified_absences || 0,
+            'PERMISOS MÉDICOS': w.summary?.justified_absences || 0,
+            'COBERTURAS': datos.coberturas.length
+        }];
+        const coberturas = datos.coberturas.map(c => ({
+            'ESTADO': c.status, 'MOTIVO': String(c.reason || '').replaceAll('_',' '),
+            'TITULAR O VACANTE': c.target_name || 'VACANTE', 'PERSONA QUE CUBRE': c.replacement_name || '',
+            'CÉDULA APOYO': c.replacement_national_id || '', 'PROVINCIA': c.province || '',
+            'PROYECTO': c.project || '', 'PUESTO': c.post || '', 'DESDE': c.start_date || '',
+            'HASTA PREVISTO': c.planned_end_date || '', 'HASTA EFECTIVO': c.actual_end_date || '',
+            'OBSERVACIÓN': c.note || '', 'CANCELACIÓN': c.cancellation_reason || ''
+        }));
+        const novedades = [];
+        datos.faltas.forEach(a => {
+            a.injustificadas.forEach(dia => novedades.push({'TIPO':'FALTA INJUSTIFICADA','DÍA':dia,'PERSONAL':a.full_name || '','CÉDULA':a.national_id || '','PROYECTO':a.project || '','PUESTO':a.post || ''}));
+            a.medicos.forEach(dia => novedades.push({'TIPO':'PERMISO MÉDICO','DÍA':dia,'PERSONAL':a.full_name || '','CÉDULA':a.national_id || '','PROYECTO':a.project || '','PUESTO':a.post || ''}));
+        });
+        datos.ingresos.forEach(a => novedades.push({'TIPO':'INGRESO','FECHA':a.employment_start_date,'PERSONAL':a.full_name || '','CÉDULA':a.national_id || '','PROYECTO':a.project || '','PUESTO':a.post || ''}));
+        datos.salidas.forEach(a => novedades.push({'TIPO':'SALIDA','FECHA':a.employment_end_date,'PERSONAL':a.full_name || '','CÉDULA':a.national_id || '','PROYECTO':a.project || '','PUESTO':a.post || ''}));
+        const agregarHoja = (nombre, filas) => {
+            const hoja = XLSX.utils.json_to_sheet(filas.length ? filas : [{ 'INFORMACIÓN': 'SIN REGISTROS' }]);
+            hoja['!cols'] = Object.keys(filas[0] || { 'INFORMACIÓN': '' }).map(campo => ({ wch: Math.min(45, Math.max(12, campo.length + 3)) }));
+            XLSX.utils.book_append_sheet(libro, hoja, nombre);
+        };
+        agregarHoja('RESUMEN', resumen);
+        agregarHoja('MATRIZ MENSUAL', matriz);
+        agregarHoja('NOVEDADES', novedades);
+        agregarHoja('COBERTURAS', coberturas);
+        XLSX.writeFile(libro, `RESPALDO_ASISTENCIA_${asistenciaNombrePeriodoArchivo()}_DEFEN.xlsx`);
+        asistenciaModulo.cierre.excel = true;
+        renderAsistenteCierreAsistencia();
+    } catch (error) {
+        alert(`NO SE PUDO GENERAR EL EXCEL: ${error.message || error}`);
+    }
+}
+
+async function abrirCierreMensualAsistencia() {
+    if (asistenciaModulo.guardando) return;
+    const periodId = asistenciaModulo.workspace?.period?.id;
+    if (!periodId) return;
+    try {
+        const preview = await supabaseRpc('preview_attendance_month_closure', { p_period_id: periodId });
+        if (!preview || preview.schema_version !== 1) throw new Error('CONTRATO DE CIERRE INCOMPATIBLE.');
+        if (asistenciaModulo.cierre.periodId !== periodId) {
+            asistenciaModulo.cierre = { periodId, preview, pdf: false, excel: false };
+        } else {
+            asistenciaModulo.cierre.preview = preview;
+        }
+        renderAsistenteCierreAsistencia();
+    } catch (error) {
+        alert(`NO SE PUDO PREPARAR EL CIERRE: ${error.message || error}`);
+    }
+}
+
+function renderAsistenteCierreAsistencia() {
+    const estado = asistenciaModulo.cierre;
+    const p = estado.preview;
+    if (!p) return;
+    const c = p.counts || {};
+    const puedeGestionar = Boolean(p.permissions?.close);
+    const problemas = (p.issues || []).map(i => `<li>${asistenciaEsc(i)}</li>`).join('');
+    const cierreHtml = p.can_close && puedeGestionar ? `
+      <div class="as-close-confirm">
+        <p>ESCRIBE <b>${asistenciaEsc(p.required_confirmation)}</b> PARA CONFIRMAR:</p>
+        <input id="as-cierre-confirmacion" autocomplete="off" placeholder="${asistenciaEsc(p.required_confirmation)}">
+        <button onclick="ejecutarCierreMensualAsistencia()" ${estado.pdf && estado.excel ? '' : 'disabled'}>CERRAR MES Y ABRIR ${asistenciaEsc(asistenciaMesEtiqueta(p.next_month))}</button>
+      </div>` : `
+      <div class="as-close-blocked"><b>CIERRE TODAVÍA BLOQUEADO</b><ul>${problemas || '<li>NO TIENES PERMISO PARA EJECUTAR EL CIERRE.</li>'}</ul></div>`;
+    const editor = asistenciaEditorElemento();
+    editor.innerHTML = `<div class="as-editor-card as-close-manager">
+      <div class="as-manager-head"><div><h3>CIERRE MENSUAL DE ASISTENCIA</h3><p>${asistenciaMesEtiqueta(p.month_start)} · ÚLTIMO DÍA ${asistenciaFechaLocal(p.last_day)}</p></div><button onclick="cerrarEditorAsistencia()">✕ CERRAR</button></div>
+      <div class="as-close-kpis"><div><span>ASIGNACIONES</span><b>${c.assignments || 0}</b></div><div><span>PERSONAS</span><b>${c.personnel || 0}</b></div><div><span>VACANTES</span><b>${c.vacancies || 0}</b></div><div><span>MARCACIONES</span><b>${c.entries || 0}</b></div><div><span>CONTINUARÁN</span><b>${c.continuing_assignments || 0}</b></div><div><span>COBERTURAS</span><b>${c.continuing_coverages || 0}</b></div></div>
+      <div class="as-close-reports"><button onclick="generarPDFCierreAsistencia()"><b>${estado.pdf ? '✓' : '1'}</b><span>REPORTE PDF</span><small>NOVEDADES, VACANTES Y COBERTURAS</small></button><button onclick="generarExcelCierreAsistencia()"><b>${estado.excel ? '✓' : '2'}</b><span>RESPALDO EXCEL</span><small>MATRIZ COMPLETA DEL PERIODO</small></button></div>
+      ${cierreHtml}
+      <p class="as-close-note">EL SIGUIENTE MES CONSERVARÁ LAS ASIGNACIONES Y COBERTURAS VIGENTES, PERO COMENZARÁ SIN MARCACIONES.</p>
+    </div>`;
+    editor.style.display = 'flex';
+}
+
+async function ejecutarCierreMensualAsistencia() {
+    if (asistenciaModulo.guardando) return;
+    const estado = asistenciaModulo.cierre, p = estado.preview;
+    const confirmacion = document.getElementById('as-cierre-confirmacion')?.value.trim().toUpperCase();
+    if (!estado.pdf || !estado.excel) {
+        alert('GENERA Y CONSERVA EL PDF Y EL EXCEL ANTES DE CERRAR.'); return;
+    }
+    if (!p?.can_close) { alert('EL CIERRE TODAVÍA NO ESTÁ HABILITADO.'); return; }
+    if (confirmacion !== p.required_confirmation) {
+        alert(`ESCRIBE EXACTAMENTE: ${p.required_confirmation}`); return;
+    }
+    if (!confirm(`ESTA ACCIÓN CERRARÁ DEFINITIVAMENTE ${asistenciaMesEtiqueta(p.month_start)} Y ABRIRÁ ${asistenciaMesEtiqueta(p.next_month)}.\n\n¿CONFIRMAS EL CIERRE?`)) return;
+    asistenciaModulo.guardando = true;
+    try {
+        const respuesta = await supabaseRpc('close_attendance_month', {
+            p_period_id: p.period_id,
+            p_confirmation: confirmacion,
+            p_reports_generated: true
+        });
+        if (!respuesta?.ok) throw new Error('SUPABASE NO CONFIRMÓ EL CIERRE.');
+        cerrarEditorAsistencia();
+        asistenciaModulo.cierre = { periodId: null, preview: null, pdf: false, excel: false };
+        await cargarWorkspaceAsistencia(null);
+        await cargarCoberturasAsistencia(true);
+        if (typeof cargarDatos === 'function') cargarDatos().catch(() => {});
+        alert(`CIERRE COMPLETADO. NUEVO PERIODO: ${asistenciaMesEtiqueta(respuesta.new_month)}.`);
+    } catch (error) {
+        alert(`NO SE PUDO CERRAR EL MES: ${error.message || error}`);
+    } finally {
+        asistenciaModulo.guardando = false;
+    }
 }
 
 function editarMarcacionAsistencia(assignmentId, dia, codigoActual) {
