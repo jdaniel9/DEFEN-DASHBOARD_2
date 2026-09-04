@@ -10,6 +10,7 @@ const asistenciaModulo = {
     busqueda: '',
     proyecto: '',
     estado: '',
+    borradorCobertura: null,
     guardando: false
 };
 
@@ -92,6 +93,7 @@ async function abrirModuloAsistencia() {
 function cerrarModuloAsistencia() {
     const modal = document.getElementById('asistencia-modal');
     if (modal) modal.style.display = 'none';
+    asistenciaModulo.borradorCobertura = null;
 }
 
 async function recargarModuloAsistencia() {
@@ -277,7 +279,7 @@ function asistenciaEditorElemento() {
     return editor;
 }
 
-async function abrirNuevaCoberturaAsistencia(assignmentId) {
+async function abrirNuevaCoberturaAsistencia(assignmentId, personaSeleccionada = '') {
     if (asistenciaModulo.guardando) return;
     try {
         const datos = await cargarCoberturasAsistencia(false);
@@ -299,14 +301,18 @@ async function abrirNuevaCoberturaAsistencia(assignmentId) {
         const inicioMes = asistenciaModulo.workspace.period.month_start;
         const finMes = asistenciaSumarDias(asistenciaSumarDias(inicioMes, asistenciaDiasMes(inicioMes)), -1);
         const hoy = asistenciaHoyEcuador();
-        const inicio = hoy >= inicioMes && hoy <= finMes ? hoy : inicioMes;
-        const fin = asistenciaSumarDias(inicio, 6);
+        const inicioPredeterminado = hoy >= inicioMes && hoy <= finMes ? hoy : inicioMes;
+        const borrador = asistenciaModulo.borradorCobertura?.assignmentId === assignmentId
+            ? asistenciaModulo.borradorCobertura : null;
+        const inicio = borrador?.inicio || inicioPredeterminado;
+        const fin = borrador?.fin || asistenciaSumarDias(inicio, 6);
         const esVacante = asignacion.status === 'VACANTE';
         const motivos = esVacante
             ? '<option value="VACANTE">VACANTE</option>'
             : '<option value="PERMISO_MEDICO">PERMISO MÉDICO</option><option value="FALTA_INJUSTIFICADA">FALTA INJUSTIFICADA</option><option value="OTRO">OTRO</option>';
+        const personaActual = personaSeleccionada || borrador?.persona || '';
         const opciones = personal.map(p =>
-            `<option value="${asistenciaEsc(p.id)}">${asistenciaEsc(p.full_name)}${p.national_id ? ` · ${asistenciaEsc(p.national_id)}` : ''}</option>`
+            `<option value="${asistenciaEsc(p.id)}" ${p.id === personaActual ? 'selected' : ''}>${p.personnel_type ? `[${asistenciaEsc(p.personnel_type)}] ` : ''}${asistenciaEsc(p.full_name)}${p.national_id ? ` · ${asistenciaEsc(p.national_id)}` : ''}</option>`
         ).join('');
         const editor = asistenciaEditorElemento();
         editor.innerHTML = `
@@ -314,15 +320,18 @@ async function abrirNuevaCoberturaAsistencia(assignmentId) {
             <h3>${esVacante ? 'CUBRIR VACANTE' : 'CREAR COBERTURA TEMPORAL'}</h3>
             <p><b>${asistenciaEsc(asignacion.full_name || 'VACANTE')}</b><br>${asistenciaEsc([asignacion.province, asignacion.project, asignacion.post].filter(Boolean).join(' · '))}</p>
             <div class="as-form-grid">
-              <label class="as-form-wide">PERSONA QUE CUBRE<select id="as-cobertura-persona"><option value="">SELECCIONA PERSONAL…</option>${opciones}</select></label>
+              <label class="as-form-wide">PERSONA QUE CUBRE<div class="as-personnel-picker"><select id="as-cobertura-persona"><option value="">SELECCIONA PERSONAL…</option>${opciones}</select><button type="button" onclick="abrirAgregarPersonaCoberturaAsistencia('${asistenciaEsc(assignmentId)}')">＋ AGREGAR PERSONA</button></div></label>
               <label>MOTIVO<select id="as-cobertura-motivo">${motivos}</select></label>
               <label>FECHA INICIAL<input id="as-cobertura-inicio" type="date" min="${inicioMes}" max="${finMes}" value="${inicio}"></label>
               <label>FECHA FINAL PREVISTA<input id="as-cobertura-fin" type="date" min="${inicio}" value="${fin}"></label>
-              <label class="as-form-wide">OBSERVACIÓN<textarea id="as-cobertura-nota" rows="3" placeholder="DETALLE DEL PERMISO, FALTA O COBERTURA"></textarea></label>
+              <label class="as-form-wide">OBSERVACIÓN<textarea id="as-cobertura-nota" rows="3" placeholder="DETALLE DEL PERMISO, FALTA O COBERTURA">${asistenciaEsc(borrador?.nota || '')}</textarea></label>
             </div>
             <div class="as-editor-actions"><button class="primary" onclick="guardarCoberturaAsistencia('${asistenciaEsc(assignmentId)}')">GUARDAR COBERTURA</button><button onclick="cerrarEditorAsistencia()">CANCELAR</button></div>
           </div>`;
         editor.style.display = 'flex';
+        if (borrador?.motivo && document.querySelector(`#as-cobertura-motivo option[value="${borrador.motivo}"]`)) {
+            document.getElementById('as-cobertura-motivo').value = borrador.motivo;
+        }
         document.getElementById('as-cobertura-inicio').addEventListener('change', event => {
             const finInput = document.getElementById('as-cobertura-fin');
             finInput.min = event.target.value;
@@ -330,6 +339,74 @@ async function abrirNuevaCoberturaAsistencia(assignmentId) {
         });
     } catch (error) {
         alert(`NO SE PUDO PREPARAR LA COBERTURA: ${error.message || error}`);
+    }
+}
+
+function guardarBorradorCoberturaAsistencia(assignmentId) {
+    asistenciaModulo.borradorCobertura = {
+        assignmentId,
+        persona: document.getElementById('as-cobertura-persona')?.value || '',
+        motivo: document.getElementById('as-cobertura-motivo')?.value || '',
+        inicio: document.getElementById('as-cobertura-inicio')?.value || '',
+        fin: document.getElementById('as-cobertura-fin')?.value || '',
+        nota: document.getElementById('as-cobertura-nota')?.value.trim() || ''
+    };
+}
+
+function abrirAgregarPersonaCoberturaAsistencia(assignmentId) {
+    guardarBorradorCoberturaAsistencia(assignmentId);
+    const editor = asistenciaEditorElemento();
+    editor.innerHTML = `
+      <div class="as-editor-card as-coverage-form">
+        <h3>AGREGAR PERSONA PARA COBERTURA</h3>
+        <p>REGISTRA PERSONAL INTERNO DE APOYO O UNA PERSONA EXTERNA QUE NO ESTÉ EN EL LISTADO.</p>
+        <div class="as-form-grid">
+          <label class="as-form-wide">NOMBRES Y APELLIDOS<input id="as-nueva-persona-nombre" type="text" maxlength="150" placeholder="NOMBRE COMPLETO"></label>
+          <label>CÉDULA<input id="as-nueva-persona-cedula" type="text" inputmode="numeric" maxlength="10" placeholder="10 DÍGITOS"></label>
+          <label>TIPO DE PERSONAL<select id="as-nueva-persona-tipo"><option value="INTERNO">INTERNO DE APOYO</option><option value="EXTERNO">EXTERNO</option></select></label>
+        </div>
+        <div class="as-editor-actions"><button class="primary" onclick="guardarNuevaPersonaCoberturaAsistencia('${asistenciaEsc(assignmentId)}')">AGREGAR Y SELECCIONAR</button><button onclick="abrirNuevaCoberturaAsistencia('${asistenciaEsc(assignmentId)}')">VOLVER</button></div>
+      </div>`;
+    editor.style.display = 'flex';
+    const cedula = document.getElementById('as-nueva-persona-cedula');
+    cedula.addEventListener('input', () => { cedula.value = cedula.value.replace(/\D/g, '').slice(0, 10); });
+}
+
+async function guardarNuevaPersonaCoberturaAsistencia(assignmentId) {
+    if (asistenciaModulo.guardando) return;
+    const nombre = document.getElementById('as-nueva-persona-nombre')?.value.trim().toUpperCase();
+    const cedula = document.getElementById('as-nueva-persona-cedula')?.value.trim();
+    const tipo = document.getElementById('as-nueva-persona-tipo')?.value;
+    if (!nombre || nombre.length < 5) {
+        alert('INGRESA LOS NOMBRES Y APELLIDOS COMPLETOS.');
+        return;
+    }
+    if (!/^\d{10}$/.test(cedula || '')) {
+        alert('LA CÉDULA DEBE CONTENER EXACTAMENTE 10 DÍGITOS.');
+        return;
+    }
+    asistenciaModulo.guardando = true;
+    try {
+        const respuesta = await supabaseRpc('create_attendance_support_personnel', {
+            p_national_id: cedula,
+            p_full_name: nombre,
+            p_personnel_type: tipo
+        });
+        const persona = respuesta?.personnel;
+        if (!respuesta?.ok || !persona?.id) throw new Error('SUPABASE NO DEVOLVIÓ LA PERSONA REGISTRADA.');
+        const catalogo = asistenciaModulo.coberturas?.personnel || [];
+        if (!catalogo.some(p => p.id === persona.id)) catalogo.push(persona);
+        catalogo.sort((a, b) => String(a.full_name).localeCompare(String(b.full_name), 'es'));
+        if (asistenciaModulo.borradorCobertura) asistenciaModulo.borradorCobertura.persona = persona.id;
+        asistenciaModulo.guardando = false;
+        await abrirNuevaCoberturaAsistencia(assignmentId, persona.id);
+        alert(respuesta.already_existed
+            ? 'LA PERSONA YA ESTABA REGISTRADA Y FUE SELECCIONADA.'
+            : 'PERSONA AGREGADA Y SELECCIONADA CORRECTAMENTE.');
+    } catch (error) {
+        alert(`NO SE PUDO AGREGAR LA PERSONA: ${error.message || error}`);
+    } finally {
+        asistenciaModulo.guardando = false;
     }
 }
 
@@ -358,6 +435,7 @@ async function guardarCoberturaAsistencia(assignmentId) {
             p_end_date: fin,
             p_note: nota || null
         });
+        asistenciaModulo.borradorCobertura = null;
         cerrarEditorAsistencia();
         await refrescarCoberturasAsistencia();
         alert('COBERTURA REGISTRADA CORRECTAMENTE.');
