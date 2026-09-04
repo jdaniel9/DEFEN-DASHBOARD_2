@@ -4,6 +4,7 @@
 
 const asistenciaModulo = {
     workspace: null,
+    coberturas: null,
     pagina: 1,
     porPagina: 35,
     busqueda: '',
@@ -49,7 +50,7 @@ function crearModalAsistencia() {
       <div class="as-shell">
         <header class="as-header">
           <div><h2>CONTROL MENSUAL DE ASISTENCIA</h2><p id="as-periodo-subtitulo">CARGANDO PERIODO…</p></div>
-          <div class="as-header-actions"><button onclick="recargarModuloAsistencia()">↻ ACTUALIZAR</button><button onclick="cerrarModuloAsistencia()">✕ CERRAR</button></div>
+          <div class="as-header-actions"><button onclick="abrirGestorCoberturasAsistencia()">👥 COBERTURAS</button><button onclick="recargarModuloAsistencia()">↻ ACTUALIZAR</button><button onclick="cerrarModuloAsistencia()">✕ CERRAR</button></div>
         </header>
         <div class="as-body">
           <section class="as-kpis">
@@ -57,6 +58,7 @@ function crearModalAsistencia() {
             <div><span>VACANTES</span><strong id="as-kpi-vacantes">—</strong></div>
             <div><span>SACAFRANCOS</span><strong id="as-kpi-moviles">—</strong></div>
             <div><span>FALTAS</span><strong id="as-kpi-faltas">—</strong></div>
+            <div><span>COBERTURAS</span><strong id="as-kpi-coberturas">—</strong></div>
             <div><span>PERIODO</span><strong id="as-kpi-estado">—</strong></div>
           </section>
           <section class="as-toolbar">
@@ -84,6 +86,7 @@ async function abrirModuloAsistencia() {
     crearModalAsistencia();
     document.getElementById('asistencia-modal').style.display = 'flex';
     await cargarWorkspaceAsistencia(null);
+    await cargarCoberturasAsistencia(true);
 }
 
 function cerrarModuloAsistencia() {
@@ -94,10 +97,12 @@ function cerrarModuloAsistencia() {
 async function recargarModuloAsistencia() {
     const id = asistenciaModulo.workspace?.period?.id || null;
     await cargarWorkspaceAsistencia(id);
+    if (asistenciaModulo.coberturas) await cargarCoberturasAsistencia(true);
 }
 
 async function cambiarPeriodoAsistencia(periodId) {
     await cargarWorkspaceAsistencia(periodId || null);
+    await cargarCoberturasAsistencia(true);
 }
 
 async function cargarWorkspaceAsistencia(periodId) {
@@ -108,9 +113,11 @@ async function cargarWorkspaceAsistencia(periodId) {
     mensaje.textContent = 'CARGANDO MATRIZ MENSUAL…';
     tabla.style.display = 'none';
     try {
+        const periodoAnterior = asistenciaModulo.workspace?.period?.id || null;
         const workspace = await supabaseRpc('get_attendance_workspace', { p_period_id: periodId || null });
         if (!workspace || workspace.schema_version !== 1) throw new Error('CONTRATO DE ASISTENCIA INCOMPATIBLE.');
         asistenciaModulo.workspace = workspace;
+        if (periodoAnterior !== workspace.period.id) asistenciaModulo.coberturas = null;
         asistenciaModulo.pagina = 1;
         asistenciaModulo.busqueda = '';
         asistenciaModulo.proyecto = '';
@@ -174,6 +181,8 @@ function renderModuloAsistencia() {
     document.getElementById('as-kpi-vacantes').textContent = Number(w.summary?.vacancies || 0).toLocaleString('es-EC');
     document.getElementById('as-kpi-moviles').textContent = Number(w.summary?.mobile_coverage || 0).toLocaleString('es-EC');
     document.getElementById('as-kpi-faltas').textContent = Number(w.summary?.unjustified_absences || 0) + Number(w.summary?.justified_absences || 0);
+    const coberturasPeriodo = (asistenciaModulo.coberturas?.coverages || []).length;
+    document.getElementById('as-kpi-coberturas').textContent = asistenciaModulo.coberturas ? coberturasPeriodo : '—';
     document.getElementById('as-kpi-estado').textContent = w.period.status;
 
     const dayHeaders = Array.from({length:dias}, (_,i) => `<th class="as-day-head ${esMesActual && i+1===hoy.getDate()?'as-today':''}">${i+1}</th>`).join('');
@@ -181,13 +190,25 @@ function renderModuloAsistencia() {
     document.getElementById('as-tbody').innerHTML = filas.map(a => {
         const nombre = a.status === 'VACANTE' ? 'VACANTE' : (a.full_name || 'SIN NOMBRE');
         const ubicacion = [a.province, a.project, a.post].filter(Boolean).join(' · ');
+        const cobertura = coberturaActivaParaAsignacion(a.assignment_id);
+        const esApoyoCobertura = asignacionEsApoyoCobertura(a.assignment_id);
+        const puedeCrearCobertura = puedeEditar && a.status !== 'INACTIVO' && !esApoyoCobertura && !cobertura;
+        const coberturaHtml = cobertura
+            ? `<small class="as-coverage-badge">CUBIERTO POR ${asistenciaEsc(cobertura.replacement_name)} · ${asistenciaEsc(cobertura.status)}</small>`
+            : '';
+        const accionHtml = puedeCrearCobertura
+            ? `<button class="as-cover-row" onclick="abrirNuevaCoberturaAsistencia('${asistenciaEsc(a.assignment_id)}')">${a.status === 'VACANTE' ? 'CUBRIR VACANTE' : 'CREAR COBERTURA'}</button>`
+            : '';
         const dayCells = Array.from({length:dias}, (_,i) => {
             const dia = i + 1;
             const codigo = String(a.days?.[dia] || '');
-            const editable = puedeEditar && a.status !== 'INACTIVO' && a.status !== 'VACANTE';
+            const fechaCelda = asistenciaFechaDesdeDia(w.period.month_start, dia);
+            const dentroVigencia = (!a.employment_start_date || fechaCelda >= a.employment_start_date)
+                && (!a.employment_end_date || fechaCelda <= a.employment_end_date);
+            const editable = puedeEditar && a.status !== 'INACTIVO' && a.status !== 'VACANTE' && dentroVigencia;
             return `<td class="as-day ${asistenciaCodigoClase(codigo)} ${esMesActual&&dia===hoy.getDate()?'as-today':''} ${editable?'as-editable':''}" ${editable?`onclick="editarMarcacionAsistencia('${asistenciaEsc(a.assignment_id)}',${dia},'${asistenciaEsc(codigo)}')"`:''}>${codigo ? asistenciaEsc(codigo) : '·'}</td>`;
         }).join('');
-        return `<tr><td class="as-sticky as-col-person"><b>${asistenciaEsc(nombre)}</b><small>${asistenciaEsc(a.national_id || 'SIN CÉDULA')}</small><small>${asistenciaEsc(ubicacion)}</small><small>${asistenciaEsc(a.schedule || 'SIN HORARIO')}${a.mobile_coverage?' · COBERTURA MÓVIL':''}</small></td><td class="as-sticky as-col-status"><span class="as-status as-status-${String(a.status||'').toLowerCase()}">${asistenciaEsc(a.status)}</span></td>${dayCells}</tr>`;
+        return `<tr><td class="as-sticky as-col-person"><b>${asistenciaEsc(nombre)}</b><small>${asistenciaEsc(a.national_id || 'SIN CÉDULA')}</small><small>${asistenciaEsc(ubicacion)}</small><small>${asistenciaEsc(a.schedule || 'SIN HORARIO')}${a.mobile_coverage?' · COBERTURA MÓVIL':''}</small>${coberturaHtml}${accionHtml}</td><td class="as-sticky as-col-status"><span class="as-status as-status-${String(a.status||'').toLowerCase()}">${asistenciaEsc(a.status)}</span></td>${dayCells}</tr>`;
     }).join('') || `<tr><td colspan="${dias+2}" class="as-empty">NO HAY ASIGNACIONES PARA LOS FILTROS SELECCIONADOS.</td></tr>`;
     document.getElementById('as-contador').textContent = `${todas.length} ASIGNACIÓN(ES) · MOSTRANDO ${filas.length}`;
     document.getElementById('as-pagina').textContent = `PÁGINA ${asistenciaModulo.pagina} DE ${paginas}`;
@@ -201,10 +222,51 @@ function paginaAsistencia(delta) {
     document.getElementById('as-tabla-wrap').scrollTop = 0;
 }
 
-function editarMarcacionAsistencia(assignmentId, dia, codigoActual) {
-    if (asistenciaModulo.guardando) return;
-    const w = asistenciaModulo.workspace;
-    if (!w?.permissions?.manage || w.period.status !== 'OPEN') return;
+async function cargarCoberturasAsistencia(forzar = false) {
+    const periodId = asistenciaModulo.workspace?.period?.id;
+    if (!periodId) return null;
+    if (!forzar && asistenciaModulo.coberturas?.period_id === periodId) return asistenciaModulo.coberturas;
+    try {
+        const respuesta = await supabaseRpc('get_attendance_coverages', { p_period_id: periodId });
+        if (!respuesta || respuesta.schema_version !== 1) throw new Error('CONTRATO DE COBERTURAS INCOMPATIBLE.');
+        asistenciaModulo.coberturas = respuesta;
+        renderModuloAsistencia();
+        return respuesta;
+    } catch (error) {
+        asistenciaModulo.coberturas = null;
+        throw error;
+    }
+}
+
+function coberturaActivaParaAsignacion(assignmentId) {
+    return (asistenciaModulo.coberturas?.coverages || []).find(c =>
+        c.target_assignment_id === assignmentId && ['ACTIVA', 'PROGRAMADA'].includes(c.status)
+    ) || null;
+}
+
+function asignacionEsApoyoCobertura(assignmentId) {
+    return (asistenciaModulo.coberturas?.coverages || []).some(c => c.support_assignment_id === assignmentId);
+}
+
+function asistenciaHoyEcuador() {
+    try {
+        const partes = new Intl.DateTimeFormat('en-CA', {
+            timeZone: 'America/Guayaquil', year: 'numeric', month: '2-digit', day: '2-digit'
+        }).formatToParts(new Date());
+        const valor = Object.fromEntries(partes.map(p => [p.type, p.value]));
+        return `${valor.year}-${valor.month}-${valor.day}`;
+    } catch (_) {
+        return new Date().toISOString().slice(0, 10);
+    }
+}
+
+function asistenciaSumarDias(fechaIso, dias) {
+    const fecha = new Date(`${fechaIso}T12:00:00Z`);
+    fecha.setUTCDate(fecha.getUTCDate() + dias);
+    return fecha.toISOString().slice(0, 10);
+}
+
+function asistenciaEditorElemento() {
     let editor = document.getElementById('as-editor');
     if (!editor) {
         editor = document.createElement('div');
@@ -212,6 +274,175 @@ function editarMarcacionAsistencia(assignmentId, dia, codigoActual) {
         editor.className = 'as-editor-overlay';
         document.body.appendChild(editor);
     }
+    return editor;
+}
+
+async function abrirNuevaCoberturaAsistencia(assignmentId) {
+    if (asistenciaModulo.guardando) return;
+    try {
+        const datos = await cargarCoberturasAsistencia(false);
+        if (!datos?.permissions?.manage || datos.period_status !== 'OPEN') {
+            alert('NO TIENES PERMISO PARA CREAR COBERTURAS EN ESTE PERIODO.');
+            return;
+        }
+        if (asignacionEsApoyoCobertura(assignmentId)) {
+            alert('UNA ASIGNACIÓN DE APOYO NO PUEDE SER CUBIERTA POR OTRA COBERTURA.');
+            return;
+        }
+        if (coberturaActivaParaAsignacion(assignmentId)) {
+            alert('ESTA ASIGNACIÓN YA TIENE UNA COBERTURA ACTIVA O PROGRAMADA.');
+            return;
+        }
+        const asignacion = asistenciaModulo.workspace.assignments.find(a => a.assignment_id === assignmentId);
+        if (!asignacion) throw new Error('NO SE ENCONTRÓ LA ASIGNACIÓN SELECCIONADA.');
+        const personal = (datos.personnel || []).filter(p => p.id !== asignacion.personnel_id);
+        const inicioMes = asistenciaModulo.workspace.period.month_start;
+        const finMes = asistenciaSumarDias(asistenciaSumarDias(inicioMes, asistenciaDiasMes(inicioMes)), -1);
+        const hoy = asistenciaHoyEcuador();
+        const inicio = hoy >= inicioMes && hoy <= finMes ? hoy : inicioMes;
+        const fin = asistenciaSumarDias(inicio, 6);
+        const esVacante = asignacion.status === 'VACANTE';
+        const motivos = esVacante
+            ? '<option value="VACANTE">VACANTE</option>'
+            : '<option value="PERMISO_MEDICO">PERMISO MÉDICO</option><option value="FALTA_INJUSTIFICADA">FALTA INJUSTIFICADA</option><option value="OTRO">OTRO</option>';
+        const opciones = personal.map(p =>
+            `<option value="${asistenciaEsc(p.id)}">${asistenciaEsc(p.full_name)}${p.national_id ? ` · ${asistenciaEsc(p.national_id)}` : ''}</option>`
+        ).join('');
+        const editor = asistenciaEditorElemento();
+        editor.innerHTML = `
+          <div class="as-editor-card as-coverage-form">
+            <h3>${esVacante ? 'CUBRIR VACANTE' : 'CREAR COBERTURA TEMPORAL'}</h3>
+            <p><b>${asistenciaEsc(asignacion.full_name || 'VACANTE')}</b><br>${asistenciaEsc([asignacion.province, asignacion.project, asignacion.post].filter(Boolean).join(' · '))}</p>
+            <div class="as-form-grid">
+              <label class="as-form-wide">PERSONA QUE CUBRE<select id="as-cobertura-persona"><option value="">SELECCIONA PERSONAL…</option>${opciones}</select></label>
+              <label>MOTIVO<select id="as-cobertura-motivo">${motivos}</select></label>
+              <label>FECHA INICIAL<input id="as-cobertura-inicio" type="date" min="${inicioMes}" max="${finMes}" value="${inicio}"></label>
+              <label>FECHA FINAL PREVISTA<input id="as-cobertura-fin" type="date" min="${inicio}" value="${fin}"></label>
+              <label class="as-form-wide">OBSERVACIÓN<textarea id="as-cobertura-nota" rows="3" placeholder="DETALLE DEL PERMISO, FALTA O COBERTURA"></textarea></label>
+            </div>
+            <div class="as-editor-actions"><button class="primary" onclick="guardarCoberturaAsistencia('${asistenciaEsc(assignmentId)}')">GUARDAR COBERTURA</button><button onclick="cerrarEditorAsistencia()">CANCELAR</button></div>
+          </div>`;
+        editor.style.display = 'flex';
+        document.getElementById('as-cobertura-inicio').addEventListener('change', event => {
+            const finInput = document.getElementById('as-cobertura-fin');
+            finInput.min = event.target.value;
+            if (finInput.value < event.target.value) finInput.value = event.target.value;
+        });
+    } catch (error) {
+        alert(`NO SE PUDO PREPARAR LA COBERTURA: ${error.message || error}`);
+    }
+}
+
+async function guardarCoberturaAsistencia(assignmentId) {
+    if (asistenciaModulo.guardando) return;
+    const persona = document.getElementById('as-cobertura-persona')?.value;
+    const motivo = document.getElementById('as-cobertura-motivo')?.value;
+    const inicio = document.getElementById('as-cobertura-inicio')?.value;
+    const fin = document.getElementById('as-cobertura-fin')?.value;
+    const nota = document.getElementById('as-cobertura-nota')?.value.trim();
+    if (!persona || !motivo || !inicio || !fin) {
+        alert('SELECCIONA LA PERSONA, EL MOTIVO Y EL RANGO DE FECHAS.');
+        return;
+    }
+    if (fin < inicio) {
+        alert('LA FECHA FINAL NO PUEDE SER ANTERIOR A LA FECHA INICIAL.');
+        return;
+    }
+    asistenciaModulo.guardando = true;
+    try {
+        await supabaseRpc('create_attendance_coverage', {
+            p_target_assignment_id: assignmentId,
+            p_replacement_personnel_id: persona,
+            p_reason: motivo,
+            p_start_date: inicio,
+            p_end_date: fin,
+            p_note: nota || null
+        });
+        cerrarEditorAsistencia();
+        await refrescarCoberturasAsistencia();
+        alert('COBERTURA REGISTRADA CORRECTAMENTE.');
+    } catch (error) {
+        alert(`NO SE PUDO CREAR LA COBERTURA: ${error.message || error}`);
+    } finally {
+        asistenciaModulo.guardando = false;
+    }
+}
+
+async function abrirGestorCoberturasAsistencia() {
+    if (asistenciaModulo.guardando) return;
+    try {
+        const datos = await cargarCoberturasAsistencia(true);
+        const filas = datos.coverages || [];
+        const contenido = filas.length ? filas.map(c => {
+            const cancelable = datos.permissions?.cancel && ['ACTIVA', 'PROGRAMADA'].includes(c.status);
+            const motivo = String(c.reason || '').replaceAll('_', ' ');
+            return `<article class="as-coverage-card">
+              <div class="as-coverage-card-head"><span class="as-coverage-state as-coverage-state-${asistenciaEsc(String(c.status).toLowerCase())}">${asistenciaEsc(c.status)}</span><b>${asistenciaEsc(motivo)}</b></div>
+              <h4>${asistenciaEsc(c.target_name || 'VACANTE')} <span>→</span> ${asistenciaEsc(c.replacement_name)}</h4>
+              <p>${asistenciaEsc([c.province, c.project, c.post].filter(Boolean).join(' · '))}</p>
+              <p><b>${asistenciaFechaLocal(c.start_date)}</b> HASTA <b>${asistenciaFechaLocal(c.actual_end_date || c.planned_end_date)}</b></p>
+              ${c.note ? `<small>OBSERVACIÓN: ${asistenciaEsc(c.note)}</small>` : ''}
+              ${c.cancellation_reason ? `<small>CANCELACIÓN: ${asistenciaEsc(c.cancellation_reason)}</small>` : ''}
+              ${cancelable ? `<button class="danger" onclick="abrirCancelarCoberturaAsistencia('${asistenciaEsc(c.id)}')">CANCELAR ANTICIPADAMENTE</button>` : ''}
+            </article>`;
+        }).join('') : '<div class="as-empty-coverages">NO EXISTEN COBERTURAS EN ESTE PERIODO.</div>';
+        const editor = asistenciaEditorElemento();
+        editor.innerHTML = `<div class="as-editor-card as-coverage-manager"><div class="as-manager-head"><div><h3>COBERTURAS DEL PERIODO</h3><p>${asistenciaMesEtiqueta(datos.month_start)} · ${filas.length} REGISTRO(S)</p></div><button onclick="cerrarEditorAsistencia()">✕ CERRAR</button></div><div class="as-coverage-list">${contenido}</div></div>`;
+        editor.style.display = 'flex';
+    } catch (error) {
+        alert(`NO SE PUDIERON CARGAR LAS COBERTURAS: ${error.message || error}`);
+    }
+}
+
+function abrirCancelarCoberturaAsistencia(coverageId) {
+    const cobertura = (asistenciaModulo.coberturas?.coverages || []).find(c => c.id === coverageId);
+    if (!cobertura) return;
+    const hoy = asistenciaHoyEcuador();
+    const fecha = hoy > cobertura.planned_end_date ? cobertura.planned_end_date : hoy;
+    const editor = asistenciaEditorElemento();
+    editor.innerHTML = `<div class="as-editor-card as-coverage-form"><h3>CANCELAR COBERTURA ANTICIPADAMENTE</h3><p><b>${asistenciaEsc(cobertura.replacement_name)}</b><br>${asistenciaEsc([cobertura.project, cobertura.post].filter(Boolean).join(' · '))}</p><div class="as-form-grid"><label>ÚLTIMO DÍA EFECTIVO<input id="as-cancelar-fecha" type="date" max="${asistenciaEsc(cobertura.planned_end_date)}" value="${asistenciaEsc(fecha)}"></label><label class="as-form-wide">MOTIVO DE CANCELACIÓN<textarea id="as-cancelar-motivo" rows="3" placeholder="EXPLICA POR QUÉ TERMINA ANTES"></textarea></label></div><div class="as-editor-actions"><button class="danger" onclick="cancelarCoberturaAsistencia('${asistenciaEsc(coverageId)}')">CONFIRMAR CANCELACIÓN</button><button onclick="abrirGestorCoberturasAsistencia()">VOLVER</button></div></div>`;
+    editor.style.display = 'flex';
+}
+
+async function cancelarCoberturaAsistencia(coverageId) {
+    if (asistenciaModulo.guardando) return;
+    const fecha = document.getElementById('as-cancelar-fecha')?.value;
+    const motivo = document.getElementById('as-cancelar-motivo')?.value.trim();
+    if (!fecha || !motivo) {
+        alert('LA FECHA EFECTIVA Y EL MOTIVO DE CANCELACIÓN SON OBLIGATORIOS.');
+        return;
+    }
+    if (!confirm('¿CONFIRMAS LA CANCELACIÓN ANTICIPADA DE ESTA COBERTURA?')) return;
+    asistenciaModulo.guardando = true;
+    try {
+        await supabaseRpc('cancel_attendance_coverage', {
+            p_coverage_id: coverageId,
+            p_effective_end_date: fecha,
+            p_reason: motivo
+        });
+        cerrarEditorAsistencia();
+        await refrescarCoberturasAsistencia();
+        asistenciaModulo.guardando = false;
+        await abrirGestorCoberturasAsistencia();
+    } catch (error) {
+        alert(`NO SE PUDO CANCELAR LA COBERTURA: ${error.message || error}`);
+    } finally {
+        asistenciaModulo.guardando = false;
+    }
+}
+
+async function refrescarCoberturasAsistencia() {
+    const periodId = asistenciaModulo.workspace?.period?.id || null;
+    asistenciaModulo.coberturas = null;
+    await cargarWorkspaceAsistencia(periodId);
+    await cargarCoberturasAsistencia(true);
+}
+
+function editarMarcacionAsistencia(assignmentId, dia, codigoActual) {
+    if (asistenciaModulo.guardando) return;
+    const w = asistenciaModulo.workspace;
+    if (!w?.permissions?.manage || w.period.status !== 'OPEN') return;
+    const editor = asistenciaEditorElemento();
     const asignacion = w.assignments.find(a => a.assignment_id === assignmentId);
     editor.innerHTML = `<div class="as-editor-card"><h3>REGISTRAR ASISTENCIA</h3><p>${asistenciaEsc(asignacion?.full_name || 'VACANTE')}<br><b>${asistenciaEsc(asistenciaFechaDesdeDia(w.period.month_start,dia))}</b></p><div class="as-code-grid">${(w.codes||[]).map(c=>`<button class="${asistenciaCodigoClase(c.code)} ${c.code===codigoActual?'selected':''}" onclick="guardarMarcacionAsistencia('${asistenciaEsc(assignmentId)}',${dia},'${asistenciaEsc(c.code)}')"><b>${asistenciaEsc(c.code)}</b><small>${asistenciaEsc(c.label)}</small></button>`).join('')}</div><div class="as-editor-actions">${codigoActual?`<button class="danger" onclick="eliminarMarcacionAsistencia('${asistenciaEsc(assignmentId)}',${dia})">BORRAR MARCACIÓN</button>`:''}<button onclick="cerrarEditorAsistencia()">CANCELAR</button></div></div>`;
     editor.style.display = 'flex';
