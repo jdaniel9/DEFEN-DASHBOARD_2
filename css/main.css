@@ -302,6 +302,18 @@
 .as-form-grid input,
 .as-form-grid select { height: 38px; }
 .as-form-grid textarea { resize: vertical; text-transform: uppercase; }
+.as-form-grid input[type="text"] { text-transform: uppercase; }
+.as-personnel-picker {
+    display: grid; grid-template-columns: minmax(0, 1fr) auto;
+    align-items: end; gap: 8px;
+}
+.as-personnel-picker button {
+    height: 38px; margin-top: 5px; padding: 7px 11px;
+    border: 0; border-radius: 8px; cursor: pointer;
+    background: #e0e7ff; color: #3730a3;
+    font-size: 8px; font-weight: 900; white-space: nowrap;
+}
+.as-personnel-picker button:hover { background: #c7d2fe; }
 .as-editor-actions button.primary { background: #2563eb; color: #fff; }
 .as-coverage-manager {
     width: min(900px, 100%); max-height: min(86vh, 780px);
@@ -356,4 +368,5 @@
 @media (max-width: 600px) {
     .as-kpis, .as-form-grid { grid-template-columns: 1fr; }
     .as-form-grid .as-form-wide { grid-column: auto; }
+    .as-personnel-picker { grid-template-columns: 1fr; }
 }
