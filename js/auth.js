@@ -55,6 +55,14 @@ function usuarioPuedeVerRadiosDetalle() {
     return !ROLES_SIN_RADIOS.includes(rolActual());
 }
 
+function usuarioPuedeVerAsistencia() {
+    return ['admin', 'operaciones', 'gdp'].includes(rolActual());
+}
+
+function usuarioPuedeGestionarAsistencia() {
+    return ['admin', 'operaciones'].includes(rolActual());
+}
+
 // Al elegir un departamento en el login, autocompleta el campo Usuario
 // (el usuario sigue teniendo que escribir su contraseña)
 function autocompletarUsuarioPorDepartamento() {
@@ -68,6 +76,9 @@ function aplicarPermisosUI() {
     // Las actas de armamento son exclusivas de ADMIN y OPERACIONES.
     document.querySelectorAll('[data-permiso-actas]').forEach(el => {
         el.style.display = usuarioPuedeGenerarActas() ? '' : 'none';
+    });
+    document.querySelectorAll('[data-permiso-asistencia]').forEach(el => {
+        el.style.display = usuarioPuedeVerAsistencia() ? '' : 'none';
     });
     if (!usuarioPuedeVerArmamentoDetalle()) {
         // Cubre el botón "Detalle" Y las filas clickeables del resumen
