@@ -42,13 +42,33 @@ function tokenSesionActual() {
 }
 
 function usuarioPuedeGenerarActas() {
-    if (backendUsaSupabase() && SUPABASE_READ_ONLY_PHASE) return false;
-    return ['admin','operaciones'].includes(rolActual());
+    const autorizado = ['admin','operaciones'].includes(rolActual());
+    if (!autorizado) return false;
+    if (backendUsaSupabase() && SUPABASE_READ_ONLY_PHASE) {
+        return typeof SUPABASE_WEAPON_DISPATCH_ENABLED !== 'undefined'
+            && SUPABASE_WEAPON_DISPATCH_ENABLED;
+    }
+    return true;
 }
 
 function usuarioPuedeRegularizarArmamento() {
     return ['admin','operaciones'].includes(rolActual())
         && (!backendUsaSupabase() || SUPABASE_WEAPON_REGULARIZATION_ENABLED);
+}
+
+function usuarioPuedeGestionarNovedadArmamento() {
+    return ['admin','operaciones'].includes(rolActual())
+        && (!backendUsaSupabase() || !SUPABASE_READ_ONLY_PHASE);
+}
+
+function usuarioPuedeGestionarMantenimientoArmamento() {
+    return ['admin','operaciones'].includes(rolActual())
+        && (!backendUsaSupabase() || !SUPABASE_READ_ONLY_PHASE);
+}
+
+function usuarioPuedeVerHistorialMovimientosArmamento() {
+    return ['admin','operaciones'].includes(rolActual())
+        && (!backendUsaSupabase() || !SUPABASE_READ_ONLY_PHASE);
 }
 
 
@@ -81,6 +101,12 @@ function aplicarPermisosUI() {
     // Las actas de armamento son exclusivas de ADMIN y OPERACIONES.
     document.querySelectorAll('[data-permiso-actas]').forEach(el => {
         el.style.display = usuarioPuedeGenerarActas() ? '' : 'none';
+    });
+    document.querySelectorAll('[data-permiso-despacho]').forEach(el => {
+        el.style.display = usuarioPuedeGenerarActas() ? '' : 'none';
+    });
+    document.querySelectorAll('[data-permiso-historial-armamento]').forEach(el => {
+        el.style.display = usuarioPuedeVerHistorialMovimientosArmamento() ? '' : 'none';
     });
     document.querySelectorAll('[data-permiso-regularizacion]').forEach(el => {
         el.style.display = usuarioPuedeRegularizarArmamento() ? '' : 'none';
@@ -124,7 +150,9 @@ function mostrarAvisoSupabaseLectura() {
     if (document.getElementById('supabase-readonly-badge')) return;
     const aviso = document.createElement('div');
     aviso.id = 'supabase-readonly-badge';
-    aviso.textContent = 'SUPABASE DEV · PRUEBA DE LECTURA';
+    aviso.textContent = (typeof SUPABASE_WEAPON_DISPATCH_ENABLED !== 'undefined' && SUPABASE_WEAPON_DISPATCH_ENABLED)
+        ? 'SUPABASE DEV · MIGRACIÓN CONTROLADA'
+        : 'SUPABASE DEV · PRUEBA DE LECTURA';
     aviso.style.cssText = 'position:fixed;right:14px;bottom:14px;z-index:30000;background:#1e3a8a;color:#dbeafe;border:1px solid #60a5fa;border-radius:999px;padding:7px 11px;font-size:9px;font-weight:900;letter-spacing:.04em;box-shadow:0 8px 24px rgba(15,23,42,.3)';
     document.body.appendChild(aviso);
 }
