@@ -298,3 +298,100 @@ async function supabaseCargarDashboardLegacy() {
     if (puedeVerRadios) salida.__radios_detalle__ = radios;
     return salida;
 }
+
+let supabaseWeaponWorkspacePromise = null;
+let supabaseWeaponWorkspace = null;
+
+function adaptarWeaponWorkspace(workspace) {
+    if (!workspace || workspace.schema_version !== 1 || !Array.isArray(workspace.weapons)) {
+        throw new Error('Supabase devolvió un contrato de armamento incompatible.');
+    }
+    armamentoDetalle = workspace.weapons.map(w => ({
+        idArma: w.id,
+        codigoArma: w.weapon_code || '',
+        numeroDocumento: w.document_number || '',
+        propietario: w.owner_name || '',
+        clase: w.weapon_class || '',
+        tipo: w.weapon_type || '',
+        marca: w.brand || '',
+        modelo: w.model || '',
+        calibre: w.caliber || '',
+        serie: w.serial_number || '',
+        categoria: w.category || '',
+        fechaEmision: w.issue_date || '',
+        fechaExpiracion: w.expiration_date || '',
+        urlCredencial: w.credential_url || '',
+        urlImagenArma: w.photo_url || '',
+        estado: w.state || '',
+        provinciaId: w.province_id || null,
+        provincia: w.province || '',
+        ciudad: w.city || '',
+        proyectoId: w.project_id || null,
+        proyecto: w.project || '',
+        puestoId: w.post_id || null,
+        puesto: w.post || '',
+        ubicacion: w.location || '',
+        responsablePersonalId: w.responsible_personnel_id || null,
+        responsableNombre: w.responsible_name || '',
+        responsableCedula: w.responsible_national_id || '',
+        destinoProvinciaId: w.destination_province_id || null,
+        destinoCiudad: w.destination_city || '',
+        destinoProyectoId: w.destination_project_id || null,
+        destinoPuestoId: w.destination_post_id || null,
+        destinoUbicacion: w.destination_location || '',
+        urlGuiaEnvio: w.outbound_guide_url || '',
+        urlGuiaRetorno: w.return_guide_url || '',
+        estadoDocumental: w.document_status || '',
+        condicionTecnica: w.technical_condition || '',
+        bloqueadaAsignacion: Boolean(w.assignment_blocked),
+        motivoBloqueo: w.block_reason || '',
+        idActaActual: w.current_act_id || '',
+        actaVigente: w.current_act_code || '',
+        idMovimientoActual: w.current_movement_id || '',
+        idMantenimientoActual: w.current_maintenance_id || '',
+        fechaUltimoMovimiento: w.last_movement_at || '',
+        fechaUltimaNovedadTecnica: w.last_technical_event_at || ''
+    }));
+    supervisoresActas = (workspace.supervisors || []).map(s => ({
+        idAsignacion: s.assignment_id,
+        personalId: s.personnel_id,
+        cedula: s.national_id || '',
+        nombre: s.full_name || '',
+        provinciaId: s.province_id,
+        provincia: s.province || '',
+        proyectoId: s.project_id,
+        proyecto: s.project || '',
+        estado: 'ACTIVO'
+    }));
+    supabaseWeaponWorkspace = workspace;
+    return workspace;
+}
+
+async function cargarWorkspaceArmamentoSupabase(forzar = false) {
+    if (!backendUsaSupabase()) return null;
+    if (supabaseWeaponWorkspace && !forzar) return supabaseWeaponWorkspace;
+    if (supabaseWeaponWorkspacePromise && !forzar) return supabaseWeaponWorkspacePromise;
+    supabaseWeaponWorkspacePromise = (async () => {
+        const workspace = await supabaseRpc('get_weapon_workspace');
+        return adaptarWeaponWorkspace(workspace);
+    })();
+    try { return await supabaseWeaponWorkspacePromise; }
+    finally { supabaseWeaponWorkspacePromise = null; }
+}
+
+function invalidarWorkspaceArmamentoSupabase() {
+    supabaseWeaponWorkspace = null;
+    supabaseWeaponWorkspacePromise = null;
+}
+
+async function supabaseCrearActaArmamento(payload) {
+    return supabaseRpc('create_weapon_act', { p_payload: payload });
+}
+
+async function supabaseListarActasArmamento(limite = 200) {
+    return supabaseRpc('list_weapon_acts', { p_limit: limite });
+}
+
+async function supabaseObtenerActaArmamento(codigo) {
+    return supabaseRpc('get_weapon_act_detail', { p_act_code: codigo });
+}
