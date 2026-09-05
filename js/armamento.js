@@ -33,13 +33,27 @@ const ARM_COLUMNAS = [
 ];
 
 // ── Abrir modal de armamento, opcionalmente pre-filtrado por estado ──
-function abrirModalArmamento(preset) {
+async function abrirModalArmamento(preset) {
     if (typeof usuarioPuedeVerArmamentoDetalle === 'function' && !usuarioPuedeVerArmamentoDetalle()) {
         alert('Tu perfil no tiene permiso para ver el detalle de armamento.');
         return;
     }
     filtrosArmamento = { estado: [], tipo: [], clase: [], categoria: [], provincia: [], proyecto: [] };
     busquedaArmamento = '';
+
+    if (backendUsaSupabase()) {
+        const modal = document.getElementById('armamento-modal');
+        const cuerpo = document.getElementById('armamento-tbody');
+        if (modal) modal.style.display = 'flex';
+        if (cuerpo) cuerpo.innerHTML = '<tr><td colspan="20" style="padding:28px;text-align:center;color:#64748b;font-weight:800">Cargando inventario de armamento…</td></tr>';
+        try {
+            await cargarWorkspaceArmamentoSupabase();
+        } catch (error) {
+            if (modal) modal.style.display = 'none';
+            alert(error.message || 'No se pudo cargar el inventario de armamento.');
+            return;
+        }
+    }
 
     // Acepta un string simple (compatibilidad: solo estado) o un objeto
     // con varios filtros preseleccionados a la vez, ej: {estado:'activo', clase:'letal', tipo:'pistola'}
