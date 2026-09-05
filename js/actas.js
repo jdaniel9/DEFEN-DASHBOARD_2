@@ -458,7 +458,43 @@ function mostrarErrorActa(m){
 }
 
 async function postActasLegacyV2(payload){const r=await fetch(APPS_SCRIPT_URL,{method:'POST',body:JSON.stringify(payload),redirect:'follow'});return await r.json();}
-async function registrarActaServidor(d,confirmarInvalidacion=false,guia=null){if(!idSolicitudActaActual)idSolicitudActaActual=nuevoIdSolicitudActa();return await postActas({accion:'crear_acta_armamento',token:tokenSesionActual(),idSolicitud:idSolicitudActaActual,confirmarInvalidacion,guia,acta:d},90000);}
+function resolverDestinoActaSupabase(d){
+    const proyectos=Array.isArray(supabaseWeaponWorkspace?.projects)?supabaseWeaponWorkspace.projects:[];
+    const proyecto=proyectos.find(p=>normalizarTexto(p.province)===normalizarTexto(d.provincia)&&normalizarTexto(p.name)===normalizarTexto(d.proyecto));
+    if(!proyecto)throw new Error('El proyecto seleccionado no está activo o no fue reconocido en Supabase.');
+    const puestos=Array.isArray(proyecto.posts)?proyecto.posts:[];
+    const puesto=puestos.find(p=>normalizarTexto(p.name)===normalizarTexto(d.puesto));
+    return{proyecto,puesto};
+}
+async function registrarActaServidor(d,confirmarInvalidacion=false,guia=null){
+    if(!idSolicitudActaActual)idSolicitudActaActual=nuevoIdSolicitudActa();
+    if(!backendUsaSupabase())return await postActas({accion:'crear_acta_armamento',token:tokenSesionActual(),idSolicitud:idSolicitudActaActual,confirmarInvalidacion,guia,acta:d},90000);
+    const seleccionadas=armasActaSeleccionadas.filter(Boolean),anteriores=[...new Set(seleccionadas.map(a=>a.actaVigente).filter(Boolean))];
+    if(anteriores.length&&!confirmarInvalidacion)return{ok:false,requiereConfirmacion:true,codigosAnteriores:anteriores};
+    const {proyecto,puesto}=resolverDestinoActaSupabase(d),supervisor=supervisoresDestino().find(s=>normalizarTexto(s.nombre)===normalizarTexto(d.supervisorNombre));
+    if(seleccionadas.some(a=>!a.idArma))throw new Error('Una de las armas no tiene identificador válido en Supabase.');
+    const payload={
+        request_id:idSolicitudActaActual,
+        request_fingerprint:`DESPACHO-${idSolicitudActaActual}`,
+        act_type:d.tipoActa==='CUSTODIO VIP'?'CUSTODIO':'GUARDIA',
+        act_date:d.fecha,
+        effective_at:`${d.fecha}T12:00:00-05:00`,
+        regularization:false,
+        replace_existing:Boolean(confirmarInvalidacion),
+        replacement_reason:confirmarInvalidacion?'REASIGNACION CONFIRMADA POR EL USUARIO':null,
+        guide_storage_path:guia?.storagePath||null,
+        receiver:{personnel_id:agenteActaSeleccionado?.personalId||null,name:d.receptorNombre,national_id:d.receptorCedula,origin:d.receptorOrigen==='registrado'?'PERSONAL REGISTRADO':'INGRESO MANUAL',position_title:d.cargo||null},
+        destination:{province_id:proyecto.province_id,project_id:proyecto.id,post_id:puesto?.id||null,city:d.ciudad,location:d.puesto||null},
+        supervisor:d.tipoActa==='GUARDIA'?{personnel_id:supervisor?.personalId||null,name:d.supervisorNombre,national_id:d.supervisorCedula}:{},
+        permit_reference:d.permiso||null,
+        comment:d.comentario||null,
+        novelty:d.novedad||null,
+        movement_observation:`ENVIO A ${d.proyecto}${d.puesto?' · '+d.puesto:''}`,
+        items:seleccionadas.map(a=>({weapon_id:a.idArma,magazines:d.alimentadoras,ammunition:d.municiones}))
+    };
+    const r=await supabaseCrearActaArmamento(payload);
+    return{ok:Boolean(r?.ok),codigo:r?.act_code||'',loteId:r?.batch_id||'',pendienteSubsanar:r?.document_status==='PENDIENTE',reutilizada:Boolean(r?.idempotent),resultado:r};
+}
 async function imagenActaBase64(url){if(!url)return '';try{const j=await postActas({accion:'imagen_acta',token:tokenSesionActual(),url});if(j.ok&&j.base64)return `data:${j.mime||'image/jpeg'};base64,${j.base64}`;}catch(e){console.warn('Imagen acta:',e);}return '';}
 
 async function generarActaArmamentoLegacyV2(){
@@ -704,6 +740,7 @@ function actasV3PrepararPestanaPendientes(){
     }
 }
 function mostrarPestanaActas(vista){
+    if(!actasPestanaDisponible(vista))vista='historial';
     const historial=vista==='historial',pendientes=vista==='pendientes',transito=vista==='transito',retorno=vista==='retorno',regularizacion=vista==='regularizacion',nueva=!historial&&!pendientes&&!transito&&!retorno&&!regularizacion;
     document.getElementById('acta-vista-nueva').style.display=nueva?'block':'none';
     document.getElementById('acta-vista-historial').style.display=historial?'block':'none';
@@ -712,12 +749,19 @@ function mostrarPestanaActas(vista){
     const vistaRetorno=document.getElementById('acta-vista-retorno');if(vistaRetorno)vistaRetorno.style.display=retorno?'block':'none';
     const vistaRegularizacion=document.getElementById('acta-vista-regularizacion');if(vistaRegularizacion)vistaRegularizacion.style.display=regularizacion?'block':'none';
     document.getElementById('acta-pie').style.display=nueva?'flex':'none';
-    [['acta-tab-nueva',nueva],['acta-tab-historial',historial],['acta-tab-pendientes',pendientes],['acta-tab-transito',transito],['acta-tab-retorno',retorno],['acta-tab-regularizacion',regularizacion]].forEach(([id,activo])=>{const e=document.getElementById(id),bloqueada=backendUsaSupabase()&&SUPABASE_READ_ONLY_PHASE&&['acta-tab-nueva','acta-tab-pendientes','acta-tab-transito','acta-tab-retorno'].includes(id);if(e)e.style.cssText=`border:0;border-radius:8px;padding:7px 12px;font-size:11px;font-weight:900;cursor:pointer;${activo?'background:#f97316;color:white':'background:#e2e8f0;color:#334155'};${bloqueada?'display:none':''}`;});
+    [['acta-tab-nueva','nueva',nueva],['acta-tab-historial','historial',historial],['acta-tab-pendientes','pendientes',pendientes],['acta-tab-transito','transito',transito],['acta-tab-retorno','retorno',retorno],['acta-tab-regularizacion','regularizacion',regularizacion]].forEach(([id,nombre,activo])=>{const e=document.getElementById(id),bloqueada=!actasPestanaDisponible(nombre);if(e)e.style.cssText=`border:0;border-radius:8px;padding:7px 12px;font-size:11px;font-weight:900;cursor:pointer;${activo?'background:#f97316;color:white':'background:#e2e8f0;color:#334155'};${bloqueada?'display:none':''}`;});
     if(historial)cargarHistorialIntegrado();
     if(pendientes)cargarGuiasPendientes();
     if(transito)cargarMovimientosTransito();
     if(retorno)prepararFormularioRetorno();
     if(regularizacion)prepararFormularioRegularizacion();
+}
+function actasPestanaDisponible(vista){
+    if(!backendUsaSupabase())return true;
+    if(vista==='historial')return true;
+    if(vista==='regularizacion')return typeof SUPABASE_WEAPON_REGULARIZATION_ENABLED!=='undefined'&&SUPABASE_WEAPON_REGULARIZATION_ENABLED;
+    if(['nueva','transito'].includes(vista))return typeof SUPABASE_WEAPON_DISPATCH_ENABLED!=='undefined'&&SUPABASE_WEAPON_DISPATCH_ENABLED;
+    return !SUPABASE_READ_ONLY_PHASE;
 }
 function armasDisponiblesRetorno(){return (armamentoDetalle||[]).filter(a=>['activo','en campo'].includes(normalizarTexto(a.estado))&&!a.bloqueadaAsignacion&&!a.idMantenimientoActual&&a.provincia&&a.proyecto&&a.serie);}
 function armasPendientesRegularizacion(){return (armamentoDetalle||[]).filter(a=>['activo','en campo'].includes(normalizarTexto(a.estado))&&!a.bloqueadaAsignacion&&!a.idMantenimientoActual&&!String(a.actaVigente||'').trim()&&a.provincia&&a.proyecto&&a.serie);}
@@ -801,16 +845,26 @@ async function iniciarRetornoArmamento(){
 async function cargarMovimientosTransito(){
     const c=document.getElementById('actas-transito-lista');if(!c)return;c.innerHTML='<p style="color:#64748b">Cargando armas en tránsito…</p>';
     try{
-        const r=await postActas({accion:'listar_movimientos_transito',token:tokenSesionActual()});if(!r.ok)throw new Error(r.mensaje);
+        let r;
+        if(backendUsaSupabase()){
+            const workspace=await cargarWorkspaceDespachoArmamentoSupabase(true);
+            r={ok:true,movimientos:(workspace.in_transit||[]).map(b=>({loteId:b.batch_id,codigoLote:b.batch_code,codigoActa:b.act_code||'',tipoMovimiento:b.movement_type||'ASIGNACION',estadoDocumental:b.document_status==='PENDIENTE'?'PENDIENTE_SUBSANAR':b.document_status,urlGuia:b.guide_url||'',rutaGuia:b.guide_storage_path||'',provinciaDestino:b.destination_province||'',ciudadDestino:b.destination_city||'',proyectoDestino:b.destination_project||'',puestoDestino:b.destination_post||'',responsable:b.weapons?.[0]?.receiver_name||'',armas:(b.weapons||[]).map(w=>({serie:w.serial_number||'',codigoArma:w.weapon_code||''}))}))};
+        }else r=await postActas({accion:'listar_movimientos_transito',token:tokenSesionActual()});
+        if(!r.ok)throw new Error(r.mensaje);
         const movimientos=r.movimientos||[];
         if(!movimientos.length){c.innerHTML='<div style="background:#dcfce7;color:#166534;border:1px solid #86efac;border-radius:12px;padding:14px;font-size:11px;font-weight:800">✓ No existen armas pendientes de confirmar llegada.</div>';return;}
-        c.innerHTML=`<div style="background:#eff6ff;border:1px solid #93c5fd;color:#1e40af;border-radius:12px;padding:12px;margin-bottom:12px;font-size:10px;font-weight:700">Confirma la llegada únicamente cuando todas las armas del lote estén físicamente en su destino.</div>`+movimientos.map(m=>{const haciaRastrillo=['RETORNO','RECUPERACION'].includes(m.tipoMovimiento),recuperacion=m.tipoMovimiento==='RECUPERACION',color=recuperacion?'#0891b2':haciaRastrillo?'#f97316':'#2563eb',etiqueta=recuperacion?'RECUPERACIÓN · ':m.tipoMovimiento==='RETORNO'?'RETORNO · ':'';return `<div style="background:white;border:1px solid #bfdbfe;border-left:4px solid ${color};border-radius:10px;padding:11px 12px;margin-bottom:8px;display:flex;gap:10px;align-items:center;flex-wrap:wrap"><div style="flex:1;min-width:250px"><b style="font-size:12px;color:#0f172a">${escHtml(m.loteId||m.codigoActa)}</b><span style="display:inline-block;margin-left:7px;padding:3px 7px;border-radius:99px;background:#dbeafe;color:#1d4ed8;font-size:8px;font-weight:900">${etiqueta}EN TRÁNSITO</span>${m.estadoDocumental==='PENDIENTE_SUBSANAR'?'<span style="display:inline-block;margin-left:5px;padding:3px 7px;border-radius:99px;background:#ffedd5;color:#c2410c;font-size:8px;font-weight:900">GUÍA PENDIENTE</span>':''}<div style="font-size:10px;color:#475569;margin-top:4px">Destino: ${escHtml(m.provinciaDestino)} · ${escHtml(m.ciudadDestino)}${m.proyectoDestino?' · '+escHtml(m.proyectoDestino):''}${m.puestoDestino?' · '+escHtml(m.puestoDestino):''}</div><div style="font-size:9px;color:#94a3b8">${m.responsable?'Responsable: '+escHtml(m.responsable)+' · ':''}Series: ${(m.armas||[]).map(a=>escHtml(a.serie)).join(', ')}</div></div>${m.urlGuia?`<a href="${escAttr(m.urlGuia)}" target="_blank" rel="noopener" style="border-radius:7px;background:#ecfdf5;color:#047857;padding:7px 9px;font-size:10px;font-weight:900;text-decoration:none">Ver guía</a>`:''}<button onclick="confirmarLlegadaMovimiento('${escAttr(m.loteId||'')}','${escAttr(m.codigoActa||'')}',${Number((m.armas||[]).length)},'${escAttr(m.tipoMovimiento||'ASIGNACION')}')" style="border:0;border-radius:7px;background:${color};color:white;padding:7px 10px;font-size:10px;font-weight:900;cursor:pointer">✓ Confirmar llegada</button></div>`;}).join('');
+        c.innerHTML=`<div style="background:#eff6ff;border:1px solid #93c5fd;color:#1e40af;border-radius:12px;padding:12px;margin-bottom:12px;font-size:10px;font-weight:700">Confirma la llegada únicamente cuando todas las armas del lote estén físicamente en su destino.</div>`+movimientos.map(m=>{const haciaRastrillo=['RETORNO','RECUPERACION'].includes(m.tipoMovimiento),recuperacion=m.tipoMovimiento==='RECUPERACION',color=recuperacion?'#0891b2':haciaRastrillo?'#f97316':'#2563eb',etiqueta=recuperacion?'RECUPERACIÓN · ':m.tipoMovimiento==='RETORNO'?'RETORNO · ':'';return `<div style="background:white;border:1px solid #bfdbfe;border-left:4px solid ${color};border-radius:10px;padding:11px 12px;margin-bottom:8px;display:flex;gap:10px;align-items:center;flex-wrap:wrap"><div style="flex:1;min-width:250px"><b style="font-size:12px;color:#0f172a">${escHtml(m.codigoLote||m.codigoActa||m.loteId)}</b><span style="display:inline-block;margin-left:7px;padding:3px 7px;border-radius:99px;background:#dbeafe;color:#1d4ed8;font-size:8px;font-weight:900">${etiqueta}EN TRÁNSITO</span>${m.estadoDocumental==='PENDIENTE_SUBSANAR'?'<span style="display:inline-block;margin-left:5px;padding:3px 7px;border-radius:99px;background:#ffedd5;color:#c2410c;font-size:8px;font-weight:900">GUÍA PENDIENTE</span>':''}<div style="font-size:10px;color:#475569;margin-top:4px">Destino: ${escHtml(m.provinciaDestino)} · ${escHtml(m.ciudadDestino)}${m.proyectoDestino?' · '+escHtml(m.proyectoDestino):''}${m.puestoDestino?' · '+escHtml(m.puestoDestino):''}</div><div style="font-size:9px;color:#94a3b8">${m.responsable?'Responsable: '+escHtml(m.responsable)+' · ':''}Series: ${(m.armas||[]).map(a=>escHtml(a.serie)).join(', ')}</div></div>${m.rutaGuia?`<button onclick="abrirGuiaPrivadaArmamento('${encodeURIComponent(m.rutaGuia)}')" style="border:0;border-radius:7px;background:#ecfdf5;color:#047857;padding:7px 9px;font-size:10px;font-weight:900;cursor:pointer">Ver guía</button>`:m.urlGuia?`<a href="${escAttr(m.urlGuia)}" target="_blank" rel="noopener" style="border-radius:7px;background:#ecfdf5;color:#047857;padding:7px 9px;font-size:10px;font-weight:900;text-decoration:none">Ver guía</a>`:''}<button onclick="confirmarLlegadaMovimiento('${escAttr(m.loteId||'')}','${escAttr(m.codigoActa||'')}',${Number((m.armas||[]).length)},'${escAttr(m.tipoMovimiento||'ASIGNACION')}')" style="border:0;border-radius:7px;background:${color};color:white;padding:7px 10px;font-size:10px;font-weight:900;cursor:pointer">✓ Confirmar llegada</button></div>`;}).join('');
     }catch(e){c.innerHTML=`<p style="color:#b91c1c;font-weight:700">${escHtml(e.message||String(e))}</p>`;}
+}
+async function abrirGuiaPrivadaArmamento(rutaCodificada){
+    let ventana=null;
+    try{ventana=window.open('about:blank','_blank');const ruta=decodeURIComponent(rutaCodificada||''),url=await supabaseUrlFirmadaGuiaArmamento(ruta,300);if(ventana)ventana.location.href=url;else window.location.href=url;}
+    catch(e){if(ventana)ventana.close();alert(e.message||String(e));}
 }
 async function confirmarLlegadaMovimiento(loteId,codigoActa,cantidad,tipoMovimiento){
     const haciaRastrillo=['RETORNO','RECUPERACION'].includes(tipoMovimiento),resultado=haciaRastrillo?'Rastrillo y sus actas quedarán FINALIZADAS':'Activo en el proyecto y puesto de destino';
     if(!confirm(`¿Confirmas que las ${cantidad} arma(s) de ${loteId||codigoActa} llegaron físicamente a su destino?\n\nAl continuar quedarán en estado ${resultado}.`))return;
-    try{progresoActa('Confirmando recepción del armamento…',45);const r=await postActas({accion:'confirmar_llegada_armas',token:tokenSesionActual(),loteId,codigoActa},90000);if(!r.ok)throw new Error(r.mensaje);progresoActa('Llegada confirmada.',100);alert(r.mensaje);if(typeof cargarDatos==='function')await cargarDatos();await cargarMovimientosTransito();}catch(e){alert(e.message||String(e));}finally{setTimeout(cerrarProgresoActa,350);}
+    try{progresoActa('Confirmando recepción del armamento…',45);const r=backendUsaSupabase()?await supabaseConfirmarLlegadaArmamento(loteId,new Date().toISOString(),'RECEPCION CONFIRMADA DESDE EL DASHBOARD'):await postActas({accion:'confirmar_llegada_armas',token:tokenSesionActual(),loteId,codigoActa},90000);if(r?.ok===false)throw new Error(r.mensaje);progresoActa('Llegada confirmada.',100);alert(backendUsaSupabase()?`${r.received_count||cantidad} arma(s) recibida(s) correctamente.`:r.mensaje);if(typeof cargarDatos==='function')await cargarDatos();if(backendUsaSupabase()){invalidarWorkspaceArmamentoSupabase();invalidarWorkspaceDespachoArmamentoSupabase();await cargarWorkspaceArmamentoSupabase(true);if(typeof renderTablaArmamento==='function')renderTablaArmamento();}await cargarMovimientosTransito();}catch(e){alert(e.message||String(e));}finally{setTimeout(cerrarProgresoActa,350);}
 }
 async function cargarGuiasPendientes(){
     const c=document.getElementById('actas-pendientes-lista');if(!c)return;
@@ -857,10 +911,10 @@ async function cargarHistorialIntegrado(){
                 const colorEstado=invalidada?['#fee2e2','#b91c1c']:finalizada?['#e2e8f0','#475569']:parcial?['#fef3c7','#92400e']:['#dcfce7','#15803d'];
                 const estado=`<span style="display:inline-block;margin-left:7px;padding:3px 7px;border-radius:99px;background:${colorEstado[0]};color:${colorEstado[1]};font-size:8px;font-weight:900">${escHtml(a.estadoActa||'VIGENTE')}</span>`;
                 const guiaPendiente=a.estadoDocumental==='PENDIENTE_SUBSANAR';
-                const respaldoExistente=a.estadoDocumental==='RESPALDO_EXISTENTE',estadoGuia=`<span style="display:inline-block;margin-left:5px;padding:3px 7px;border-radius:99px;background:${guiaPendiente?'#ffedd5':'#e0f2fe'};color:${guiaPendiente?'#c2410c':'#0369a1'};font-size:8px;font-weight:900">${guiaPendiente?'GUÍA PENDIENTE':respaldoExistente?'RESPALDO EXISTENTE':a.urlGuia?'GUÍA COMPLETA':'SIN CONTROL DE GUÍA'}</span>`;
+                const respaldoExistente=a.estadoDocumental==='RESPALDO_EXISTENTE',tieneGuia=Boolean(a.urlGuia||a.rutaGuia),estadoGuia=`<span style="display:inline-block;margin-left:5px;padding:3px 7px;border-radius:99px;background:${guiaPendiente?'#ffedd5':'#e0f2fe'};color:${guiaPendiente?'#c2410c':'#0369a1'};font-size:8px;font-weight:900">${guiaPendiente?'GUÍA PENDIENTE':respaldoExistente?'RESPALDO EXISTENTE':tieneGuia?'GUÍA COMPLETA':'SIN CONTROL DE GUÍA'}</span>`;
                 const detalleInvalidacion=invalidada?`<div style="font-size:9px;color:#b91c1c;margin-top:4px">Reemplazada por ${escHtml(a.actaReemplazo||'otra acta')} · ${escHtml(a.motivoInvalidacion||'REASIGNACIÓN')}</div>`:'';
                 const detalleFinalizacion=(finalizada||parcial)?`<div style="font-size:9px;color:#475569;margin-top:4px">${parcial?'Una parte del armamento fue retornada':'Finalizada por retorno al rastrillo'}${a.fechaFinalizacion?' · '+escHtml(a.fechaFinalizacion):''}</div>`:'';
-                return `<div style="background:white;border:1px solid ${invalidada?'#fecaca':'#e2e8f0'};border-radius:10px;padding:10px 12px;margin-bottom:7px;display:flex;gap:10px;align-items:center;flex-wrap:wrap"><div style="flex:1;min-width:220px"><b style="font-size:12px;color:#0f172a">${escHtml(a.codigo)}</b>${estado}${estadoGuia}<div style="font-size:10px;color:#64748b">${escHtml(a.receptor)} · ${a.armas.length} arma(s) · ${escHtml(a.fecha)}</div><div style="font-size:9px;color:#94a3b8">Series: ${a.armas.map(escHtml).join(', ')}</div>${detalleInvalidacion}${detalleFinalizacion}</div>${a.urlGuia?`<a href="${escAttr(a.urlGuia)}" target="_blank" rel="noopener" style="border:0;border-radius:7px;background:#ecfdf5;color:#047857;padding:6px 8px;font-size:10px;font-weight:900;text-decoration:none">Ver guía</a>`:''}<button onclick="descargarPdfDesdeHistorial('${escAttr(a.codigo)}')" style="border:0;border-radius:7px;background:#dbeafe;color:#075985;padding:6px 8px;font-size:10px;font-weight:900;cursor:pointer">📄 Generar PDF</button>${r.esAdmin?`<button onclick="eliminarUltimaActa('${escAttr(a.codigo)}')" style="border:0;border-radius:7px;background:#fee2e2;color:#b91c1c;padding:6px 8px;font-size:10px;font-weight:900;cursor:pointer">Eliminar</button>`:''}</div>`;
+                return `<div style="background:white;border:1px solid ${invalidada?'#fecaca':'#e2e8f0'};border-radius:10px;padding:10px 12px;margin-bottom:7px;display:flex;gap:10px;align-items:center;flex-wrap:wrap"><div style="flex:1;min-width:220px"><b style="font-size:12px;color:#0f172a">${escHtml(a.codigo)}</b>${estado}${estadoGuia}<div style="font-size:10px;color:#64748b">${escHtml(a.receptor)} · ${a.armas.length} arma(s) · ${escHtml(a.fecha)}</div><div style="font-size:9px;color:#94a3b8">Series: ${a.armas.map(escHtml).join(', ')}</div>${detalleInvalidacion}${detalleFinalizacion}</div>${a.rutaGuia?`<button onclick="abrirGuiaPrivadaArmamento('${encodeURIComponent(a.rutaGuia)}')" style="border:0;border-radius:7px;background:#ecfdf5;color:#047857;padding:6px 8px;font-size:10px;font-weight:900;cursor:pointer">Ver guía</button>`:a.urlGuia?`<a href="${escAttr(a.urlGuia)}" target="_blank" rel="noopener" style="border:0;border-radius:7px;background:#ecfdf5;color:#047857;padding:6px 8px;font-size:10px;font-weight:900;text-decoration:none">Ver guía</a>`:''}<button onclick="descargarPdfDesdeHistorial('${escAttr(a.codigo)}')" style="border:0;border-radius:7px;background:#dbeafe;color:#075985;padding:6px 8px;font-size:10px;font-weight:900;cursor:pointer">📄 Generar PDF</button>${r.esAdmin?`<button onclick="eliminarUltimaActa('${escAttr(a.codigo)}')" style="border:0;border-radius:7px;background:#fee2e2;color:#b91c1c;padding:6px 8px;font-size:10px;font-weight:900;cursor:pointer">Eliminar</button>`:''}</div>`;
             }).join('');
             return `<h3 class="acta-section">${t==='GUARDIA'?'Actas de Guardia':'Actas de Custodio'}</h3>${tarjetas||'<p style="font-size:11px;color:#94a3b8">Sin actas registradas.</p>'}`;
         }).join('');
@@ -869,12 +923,23 @@ async function cargarHistorialIntegrado(){
 
 function actasV3PrepararCampos(){const mun=document.getElementById('acta-municiones');if(mun){const bloque=mun.parentElement;bloque.querySelector('label').textContent='Municiones por arma';if(!document.getElementById('acta-alimentadoras')){const nuevo=document.createElement('div');nuevo.innerHTML='<label class="acta-label">Alimentadoras por arma</label><input id="acta-alimentadoras" type="number" min="1" max="100" value="1" class="acta-input" oninput="actasV3ActualizarMuniciones(true)"><p id="acta-municiones-ayuda" class="acta-help"></p>';bloque.parentElement.insertBefore(nuevo,bloque);}}const cargo=document.getElementById('acta-cargo-select');if(cargo&&!cargo.querySelector('option[value=""]'))cargo.insertAdjacentHTML('afterbegin','<option value="">OPCIONAL / SIN CARGO</option>');}
 function actasV3PrepararValidacionesCampos(){const cedula=document.getElementById('acta-receptor-cedula');if(cedula){cedula.inputMode='numeric';cedula.maxLength=10;if(!cedula.dataset.soloDigitos){cedula.addEventListener('input',()=>{cedula.value=cedula.value.replace(/\D/g,'').slice(0,10);});cedula.dataset.soloDigitos='1';}}const limites={'acta-receptor-nombre':120,'acta-ciudad':80,'acta-proyecto-otro':160,'acta-puesto-otro':160,'acta-cargo-otro':100,'acta-modelo':100,'acta-comentario':500,'acta-novedad':500,'acta-supervisor-nombre':120,'acta-supervisor-cedula':30,'acta-supervisor-cedula-reg':30};Object.entries(limites).forEach(([id,max])=>{const e=document.getElementById(id);if(e)e.maxLength=max;});}
-function actasV3PrepararGuia(){if(document.getElementById('acta-guia-pdf'))return;const novedad=document.getElementById('acta-novedad'),card=novedad?.parentElement?.parentElement;if(!card)return;const bloque=document.createElement('div');bloque.style.gridColumn='1/-1';bloque.innerHTML=`<label class="acta-label">Guía de movilización (PDF · máximo 10 MB)</label><input id="acta-guia-pdf" type="file" accept="application/pdf,.pdf" class="acta-input"><p class="acta-help">Obligatoria para Operaciones. Administrador puede continuar por emergencia; el movimiento quedará pendiente de subsanar.</p>`;card.appendChild(bloque);}
+function actasV3PrepararGuia(){if(document.getElementById('acta-guia-pdf'))return;const novedad=document.getElementById('acta-novedad'),card=novedad?.parentElement?.parentElement;if(!card)return;const bloque=document.createElement('div');bloque.style.gridColumn='1/-1';bloque.innerHTML=`<label class="acta-label">Guía de movilización (PDF · máximo 10 MB)</label><input id="acta-guia-pdf" type="file" accept="application/pdf,.pdf" class="acta-input"><p class="acta-help">Obligatoria durante esta fase. La excepción administrativa se habilitará junto con el módulo Pendientes de subsanar.</p>`;card.appendChild(bloque);}
 function actasV3LimpiarGuia(){const guia=document.getElementById('acta-guia-pdf');if(guia)guia.value='';}
 async function actasV3LeerGuiaPdf(){const archivo=document.getElementById('acta-guia-pdf')?.files?.[0];return archivo?actasV3ArchivoPdfABase64(archivo):null;}
-function actasV3ValidarGuiaCliente(){const archivo=document.getElementById('acta-guia-pdf')?.files?.[0];if(!archivo&&rolActual()!=='admin')return 'La guía PDF es obligatoria para Operaciones.';if(archivo&&!archivo.name.toLowerCase().endsWith('.pdf'))return 'La guía debe tener extensión .pdf.';if(archivo&&archivo.size>10*1024*1024)return 'La guía PDF no puede superar 10 MB.';return '';}
+function actasV3ValidarGuiaCliente(){const archivo=document.getElementById('acta-guia-pdf')?.files?.[0];if(!archivo&&backendUsaSupabase())return 'La guía PDF es obligatoria durante esta fase. La excepción de Administrador se habilitará con Pendientes de subsanar.';if(!archivo&&rolActual()!=='admin')return 'La guía PDF es obligatoria para Operaciones.';if(archivo&&!archivo.name.toLowerCase().endsWith('.pdf'))return 'La guía debe tener extensión .pdf.';if(archivo&&archivo.size>10*1024*1024)return 'La guía PDF no puede superar 10 MB.';return '';}
 function actasV3ActualizarMuniciones(ajustar=false){const alimentadoras=document.getElementById('acta-alimentadoras'),municiones=document.getElementById('acta-municiones');if(!alimentadoras||!municiones)return;const cantidad=Math.max(1,Math.min(100,Math.trunc(Number(alimentadoras.value)||1))),porAlimentadora=document.getElementById('acta-tipo')?.value==='custodio'?10:5,maximo=cantidad*porAlimentadora;alimentadoras.value=String(cantidad);municiones.max=String(maximo);if(ajustar||Number(municiones.value)>maximo||Number(municiones.value)<0)municiones.value=String(maximo);const ayuda=document.getElementById('acta-municiones-ayuda');if(ayuda)ayuda.textContent=`Máximo ${maximo} municiones por arma (${porAlimentadora} por alimentadora).`;}
-function abrirGeneradorActa(serie){if(typeof usuarioPuedeGenerarActas==='function'&&!usuarioPuedeGenerarActas())return alert('Solo Operaciones y Administrador pueden generar actas de armamento.');if(!tokenSesionActual())return alert('Tu sesión venció. Ingresa nuevamente.');asegurarModalActas();actasV3PrepararPestanaPendientes();actasV3PrepararCampos();actasV3PrepararValidacionesCampos();actasV3PrepararGuia();mostrarPestanaActas('nueva');document.getElementById('acta-tipo').value='guardia';limpiarFormularioActa();actasV3LimpiarGuia();document.getElementById('acta-fecha').value=fechaISOHoy();actasV3ActualizarTipo();document.getElementById('actas-modal').style.display='flex';if(serie){const a=armasDisponiblesActa().find(x=>String(x.serie||'').trim()===String(serie).trim());if(a)actasV3ElegirArma(0,a);else mostrarErrorActa('Esta arma no puede utilizarse en un acta porque está En Tránsito, Perdida/Robada, Confiscada o no cumple las reglas del tipo seleccionado.');}}
+async function abrirGeneradorActa(serie){
+    if(typeof usuarioPuedeGenerarActas==='function'&&!usuarioPuedeGenerarActas())return alert('Solo Operaciones y Administrador pueden generar actas de armamento.');
+    if(!tokenSesionActual())return alert('Tu sesión venció. Ingresa nuevamente.');
+    try{
+        progresoActa('Cargando armamento y personal disponible…',25);
+        if(backendUsaSupabase())await Promise.all([cargarWorkspaceArmamentoSupabase(),cargarWorkspaceDespachoArmamentoSupabase()]);
+        asegurarModalActas();actasV3PrepararPestanaPendientes();actasV3PrepararCampos();actasV3PrepararValidacionesCampos();actasV3PrepararGuia();
+        mostrarPestanaActas('nueva');document.getElementById('acta-tipo').value='guardia';limpiarFormularioActa();actasV3LimpiarGuia();document.getElementById('acta-fecha').value=fechaISOHoy();actasV3ActualizarTipo();document.getElementById('actas-modal').style.display='flex';
+        if(serie){const a=armasDisponiblesActa().find(x=>String(x.serie||'').trim()===String(serie).trim());if(a)actasV3ElegirArma(0,a);else mostrarErrorActa('Esta arma no puede utilizarse en un acta porque está En Tránsito, Perdida/Robada, Confiscada o no cumple las reglas del tipo seleccionado.');}
+    }catch(e){alert(e.message||String(e));}
+    finally{cerrarProgresoActa();}
+}
 async function abrirRegularizacionArmamento(){
     if(typeof usuarioPuedeRegularizarArmamento==='function'&&!usuarioPuedeRegularizarArmamento())return alert('Solo Operaciones y Administrador pueden regularizar armamento.');
     if(!tokenSesionActual())return alert('Tu sesión venció. Ingresa nuevamente.');
@@ -886,9 +951,6 @@ async function abrirRegularizacionArmamento(){
         if(cedulaEntrega){cedulaEntrega.inputMode='numeric';cedulaEntrega.previousElementSibling.textContent='Cédula de quien entrega (obligatoria para Guardia)';if(!cedulaEntrega.dataset.soloDigitos){cedulaEntrega.addEventListener('input',()=>{cedulaEntrega.value=cedulaEntrega.value.replace(/\D/g,'').slice(0,10);});cedulaEntrega.dataset.soloDigitos='1';}}
         document.getElementById('actas-modal').style.display='flex';
         mostrarPestanaActas('regularizacion');
-        if(backendUsaSupabase()&&SUPABASE_READ_ONLY_PHASE){
-            ['acta-tab-nueva','acta-tab-pendientes','acta-tab-transito','acta-tab-retorno'].forEach(id=>{const e=document.getElementById(id);if(e)e.style.display='none';});
-        }
     }catch(e){alert(e.message||String(e));}
     finally{cerrarProgresoActa();}
 }
@@ -911,7 +973,7 @@ function actasV3ElegirArma(i,a){if(!a)return;armasActaSeleccionadas[i]=a;const e
 function actasV3Valor(id,otro){const v=document.getElementById(id).value;return v==='OTRO'?document.getElementById(otro).value.trim():v.trim();}
 function supervisoresDestino(){const prov=(document.getElementById('acta-provincia-destino').value||'').toUpperCase(),proy=actasV3Valor('acta-proyecto-destino','acta-proyecto-otro');return supervisoresConfiguradosProyecto(prov,proy);}
 function leerFormularioActa(){const tipo=document.getElementById('acta-tipo').value,origen=document.querySelector('input[name="acta-receptor-origen"]:checked').value,supOrigen=document.querySelector('input[name="acta-supervisor-origen"]:checked').value,armas=armasActaSeleccionadas.filter(Boolean).map(a=>({codigoArma:a.codigoArma||'',serie:a.serie||'',clase:a.clase||'',categoria:a.categoria||'',tipoArma:a.tipo||'',marca:a.marca||'',calibre:a.calibre||'',urlCredencial:a.urlCredencial||'',urlArma:a.urlImagenArma||'',estadoArma:a.estado||''})),esGuardia=tipo==='guardia';return {tipoActa:esGuardia?'GUARDIA':'CUSTODIO VIP',fecha:document.getElementById('acta-fecha').value,ciudad:document.getElementById('acta-ciudad').value.trim(),armas,proyecto:actasV3Valor('acta-proyecto-destino','acta-proyecto-otro'),provincia:document.getElementById('acta-provincia-destino').value.trim(),puesto:actasV3Valor('acta-puesto-destino','acta-puesto-otro'),receptorNombre:document.getElementById('acta-receptor-nombre').value.trim(),receptorCedula:document.getElementById('acta-receptor-cedula').value.trim(),receptorOrigen:origen,cargo:actasV3Valor('acta-cargo-select','acta-cargo-otro'),alimentadoras:Number(document.getElementById('acta-alimentadoras')?.value)||1,municiones:Number(document.getElementById('acta-municiones').value),aptitud:'APTA',permiso:document.getElementById('acta-permiso').value,modelo:document.getElementById('acta-modelo').value.trim(),comentario:document.getElementById('acta-comentario').value.trim(),novedad:document.getElementById('acta-novedad').value.trim(),supervisorNombre:esGuardia?(supOrigen==='registrado'?document.getElementById('acta-supervisor-select').value.trim():document.getElementById('acta-supervisor-nombre').value.trim()):'',supervisorCedula:esGuardia?(supOrigen==='registrado'?document.getElementById('acta-supervisor-cedula-reg').value.trim():document.getElementById('acta-supervisor-cedula').value.trim()):''};}
-function validarDatosActa(d){if(!d.armas.length)return 'Selecciona todas las armas antes de generar el acta.';if(d.armas.length!==armasActaSeleccionadas.length)return 'Falta seleccionar una o más armas.';const armaAlterada=armasActaSeleccionadas.some((a,i)=>normalizarTexto(document.getElementById(`acta-arma-${i}`)?.value)!==normalizarTexto(a?.serie||a?.codigoArma));if(armaAlterada)return 'La serie escrita no coincide con el arma seleccionada. Elige nuevamente el arma del listado.';if(d.receptorOrigen==='registrado'&&!agenteActaSeleccionado)return 'Busca y haz clic sobre la persona registrada que recibirá el arma.';if(d.receptorOrigen==='registrado'&&(normalizarTexto(d.receptorNombre)!==normalizarTexto(agenteActaSeleccionado?.nombre)||normalizarTexto(d.receptorCedula)!==normalizarTexto(agenteActaSeleccionado?.cedula)))return 'Los datos de la persona cambiaron. Selecciónala nuevamente desde el listado.';if(!d.receptorNombre)return 'El nombre de quien recibe es obligatorio.';if(!/^\d{10}$/.test(d.receptorCedula))return 'La cédula debe contener exactamente 10 números, sin espacios ni texto.';if(!d.provincia||!d.proyecto)return 'La provincia y el proyecto son obligatorios para ambas actas.';if(!d.fecha||!d.ciudad)return 'Indica la fecha y ciudad del acta.';if(!Number.isInteger(d.alimentadoras)||d.alimentadoras<1||d.alimentadoras>100)return 'Las alimentadoras deben ser un número entero entre 1 y 100.';const maximo=d.alimentadoras*(d.tipoActa==='CUSTODIO VIP'?10:5);if(!Number.isInteger(d.municiones)||d.municiones<0||d.municiones>maximo)return `Las municiones deben estar entre 0 y ${maximo} para ${d.alimentadoras} alimentadora(s).`;if(d.tipoActa==='GUARDIA'&&!d.supervisorNombre)return 'En las actas de Guardia es obligatorio indicar quién entrega.';return '';}
+function validarDatosActa(d){if(!d.armas.length)return 'Selecciona todas las armas antes de generar el acta.';if(d.armas.length!==armasActaSeleccionadas.length)return 'Falta seleccionar una o más armas.';const armaAlterada=armasActaSeleccionadas.some((a,i)=>normalizarTexto(document.getElementById(`acta-arma-${i}`)?.value)!==normalizarTexto(a?.serie||a?.codigoArma));if(armaAlterada)return 'La serie escrita no coincide con el arma seleccionada. Elige nuevamente el arma del listado.';if(d.receptorOrigen==='registrado'&&!agenteActaSeleccionado)return 'Busca y haz clic sobre la persona registrada que recibirá el arma.';if(d.receptorOrigen==='registrado'&&(normalizarTexto(d.receptorNombre)!==normalizarTexto(agenteActaSeleccionado?.nombre)||normalizarTexto(d.receptorCedula)!==normalizarTexto(agenteActaSeleccionado?.cedula)))return 'Los datos de la persona cambiaron. Selecciónala nuevamente desde el listado.';if(!d.receptorNombre)return 'El nombre de quien recibe es obligatorio.';if(!/^\d{10}$/.test(d.receptorCedula))return 'La cédula debe contener exactamente 10 números, sin espacios ni texto.';if(!d.provincia||!d.proyecto)return 'La provincia y el proyecto son obligatorios para ambas actas.';if(!d.fecha||!d.ciudad)return 'Indica la fecha y ciudad del acta.';if(!Number.isInteger(d.alimentadoras)||d.alimentadoras<1||d.alimentadoras>100)return 'Las alimentadoras deben ser un número entero entre 1 y 100.';const maximo=d.alimentadoras*(d.tipoActa==='CUSTODIO VIP'?10:5);if(!Number.isInteger(d.municiones)||d.municiones<0||d.municiones>maximo)return `Las municiones deben estar entre 0 y ${maximo} para ${d.alimentadoras} alimentadora(s).`;if(d.tipoActa==='GUARDIA'&&!d.supervisorNombre)return 'En las actas de Guardia es obligatorio indicar quién entrega.';if(d.tipoActa==='GUARDIA'&&!/^\d{10}$/.test(d.supervisorCedula))return 'La cédula de quien entrega debe contener exactamente 10 números.';return '';}
 async function generarActaArmamentoLegacyV3Inicial(){if(actaGenerando)return;const d=leerFormularioActa(),err=validarDatosActa(d);if(err)return mostrarErrorActa(err);mostrarErrorActa('');const b=document.getElementById('acta-btn-generar');actaGenerando=true;b.disabled=true;b.textContent='Registrando…';try{const reg=await registrarActaServidor(d);if(!reg.ok)throw new Error(reg.mensaje||'No se pudo registrar el acta');d.codigoActa=reg.codigo;const ev=await Promise.all(d.armas.map(async a=>({cred:await imagenActaBase64(a.urlCredencial),arma:await imagenActaBase64(a.urlArma)})));if(d.tipoActa==='CUSTODIO VIP')generarPDFCustodio(d,ev);else generarPDFGuardia(d,ev);if(typeof cerrarModalArmamento==='function')cerrarModalArmamento();document.getElementById('actas-modal').style.display='none';}catch(e){mostrarErrorActa(e.message||String(e));}finally{actaGenerando=false;b.disabled=false;b.textContent='📄 Registrar y generar PDF';}}
 // PDF V3: un documento y un código para una o varias armas.
 function generarPDFGuardia(d,evidencias){
@@ -945,7 +1007,7 @@ async function postActas(payload,timeoutMs=45000){
     if(backendUsaSupabase()){
         if(payload?.accion==='listar_actas'){
             const filas=await supabaseListarActasArmamento(200);
-            return{ok:true,esAdmin:false,actas:(filas||[]).map(a=>({codigo:a.act_code,tipo:a.act_type==='CUSTODIO'?'CUSTODIO VIP':'GUARDIA',fecha:a.act_date,receptor:a.receiver_name||'',armas:Array.isArray(a.weapon_serials)?a.weapon_serials:[],urlGuia:a.guide_url||'',estadoActa:a.status||'',estadoDocumental:a.document_status||'',provincia:a.province||'',proyecto:a.project||''}))};
+            return{ok:true,esAdmin:false,actas:(filas||[]).map(a=>({codigo:a.act_code,tipo:a.act_type==='CUSTODIO'?'CUSTODIO VIP':'GUARDIA',fecha:a.act_date,receptor:a.receiver_name||'',armas:Array.isArray(a.weapon_serials)?a.weapon_serials:[],urlGuia:a.guide_url||'',rutaGuia:a.guide_storage_path||'',estadoActa:a.status||'',estadoDocumental:a.document_status||'',provincia:a.province||'',proyecto:a.project||''}))};
         }
         if(payload?.accion==='obtener_acta'){
             const acta=await supabaseObtenerActaArmamento(payload.codigo);
@@ -980,7 +1042,7 @@ function adaptarActaSupabaseDetalle(a){
         receptorNombre:a?.receiver_name||'',receptorCedula:a?.receiver_national_id||'',receptorOrigen:a?.receiver_origin||'',cargo:a?.position_title||'',
         provincia:a?.province||'',proyecto:a?.project||'',puesto:a?.post||(puestos.length===1?puestos[0]:puestos.length>1?'VARIOS PUESTOS':''),aptitud:a?.aptitude||'APTA',permiso:a?.permit_reference||'N/A',
         comentario:a?.comment||'',novedad:a?.novelty||'',supervisorNombre:a?.supervisor_name||'',supervisorCedula:a?.supervisor_national_id||'',
-        estadoActa:a?.status||'',estadoDocumental:a?.document_status||'',urlGuia:a?.guide_url||'',alimentadoras:Number(primero.magazines)||0,municiones:Number(primero.ammunition)||0,
+        estadoActa:a?.status||'',estadoDocumental:a?.document_status||'',urlGuia:a?.guide_url||'',rutaGuia:a?.guide_storage_path||'',alimentadoras:Number(primero.magazines)||0,municiones:Number(primero.ammunition)||0,
         armas:items.map(i=>({codigoArma:i.weapon_code||'',serie:i.serial_number||'',clase:i.weapon_class||'',categoria:i.category||'',tipoArma:i.weapon_type||'',marca:i.brand||'',modelo:i.model||'',calibre:i.caliber||'',puesto:i.post||'',urlCredencial:i.credential_url||'',urlArma:i.photo_url||'',estadoActa:i.item_status||''}))
     };
 }
@@ -999,15 +1061,20 @@ async function generarActaArmamento(){
     }
     mostrarErrorActa('');
     const b=document.getElementById('acta-btn-generar');actaGenerando=true;b.disabled=true;
+    let guiaStoragePath='';
     try{
         progresoActa(tieneGuia?'Preparando y cargando la guía PDF…':'Registrando emergencia sin guía…',15);
-        const guia=await actasV3LeerGuiaPdf();
+        let guia=null;
+        if(backendUsaSupabase()&&tieneGuia){
+            const archivo=document.getElementById('acta-guia-pdf').files[0],carga=await supabaseSubirGuiaArmamento(archivo,idSolicitudActaActual,'dispatch');
+            guiaStoragePath=carga.path;guia={storagePath:carga.path};
+        }else if(!backendUsaSupabase())guia=await actasV3LeerGuiaPdf();
         progresoActa('Registrando datos del acta…',20);
         let reg=await registrarActaServidor(d,false,guia);
         if(reg.requiereConfirmacion){
             const codigos=(reg.codigosAnteriores||[]).join(', ');
             const aceptar=confirm(`Una o más armas ya tienen un acta vigente: ${codigos}.\n\nSi continúas, esas actas quedarán INVALIDADAS en el historial y se registrará una nueva acta VIGENTE.\n\n¿Deseas continuar?`);
-            if(!aceptar){mostrarErrorActa('Operación cancelada. No se modificó ninguna acta.');return;}
+            if(!aceptar){if(backendUsaSupabase()&&guiaStoragePath)await supabaseEliminarGuiaArmamento(guiaStoragePath);guiaStoragePath='';mostrarErrorActa('Operación cancelada. No se modificó ninguna acta.');return;}
             progresoActa('Invalidando actas anteriores y registrando la nueva…',30);
             reg=await registrarActaServidor(d,true,guia);
         }
@@ -1019,7 +1086,12 @@ async function generarActaArmamento(){
         progresoActa('Finalizando…',100);
         if(typeof cerrarModalArmamento==='function')cerrarModalArmamento();
         document.getElementById('actas-modal').style.display='none';
-        if(typeof cargarDatos==='function')cargarDatos();
+        if(typeof cargarDatos==='function')await cargarDatos();
+        if(backendUsaSupabase()){
+            invalidarWorkspaceArmamentoSupabase();invalidarWorkspaceDespachoArmamentoSupabase();
+            await Promise.all([cargarWorkspaceArmamentoSupabase(true),cargarWorkspaceDespachoArmamentoSupabase(true)]);
+            if(typeof renderTablaArmamento==='function')renderTablaArmamento();
+        }
     }catch(e){mostrarErrorActa(e.message||String(e));}
     finally{setTimeout(cerrarProgresoActa,350);actaGenerando=false;b.disabled=false;b.textContent='📄 Registrar y generar PDF';}
 }
