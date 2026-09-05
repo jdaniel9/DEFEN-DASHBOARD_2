@@ -46,6 +46,11 @@ function usuarioPuedeGenerarActas() {
     return ['admin','operaciones'].includes(rolActual());
 }
 
+function usuarioPuedeRegularizarArmamento() {
+    return ['admin','operaciones'].includes(rolActual())
+        && (!backendUsaSupabase() || SUPABASE_WEAPON_REGULARIZATION_ENABLED);
+}
+
 
 function usuarioPuedeVerArmamentoDetalle() {
     return !ROLES_SIN_ARMAMENTO.includes(rolActual());
@@ -76,6 +81,9 @@ function aplicarPermisosUI() {
     // Las actas de armamento son exclusivas de ADMIN y OPERACIONES.
     document.querySelectorAll('[data-permiso-actas]').forEach(el => {
         el.style.display = usuarioPuedeGenerarActas() ? '' : 'none';
+    });
+    document.querySelectorAll('[data-permiso-regularizacion]').forEach(el => {
+        el.style.display = usuarioPuedeRegularizarArmamento() ? '' : 'none';
     });
     document.querySelectorAll('[data-permiso-asistencia]').forEach(el => {
         el.style.display = usuarioPuedeVerAsistencia() ? '' : 'none';
