@@ -394,7 +394,8 @@ function renderTablaArmamento() {
     tbody.innerHTML = filtradas.map((a, i) => {
         const esActiva = normalizarTexto(a.estado) === 'activo';
         const estadoNormalizado = normalizarTexto(a.estado);
-        const puedeGestionarNovedad = typeof usuarioPuedeGenerarActas === 'function' && usuarioPuedeGenerarActas();
+        const puedeGestionarNovedad = typeof usuarioPuedeGestionarNovedadArmamento === 'function' && usuarioPuedeGestionarNovedadArmamento();
+        const puedeGestionarMantenimiento = typeof usuarioPuedeGestionarMantenimientoArmamento === 'function' && usuarioPuedeGestionarMantenimientoArmamento();
         const puedeDeclararNovedad = ['activo','en campo','rastrillo'].includes(estadoNormalizado);
         const puedeRecuperar = ['perdida','confiscada'].includes(estadoNormalizado);
         const tieneUbicacion = esActiva && a.puesto && a.provincia && a.proyecto;
@@ -446,7 +447,7 @@ function renderTablaArmamento() {
                     : '<span style="color:#e2e8f0;">—</span>'}
             </td>
             <td style="padding:6px 8px;white-space:nowrap;">
-                ${puedeGestionarNovedad && !['perdida','confiscada'].includes(estadoNormalizado)
+                ${puedeGestionarMantenimiento && !['perdida','confiscada'].includes(estadoNormalizado)
                     ? `<button onclick="abrirMantenimientoArmamento('${encodeURIComponent(a.serie||'')}')" style="font-size:8px;font-weight:900;background:${a.idMantenimientoActual?'#7c3aed':'#0f766e'};color:white;padding:3px 7px;border-radius:5px;border:none;cursor:pointer" title="${a.idMantenimientoActual?'Gestionar mantenimiento '+(a.codigoMantenimiento||''):'Reportar condición o iniciar mantenimiento'}">🔧 ${a.idMantenimientoActual?'Gestionar':'Mantenimiento'}</button>`
                     : '<span style="color:#e2e8f0;">—</span>'}
             </td>
@@ -470,7 +471,7 @@ function asegurarModalNovedadArmamento() {
 }
 
 function abrirNovedadArmamento(serieCodificada, modo) {
-    if (typeof usuarioPuedeGenerarActas === 'function' && !usuarioPuedeGenerarActas()) return alert('Solo Administrador y Operaciones pueden registrar novedades del armamento.');
+    if (typeof usuarioPuedeGestionarNovedadArmamento === 'function' && !usuarioPuedeGestionarNovedadArmamento()) return alert('Esta función todavía no está habilitada en la migración actual.');
     const serie = decodeURIComponent(serieCodificada || ''), arma = (armamentoDetalle || []).find(a => String(a.serie || '') === serie);
     if (!arma) return alert('No se encontró el arma seleccionada.');
     asegurarModalNovedadArmamento(); armaNovedadActual = { arma, modo };
@@ -511,7 +512,7 @@ function asegurarModalMantenimientoArmamento(){
 }
 function hoyMantenimiento(){return typeof fechaISOHoy==='function'?fechaISOHoy():new Date().toISOString().slice(0,10);}
 async function abrirMantenimientoArmamento(serieCodificada){
-    if(typeof usuarioPuedeGenerarActas==='function'&&!usuarioPuedeGenerarActas())return alert('Solo Administrador y Operaciones pueden gestionar mantenimientos.');
+    if(typeof usuarioPuedeGestionarMantenimientoArmamento==='function'&&!usuarioPuedeGestionarMantenimientoArmamento())return alert('Esta función todavía no está habilitada en la migración actual.');
     const serie=decodeURIComponent(serieCodificada||''),arma=(armamentoDetalle||[]).find(a=>String(a.serie||'')===serie);if(!arma)return alert('No se encontró el arma seleccionada.');
     asegurarModalMantenimientoArmamento();mantenimientoArmaActual={arma,mantenimiento:null};document.getElementById('mantenimiento-armamento-modal').style.display='flex';document.getElementById('mtto-modal-resumen').textContent=`SERIE ${arma.serie} · ${arma.estado} · ${arma.condicionTecnica||'BUEN ESTADO'}`;
     const c=document.getElementById('mtto-modal-contenido');c.innerHTML='<div style="padding:24px;text-align:center;color:#64748b;font-size:11px">Consultando estado técnico…</div>';
@@ -550,7 +551,7 @@ function asegurarModalHistorialMovimientos() {
 function filtrosHistorialMovimientos(exportar=false){return {accion:'listar_historial_movimientos',token:tokenSesionActual(),consulta:document.getElementById('hist-mov-consulta')?.value.trim()||'',tipo:document.getElementById('hist-mov-tipo')?.value||'',estado:document.getElementById('hist-mov-estado')?.value||'',provincia:document.getElementById('hist-mov-provincia')?.value||'',proyecto:document.getElementById('hist-mov-proyecto')?.value||'',desde:document.getElementById('hist-mov-desde')?.value||'',hasta:document.getElementById('hist-mov-hasta')?.value||'',pagina:paginaHistorialMovimientos,limite:100,exportar};}
 function llenarCatalogoHistorial(id,valores,etiqueta){const select=document.getElementById(id),anterior=select.value;select.innerHTML=`<option value="">${etiqueta}</option>`+(valores||[]).map(v=>`<option value="${histMovEsc(v)}">${histMovEsc(v)}</option>`).join('');if([...select.options].some(o=>o.value===anterior))select.value=anterior;}
 function actualizarCatalogosHistorial(catalogos){catalogosHistorialMovimientos=catalogos||catalogosHistorialMovimientos;llenarCatalogoHistorial('hist-mov-tipo',catalogosHistorialMovimientos.tipos,'Todos los movimientos');llenarCatalogoHistorial('hist-mov-estado',catalogosHistorialMovimientos.estados,'Todos los estados');llenarCatalogoHistorial('hist-mov-provincia',catalogosHistorialMovimientos.provincias,'Todas las provincias');llenarCatalogoHistorial('hist-mov-proyecto',catalogosHistorialMovimientos.proyectos,'Todos los proyectos');}
-async function abrirHistorialMovimientosArmamento(){if(typeof usuarioPuedeGenerarActas==='function'&&!usuarioPuedeGenerarActas())return alert('Solo Administrador y Operaciones pueden consultar este historial.');asegurarModalHistorialMovimientos();document.getElementById('historial-movimientos-modal').style.display='flex';await consultarHistorialMovimientos(1);}
+async function abrirHistorialMovimientosArmamento(){if(typeof usuarioPuedeVerHistorialMovimientosArmamento==='function'&&!usuarioPuedeVerHistorialMovimientosArmamento())return alert('Esta función todavía no está habilitada en la migración actual.');asegurarModalHistorialMovimientos();document.getElementById('historial-movimientos-modal').style.display='flex';await consultarHistorialMovimientos(1);}
 function cerrarHistorialMovimientosArmamento(){const modal=document.getElementById('historial-movimientos-modal');if(modal)modal.style.display='none';}
 function limpiarFiltrosHistorialMovimientos(){['hist-mov-consulta','hist-mov-tipo','hist-mov-estado','hist-mov-provincia','hist-mov-proyecto','hist-mov-desde','hist-mov-hasta'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});consultarHistorialMovimientos(1);}
 function etiquetaMovimientoHistorial(tipo){return ({ASIGNACION:'Asignación',RETORNO:'Retorno',REGULARIZACION:'Regularización',PERDIDA:'Pérdida/Robada',CONFISCACION:'Confiscación',RECUPERACION:'Recuperación',NOVEDAD_TECNICA:'Novedad técnica',MANTENIMIENTO_LOCAL:'Mantenimiento local',MANTENIMIENTO_ENVIO:'Envío al armero',MANTENIMIENTO_RESULTADO:'Resultado de mantenimiento',MANTENIMIENTO_RETORNO:'Retorno de mantenimiento'}[tipo]||tipo||'Movimiento');}
