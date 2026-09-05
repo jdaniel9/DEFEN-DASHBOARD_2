@@ -395,3 +395,126 @@ async function supabaseListarActasArmamento(limite = 200) {
 async function supabaseObtenerActaArmamento(codigo) {
     return supabaseRpc('get_weapon_act_detail', { p_act_code: codigo });
 }
+
+let supabaseWeaponDispatchWorkspace = null;
+let supabaseWeaponDispatchPromise = null;
+
+function adaptarWorkspaceDespachoArmamento(workspace) {
+    if (!workspace || workspace.schema_version !== 1
+        || !Array.isArray(workspace.people) || !Array.isArray(workspace.in_transit)) {
+        throw new Error('Supabase devolvió un contrato de despacho incompatible.');
+    }
+    personalActas = workspace.people.map(persona => ({
+        idAsignacion: persona.assignment_id || '',
+        personalId: persona.personnel_id || '',
+        cedula: persona.national_id || '',
+        nombre: persona.full_name || '',
+        cargo: persona.is_support ? 'PERSONAL DE APOYO' : '',
+        provinciaId: persona.province_id || null,
+        provincia: persona.province || '',
+        proyectoId: persona.project_id || null,
+        proyecto: persona.project || '',
+        puestoId: persona.post_id || null,
+        puesto: persona.post || '',
+        estado: persona.assignment_status || ''
+    }));
+    supabaseWeaponDispatchWorkspace = workspace;
+    return workspace;
+}
+
+async function cargarWorkspaceDespachoArmamentoSupabase(forzar = false) {
+    if (!backendUsaSupabase()) return null;
+    if (supabaseWeaponDispatchWorkspace && !forzar) return supabaseWeaponDispatchWorkspace;
+    if (supabaseWeaponDispatchPromise && !forzar) return supabaseWeaponDispatchPromise;
+    supabaseWeaponDispatchPromise = (async () => {
+        const workspace = await supabaseRpc('get_weapon_dispatch_workspace');
+        return adaptarWorkspaceDespachoArmamento(workspace);
+    })();
+    try { return await supabaseWeaponDispatchPromise; }
+    finally { supabaseWeaponDispatchPromise = null; }
+}
+
+function invalidarWorkspaceDespachoArmamentoSupabase() {
+    supabaseWeaponDispatchWorkspace = null;
+    supabaseWeaponDispatchPromise = null;
+}
+
+function supabaseRutaStorage(ruta) {
+    return String(ruta || '').split('/').map(encodeURIComponent).join('/');
+}
+
+async function supabaseSubirGuiaArmamento(archivo, solicitudId, carpeta = 'dispatch') {
+    if (!(archivo instanceof Blob)) throw new Error('Selecciona la guía PDF.');
+    if (archivo.type && archivo.type !== 'application/pdf') throw new Error('La guía debe estar en formato PDF.');
+    if (archivo.size > 10 * 1024 * 1024) throw new Error('La guía PDF no puede superar 10 MB.');
+    const id = String(solicitudId || '').trim();
+    if (!/^[0-9a-f-]{36}$/i.test(id)) throw new Error('La solicitud de la guía no tiene un identificador válido.');
+    const ahora = new Date();
+    const ruta = `${carpeta}/${ahora.getUTCFullYear()}/${String(ahora.getUTCMonth() + 1).padStart(2, '0')}/${id}.pdf`;
+    let token = await supabaseTokenVigente();
+    const subir = async () => {
+        const respuesta = await fetch(`${SUPABASE_URL}/storage/v1/object/weapon-guides/${supabaseRutaStorage(ruta)}`, {
+            method: 'POST',
+            headers: { ...supabaseHeaders(token), 'Content-Type': 'application/pdf', 'x-upsert': 'false' },
+            body: archivo
+        });
+        if (respuesta.ok) return { path: ruta, reused: false };
+        const texto = await respuesta.text();
+        let cuerpo = null;
+        try { cuerpo = texto ? JSON.parse(texto) : null; } catch (_) { cuerpo = texto; }
+        if (respuesta.status === 409) return { path: ruta, reused: true };
+        const error = new Error(cuerpo?.message || cuerpo?.error || `No se pudo cargar la guía (HTTP ${respuesta.status}).`);
+        error.status = respuesta.status;
+        throw error;
+    };
+    try { return await subir(); }
+    catch (error) {
+        if (error.status !== 401) throw error;
+        token = await supabaseRenovarSesion();
+        return subir();
+    }
+}
+
+async function supabaseEliminarGuiaArmamento(ruta) {
+    if (!ruta) return;
+    let token = await supabaseTokenVigente();
+    const eliminar = () => supabasePeticion(
+        `/storage/v1/object/weapon-guides/${supabaseRutaStorage(ruta)}`,
+        { method: 'DELETE', headers: supabaseHeaders(token) }
+    );
+    try { return await eliminar(); }
+    catch (error) {
+        if (error.status !== 401) throw error;
+        token = await supabaseRenovarSesion();
+        return eliminar();
+    }
+}
+
+async function supabaseUrlFirmadaGuiaArmamento(ruta, segundos = 300) {
+    const respuesta = await supabaseRpcStorageFirmada(ruta, segundos);
+    const firmada = respuesta?.signedURL || respuesta?.signedUrl || '';
+    if (!firmada) throw new Error('No se pudo generar el enlace temporal de la guía.');
+    return firmada.startsWith('http') ? firmada : `${SUPABASE_URL}/storage/v1${firmada}`;
+}
+
+async function supabaseRpcStorageFirmada(ruta, segundos) {
+    let token = await supabaseTokenVigente();
+    const crear = () => supabasePeticion(
+        `/storage/v1/object/sign/weapon-guides/${supabaseRutaStorage(ruta)}`,
+        { method: 'POST', headers: supabaseHeaders(token, true), body: JSON.stringify({ expiresIn: segundos }) }
+    );
+    try { return await crear(); }
+    catch (error) {
+        if (error.status !== 401) throw error;
+        token = await supabaseRenovarSesion();
+        return crear();
+    }
+}
+
+async function supabaseConfirmarLlegadaArmamento(loteId, fecha = new Date().toISOString(), observacion = '') {
+    return supabaseRpc('receive_weapon_batch', {
+        p_batch_id: loteId,
+        p_received_at: fecha,
+        p_observation: observacion || null
+    });
+}
