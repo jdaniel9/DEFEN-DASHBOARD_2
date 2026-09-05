@@ -974,14 +974,14 @@ async function postActas(payload,timeoutMs=45000){
     }finally{clearTimeout(timeout);}
 }
 function adaptarActaSupabaseDetalle(a){
-    const items=Array.isArray(a?.items)?a.items:[],primero=items[0]||{};
+    const items=Array.isArray(a?.items)?a.items:[],primero=items[0]||{},puestos=[...new Set(items.map(i=>i.post).filter(Boolean))];
     return{
         codigoActa:a?.act_code||'',tipoActa:a?.act_type==='CUSTODIO'?'CUSTODIO VIP':'GUARDIA',fecha:a?.act_date||'',ciudad:a?.city||'',
         receptorNombre:a?.receiver_name||'',receptorCedula:a?.receiver_national_id||'',receptorOrigen:a?.receiver_origin||'',cargo:a?.position_title||'',
-        provincia:a?.province||'',proyecto:a?.project||'',puesto:a?.post||'',aptitud:a?.aptitude||'APTA',permiso:a?.permit_reference||'N/A',
+        provincia:a?.province||'',proyecto:a?.project||'',puesto:a?.post||(puestos.length===1?puestos[0]:puestos.length>1?'VARIOS PUESTOS':''),aptitud:a?.aptitude||'APTA',permiso:a?.permit_reference||'N/A',
         comentario:a?.comment||'',novedad:a?.novelty||'',supervisorNombre:a?.supervisor_name||'',supervisorCedula:a?.supervisor_national_id||'',
         estadoActa:a?.status||'',estadoDocumental:a?.document_status||'',urlGuia:a?.guide_url||'',alimentadoras:Number(primero.magazines)||0,municiones:Number(primero.ammunition)||0,
-        armas:items.map(i=>({codigoArma:i.weapon_code||'',serie:i.serial_number||'',clase:i.weapon_class||'',categoria:i.category||'',tipoArma:i.weapon_type||'',marca:i.brand||'',modelo:i.model||'',calibre:i.caliber||'',urlCredencial:i.credential_url||'',urlArma:i.photo_url||'',estadoActa:i.item_status||''}))
+        armas:items.map(i=>({codigoArma:i.weapon_code||'',serie:i.serial_number||'',clase:i.weapon_class||'',categoria:i.category||'',tipoArma:i.weapon_type||'',marca:i.brand||'',modelo:i.model||'',calibre:i.caliber||'',puesto:i.post||'',urlCredencial:i.credential_url||'',urlArma:i.photo_url||'',estadoActa:i.item_status||''}))
     };
 }
 async function generarActaArmamento(){
