@@ -530,3 +530,7 @@ async function supabaseSubsanarGuiaArmamento(codigoActa, ruta) {
         p_guide_storage_path: ruta
     });
 }
+
+async function supabaseIniciarRetornoArmamento(payload) {
+    return supabaseRpc('start_weapon_return', { p_payload: payload });
+}
