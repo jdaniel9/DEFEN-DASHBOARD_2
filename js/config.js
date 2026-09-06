@@ -8,6 +8,7 @@ const BACKEND_PROVIDER = 'supabase';
 const SUPABASE_READ_ONLY_PHASE = true;
 const SUPABASE_WEAPON_REGULARIZATION_ENABLED = true;
 const SUPABASE_WEAPON_DISPATCH_ENABLED = true;
+const SUPABASE_WEAPON_GUIDE_REMEDIATION_ENABLED = true;
 
 // Supabase: la clave publicable puede estar en el navegador. Nunca colocar
 // aquí la service_role ni la contraseña de la base de datos.
@@ -98,4 +99,5 @@ const PUESTOS_LOCALES = {
         ]
     }
 };
+ 
  
