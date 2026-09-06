@@ -518,3 +518,15 @@ async function supabaseConfirmarLlegadaArmamento(loteId, fecha = new Date().toIS
         p_observation: observacion || null
     });
 }
+
+async function supabaseListarGuiasPendientesArmamento() {
+    const respuesta = await supabaseRpc('list_pending_weapon_guides');
+    return Array.isArray(respuesta) ? respuesta : [];
+}
+
+async function supabaseSubsanarGuiaArmamento(codigoActa, ruta) {
+    return supabaseRpc('attach_pending_weapon_guide', {
+        p_act_code: codigoActa,
+        p_guide_storage_path: ruta
+    });
+}
