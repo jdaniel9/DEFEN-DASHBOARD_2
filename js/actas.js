@@ -761,6 +761,7 @@ function actasPestanaDisponible(vista){
     if(vista==='historial')return true;
     if(vista==='regularizacion')return typeof SUPABASE_WEAPON_REGULARIZATION_ENABLED!=='undefined'&&SUPABASE_WEAPON_REGULARIZATION_ENABLED;
     if(['nueva','transito'].includes(vista))return typeof SUPABASE_WEAPON_DISPATCH_ENABLED!=='undefined'&&SUPABASE_WEAPON_DISPATCH_ENABLED;
+    if(vista==='pendientes')return typeof SUPABASE_WEAPON_GUIDE_REMEDIATION_ENABLED!=='undefined'&&SUPABASE_WEAPON_GUIDE_REMEDIATION_ENABLED;
     return !SUPABASE_READ_ONLY_PHASE;
 }
 function armasDisponiblesRetorno(){return (armamentoDetalle||[]).filter(a=>['activo','en campo'].includes(normalizarTexto(a.estado))&&!a.bloqueadaAsignacion&&!a.idMantenimientoActual&&a.provincia&&a.proyecto&&a.serie);}
@@ -870,7 +871,7 @@ async function cargarGuiasPendientes(){
     const c=document.getElementById('actas-pendientes-lista');if(!c)return;
     c.innerHTML='<p style="color:#64748b">Cargando movimientos pendientes…</p>';
     try{
-        const r=await postActas({accion:'listar_guias_pendientes',token:tokenSesionActual()});
+        const r=backendUsaSupabase()?{ok:true,pendientes:(await supabaseListarGuiasPendientesArmamento()).map(a=>({codigo:a.act_code,tipo:a.act_type==='CUSTODIO'?'CUSTODIO VIP':'GUARDIA',receptor:a.receiver_name||'',fecha:a.act_date||'',provincia:a.province||'',proyecto:a.project||'',armas:Array.isArray(a.weapon_serials)?a.weapon_serials:[],tipoPendiente:'ACTA'}))}:await postActas({accion:'listar_guias_pendientes',token:tokenSesionActual()});
         if(!r.ok)throw new Error(r.mensaje);
         const pendientes=r.pendientes||[];
         if(!pendientes.length){c.innerHTML='<div style="background:#dcfce7;color:#166534;border:1px solid #86efac;border-radius:12px;padding:14px;font-size:11px;font-weight:800">✓ No existen actas pendientes de guía.</div>';return;}
@@ -887,15 +888,24 @@ async function actasV3ArchivoPdfABase64(archivo){
 }
 async function subsanarGuiaPendiente(codigo,tipoPendiente='ACTA'){
     const input=document.getElementById(`guia-pendiente-${codigo}`),archivo=input?.files?.[0];
+    let rutaSubida='';
     try{
-        const guia=await actasV3ArchivoPdfABase64(archivo);
+        if(!archivo)throw new Error('Selecciona la guía PDF.');
+        if(!archivo.name.toLowerCase().endsWith('.pdf')||(archivo.type&&archivo.type!=='application/pdf'))throw new Error('La guía debe estar en formato PDF.');
+        if(archivo.size>10*1024*1024)throw new Error('La guía PDF no puede superar 10 MB.');
         if(!confirm(`¿Adjuntar ${archivo.name} a ${codigo}? La misma guía quedará asociada a todas las armas de esta acta.`))return;
         progresoActa('Subiendo guía y actualizando el movimiento…',45);
-        const payload=tipoPendiente==='MOVIMIENTO'?{accion:'subsanar_guia_movimiento',token:tokenSesionActual(),loteId:codigo,guia}:{accion:'subsanar_guia_acta',token:tokenSesionActual(),codigo,guia};
-        const r=await postActas(payload,90000);
+        let r;
+        if(backendUsaSupabase()){
+            const carga=await supabaseSubirGuiaArmamento(archivo,nuevoIdSolicitudActa(),'remediation');rutaSubida=carga.path;
+            r=await supabaseSubsanarGuiaArmamento(codigo,rutaSubida);
+        }else{
+            const guia=await actasV3ArchivoPdfABase64(archivo),payload=tipoPendiente==='MOVIMIENTO'?{accion:'subsanar_guia_movimiento',token:tokenSesionActual(),loteId:codigo,guia}:{accion:'subsanar_guia_acta',token:tokenSesionActual(),codigo,guia};
+            r=await postActas(payload,90000);
+        }
         if(!r.ok)throw new Error(r.mensaje||'No se pudo subsanar la guía.');
-        progresoActa('Movimiento subsanado.',100);alert(r.mensaje||'Guía adjuntada correctamente.');await cargarGuiasPendientes();
-    }catch(e){alert(e.message||String(e));}finally{setTimeout(cerrarProgresoActa,350);}
+        rutaSubida='';progresoActa('Movimiento subsanado.',100);alert(r.mensaje||'Guía adjuntada correctamente.');invalidarWorkspaceArmamentoSupabase();invalidarWorkspaceDespachoArmamentoSupabase();await cargarGuiasPendientes();
+    }catch(e){if(backendUsaSupabase()&&rutaSubida)try{await supabaseEliminarGuiaArmamento(rutaSubida);}catch(_){ }alert(e.message||String(e));}finally{setTimeout(cerrarProgresoActa,350);}
 }
 async function cargarHistorialIntegrado(){
     const c=document.getElementById('historial-actas-lista');
@@ -923,10 +933,10 @@ async function cargarHistorialIntegrado(){
 
 function actasV3PrepararCampos(){const mun=document.getElementById('acta-municiones');if(mun){const bloque=mun.parentElement;bloque.querySelector('label').textContent='Municiones por arma';if(!document.getElementById('acta-alimentadoras')){const nuevo=document.createElement('div');nuevo.innerHTML='<label class="acta-label">Alimentadoras por arma</label><input id="acta-alimentadoras" type="number" min="1" max="100" value="1" class="acta-input" oninput="actasV3ActualizarMuniciones(true)"><p id="acta-municiones-ayuda" class="acta-help"></p>';bloque.parentElement.insertBefore(nuevo,bloque);}}const cargo=document.getElementById('acta-cargo-select');if(cargo&&!cargo.querySelector('option[value=""]'))cargo.insertAdjacentHTML('afterbegin','<option value="">OPCIONAL / SIN CARGO</option>');}
 function actasV3PrepararValidacionesCampos(){const cedula=document.getElementById('acta-receptor-cedula');if(cedula){cedula.inputMode='numeric';cedula.maxLength=10;if(!cedula.dataset.soloDigitos){cedula.addEventListener('input',()=>{cedula.value=cedula.value.replace(/\D/g,'').slice(0,10);});cedula.dataset.soloDigitos='1';}}const limites={'acta-receptor-nombre':120,'acta-ciudad':80,'acta-proyecto-otro':160,'acta-puesto-otro':160,'acta-cargo-otro':100,'acta-modelo':100,'acta-comentario':500,'acta-novedad':500,'acta-supervisor-nombre':120,'acta-supervisor-cedula':30,'acta-supervisor-cedula-reg':30};Object.entries(limites).forEach(([id,max])=>{const e=document.getElementById(id);if(e)e.maxLength=max;});}
-function actasV3PrepararGuia(){if(document.getElementById('acta-guia-pdf'))return;const novedad=document.getElementById('acta-novedad'),card=novedad?.parentElement?.parentElement;if(!card)return;const bloque=document.createElement('div');bloque.style.gridColumn='1/-1';bloque.innerHTML=`<label class="acta-label">Guía de movilización (PDF · máximo 10 MB)</label><input id="acta-guia-pdf" type="file" accept="application/pdf,.pdf" class="acta-input"><p class="acta-help">Obligatoria durante esta fase. La excepción administrativa se habilitará junto con el módulo Pendientes de subsanar.</p>`;card.appendChild(bloque);}
+function actasV3PrepararGuia(){if(document.getElementById('acta-guia-pdf'))return;const novedad=document.getElementById('acta-novedad'),card=novedad?.parentElement?.parentElement;if(!card)return;const bloque=document.createElement('div');bloque.style.gridColumn='1/-1';bloque.innerHTML=`<label class="acta-label">Guía de movilización (PDF · máximo 10 MB)</label><input id="acta-guia-pdf" type="file" accept="application/pdf,.pdf" class="acta-input"><p class="acta-help">Obligatoria para Operaciones. El Administrador puede autorizar una emergencia sin guía, que quedará en Pendientes de subsanar.</p>`;card.appendChild(bloque);}
 function actasV3LimpiarGuia(){const guia=document.getElementById('acta-guia-pdf');if(guia)guia.value='';}
 async function actasV3LeerGuiaPdf(){const archivo=document.getElementById('acta-guia-pdf')?.files?.[0];return archivo?actasV3ArchivoPdfABase64(archivo):null;}
-function actasV3ValidarGuiaCliente(){const archivo=document.getElementById('acta-guia-pdf')?.files?.[0];if(!archivo&&backendUsaSupabase())return 'La guía PDF es obligatoria durante esta fase. La excepción de Administrador se habilitará con Pendientes de subsanar.';if(!archivo&&rolActual()!=='admin')return 'La guía PDF es obligatoria para Operaciones.';if(archivo&&!archivo.name.toLowerCase().endsWith('.pdf'))return 'La guía debe tener extensión .pdf.';if(archivo&&archivo.size>10*1024*1024)return 'La guía PDF no puede superar 10 MB.';return '';}
+function actasV3ValidarGuiaCliente(){const archivo=document.getElementById('acta-guia-pdf')?.files?.[0],excepcionActiva=typeof SUPABASE_WEAPON_GUIDE_REMEDIATION_ENABLED!=='undefined'&&SUPABASE_WEAPON_GUIDE_REMEDIATION_ENABLED;if(!archivo&&backendUsaSupabase()&&!(rolActual()==='admin'&&excepcionActiva))return 'La guía PDF es obligatoria para Operaciones. Solo el Administrador puede registrar una emergencia sin guía.';if(!archivo&&rolActual()!=='admin')return 'La guía PDF es obligatoria para Operaciones.';if(archivo&&!archivo.name.toLowerCase().endsWith('.pdf'))return 'La guía debe tener extensión .pdf.';if(archivo&&archivo.size>10*1024*1024)return 'La guía PDF no puede superar 10 MB.';return '';}
 function actasV3ActualizarMuniciones(ajustar=false){const alimentadoras=document.getElementById('acta-alimentadoras'),municiones=document.getElementById('acta-municiones');if(!alimentadoras||!municiones)return;const cantidad=Math.max(1,Math.min(100,Math.trunc(Number(alimentadoras.value)||1))),porAlimentadora=document.getElementById('acta-tipo')?.value==='custodio'?10:5,maximo=cantidad*porAlimentadora;alimentadoras.value=String(cantidad);municiones.max=String(maximo);if(ajustar||Number(municiones.value)>maximo||Number(municiones.value)<0)municiones.value=String(maximo);const ayuda=document.getElementById('acta-municiones-ayuda');if(ayuda)ayuda.textContent=`Máximo ${maximo} municiones por arma (${porAlimentadora} por alimentadora).`;}
 async function abrirGeneradorActa(serie){
     if(typeof usuarioPuedeGenerarActas==='function'&&!usuarioPuedeGenerarActas())return alert('Solo Operaciones y Administrador pueden generar actas de armamento.');
