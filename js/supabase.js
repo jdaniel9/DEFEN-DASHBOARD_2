@@ -322,6 +322,8 @@ function adaptarWeaponWorkspace(workspace) {
         fechaExpiracion: w.expiration_date || '',
         urlCredencial: w.credential_url || '',
         urlImagenArma: w.photo_url || '',
+        rutaCredencial: w.credential_storage_path || '',
+        rutaImagenArma: w.photo_storage_path || '',
         estado: w.state || '',
         provinciaId: w.province_id || null,
         provincia: w.province || '',
@@ -495,6 +497,41 @@ async function supabaseUrlFirmadaGuiaArmamento(ruta, segundos = 300) {
     const firmada = respuesta?.signedURL || respuesta?.signedUrl || '';
     if (!firmada) throw new Error('No se pudo generar el enlace temporal de la guía.');
     return firmada.startsWith('http') ? firmada : `${SUPABASE_URL}/storage/v1${firmada}`;
+}
+
+async function supabaseUrlFirmadaEvidenciaArmamento(ruta, segundos = 300) {
+    const respuesta = await supabaseRpcStorageFirmadaEnBucket('weapon-evidence', ruta, segundos);
+    const firmada = respuesta?.signedURL || respuesta?.signedUrl || '';
+    if (!firmada) throw new Error('No se pudo generar el enlace temporal de la evidencia.');
+    return firmada.startsWith('http') ? firmada : `${SUPABASE_URL}/storage/v1${firmada}`;
+}
+
+async function supabaseEvidenciaArmamentoBase64(ruta) {
+    if (!ruta) return '';
+    const url = await supabaseUrlFirmadaEvidenciaArmamento(ruta, 120);
+    const respuesta = await fetch(url, { cache: 'no-store' });
+    if (!respuesta.ok) throw new Error(`No se pudo descargar la evidencia (HTTP ${respuesta.status}).`);
+    const blob = await respuesta.blob();
+    return new Promise((resolve, reject) => {
+        const lector = new FileReader();
+        lector.onload = () => resolve(String(lector.result || ''));
+        lector.onerror = () => reject(new Error('No se pudo preparar la evidencia para el PDF.'));
+        lector.readAsDataURL(blob);
+    });
+}
+
+async function supabaseRpcStorageFirmadaEnBucket(bucket, ruta, segundos) {
+    let token = await supabaseTokenVigente();
+    const crear = () => supabasePeticion(
+        `/storage/v1/object/sign/${encodeURIComponent(bucket)}/${supabaseRutaStorage(ruta)}`,
+        { method: 'POST', headers: supabaseHeaders(token, true), body: JSON.stringify({ expiresIn: segundos }) }
+    );
+    try { return await crear(); }
+    catch (error) {
+        if (error.status !== 401) throw error;
+        token = await supabaseRenovarSesion();
+        return crear();
+    }
 }
 
 async function supabaseRpcStorageFirmada(ruta, segundos) {
