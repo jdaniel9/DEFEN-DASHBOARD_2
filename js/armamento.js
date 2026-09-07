@@ -420,10 +420,10 @@ function renderTablaArmamento() {
             <td style="padding:6px 8px;">${a.provincia||'—'}</td>
             <td style="padding:6px 8px;">${a.ubicacion||'—'}</td>
             <td style="padding:6px 8px;white-space:nowrap;border-left:2px solid #e0e7ff;">
-                ${a.urlCredencial ? `<button onclick="verImagen('${a.urlCredencial}','Credencial · Serie ${a.serie||''}')" style="font-size:8px;font-weight:800;background:#ede9fe;color:#6d28d9;padding:2px 6px;border-radius:5px;border:none;cursor:pointer;">📇</button>` : '<span style="color:#e2e8f0;">—</span>'}
+                ${(a.rutaCredencial||a.urlCredencial) ? `<button onclick="verEvidenciaArmamento('${encodeURIComponent(a.rutaCredencial||'')}','${encodeURIComponent(a.urlCredencial||'')}','${encodeURIComponent(`Credencial · Serie ${a.serie||''}`)}')" style="font-size:8px;font-weight:800;background:#ede9fe;color:#6d28d9;padding:2px 6px;border-radius:5px;border:none;cursor:pointer;">📇</button>` : '<span style="color:#e2e8f0;">—</span>'}
             </td>
             <td style="padding:6px 8px;white-space:nowrap;border-right:2px solid #e0e7ff;">
-                ${a.urlImagenArma ? `<button onclick="verImagen('${a.urlImagenArma}','Foto del arma · Serie ${a.serie||''}')" style="font-size:8px;font-weight:800;background:#e0f2fe;color:#0369a1;padding:2px 6px;border-radius:5px;border:none;cursor:pointer;">📷</button>` : '<span style="color:#e2e8f0;">—</span>'}
+                ${(a.rutaImagenArma||a.urlImagenArma) ? `<button onclick="verEvidenciaArmamento('${encodeURIComponent(a.rutaImagenArma||'')}','${encodeURIComponent(a.urlImagenArma||'')}','${encodeURIComponent(`Foto del arma · Serie ${a.serie||''}`)}')" style="font-size:8px;font-weight:800;background:#e0f2fe;color:#0369a1;padding:2px 6px;border-radius:5px;border:none;cursor:pointer;">📷</button>` : '<span style="color:#e2e8f0;">—</span>'}
             </td>
             <td style="padding:6px 8px;white-space:nowrap;border-left:2px solid #ddd6fe;">
                 ${a.urlGuiaEnvio ? `<a href="${a.urlGuiaEnvio}" target="_blank" style="font-size:8px;font-weight:800;background:#dbeafe;color:#1d4ed8;padding:2px 6px;border-radius:5px;text-decoration:none;">📄</a>` : '<span style="color:#e2e8f0;">—</span>'}
@@ -630,6 +630,21 @@ function verImagen(url, titulo) {
     document.getElementById('imagen-lightbox').style.display = 'flex';
 }
 
+async function verEvidenciaArmamento(rutaCodificada, urlCodificada, tituloCodificado) {
+    const ruta = decodeURIComponent(rutaCodificada || '');
+    const urlAnterior = decodeURIComponent(urlCodificada || '');
+    const titulo = decodeURIComponent(tituloCodificado || '');
+    try {
+        const url = ruta && typeof supabaseUrlFirmadaEvidenciaArmamento === 'function'
+            ? await supabaseUrlFirmadaEvidenciaArmamento(ruta, 300)
+            : urlAnterior;
+        if (!url) throw new Error('Esta arma todavía no tiene la evidencia disponible.');
+        verImagen(url, titulo);
+    } catch (error) {
+        alert(error.message || String(error));
+    }
+}
+
 function cerrarImagenLightbox() {
     document.getElementById('imagen-lightbox').style.display = 'none';
     document.getElementById('lightbox-img').src = '';
@@ -657,8 +672,8 @@ function exportarExcelArmamento() {
         'Proyecto':      a.proyecto || '',
         'Provincia':     a.provincia || '',
         'Ubicación':     a.ubicacion || '',
-        'Credencial':    a.urlCredencial || '',
-        'Foto Arma':     a.urlImagenArma || ''
+        'Credencial':    (a.rutaCredencial || a.urlCredencial) ? 'DISPONIBLE' : '',
+        'Foto Arma':     (a.rutaImagenArma || a.urlImagenArma) ? 'DISPONIBLE' : ''
     }));
 
     const ws = XLSX.utils.json_to_sheet(filas);
@@ -700,7 +715,7 @@ async function exportarPDFArmamento() {
             a.codigoArma||'—', a.serie||'—', a.clase||'—', a.tipo||'—', a.marca||'—', a.calibre||'—',
             a.categoria||'—', a.fechaEmision?formatFecha(a.fechaEmision):'—', a.fechaExpiracion?formatFecha(a.fechaExpiracion):'—',
             a.estado||'—', a.proyecto||'—', a.provincia||'—', a.ubicacion||'—',
-            a.urlCredencial ? 'Sí' : '—', a.urlImagenArma ? 'Sí' : '—'
+            (a.rutaCredencial||a.urlCredencial) ? 'Sí' : '—', (a.rutaImagenArma||a.urlImagenArma) ? 'Sí' : '—'
         ])),
         headStyles:{halign:'center',valign:'middle', fillColor:DARK, textColor:[255,255,255], fontSize:6.5, cellPadding:2 },
         bodyStyles:{halign:'center',valign:'middle', fontSize:6.5, cellPadding:1.8 },
