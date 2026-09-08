@@ -420,10 +420,10 @@ function renderTablaArmamento() {
             <td style="padding:6px 8px;">${a.provincia||'—'}</td>
             <td style="padding:6px 8px;">${a.ubicacion||'—'}</td>
             <td style="padding:6px 8px;white-space:nowrap;border-left:2px solid #e0e7ff;">
-                ${(a.rutaCredencial||a.urlCredencial) ? `<button onclick="verEvidenciaArmamento('${encodeURIComponent(a.rutaCredencial||'')}','${encodeURIComponent(a.urlCredencial||'')}','${encodeURIComponent(`Credencial · Serie ${a.serie||''}`)}')" style="font-size:8px;font-weight:800;background:#ede9fe;color:#6d28d9;padding:2px 6px;border-radius:5px;border:none;cursor:pointer;">📇</button>` : '<span style="color:#e2e8f0;">—</span>'}
+                ${botonesEvidenciaArmamento(a,'credential')}
             </td>
             <td style="padding:6px 8px;white-space:nowrap;border-right:2px solid #e0e7ff;">
-                ${(a.rutaImagenArma||a.urlImagenArma) ? `<button onclick="verEvidenciaArmamento('${encodeURIComponent(a.rutaImagenArma||'')}','${encodeURIComponent(a.urlImagenArma||'')}','${encodeURIComponent(`Foto del arma · Serie ${a.serie||''}`)}')" style="font-size:8px;font-weight:800;background:#e0f2fe;color:#0369a1;padding:2px 6px;border-radius:5px;border:none;cursor:pointer;">📷</button>` : '<span style="color:#e2e8f0;">—</span>'}
+                ${botonesEvidenciaArmamento(a,'photo')}
             </td>
             <td style="padding:6px 8px;white-space:nowrap;border-left:2px solid #ddd6fe;">
                 ${a.urlGuiaEnvio ? `<a href="${a.urlGuiaEnvio}" target="_blank" style="font-size:8px;font-weight:800;background:#dbeafe;color:#1d4ed8;padding:2px 6px;border-radius:5px;text-decoration:none;">📄</a>` : '<span style="color:#e2e8f0;">—</span>'}
@@ -597,6 +597,58 @@ async function consultarHistorialMovimientos(pagina=1){paginaHistorialMovimiento
 async function obtenerHistorialParaExportar(){const r=await postActas(filtrosHistorialMovimientos(true),90000);if(!r.ok)throw new Error(r.mensaje);if(r.truncado)alert('La exportación se limitó a los 5.000 movimientos más recientes del filtro.');return r.movimientos||[];}
 async function exportarHistorialMovimientosExcel(){try{const movimientos=await obtenerHistorialParaExportar();if(!movimientos.length)return alert('No hay movimientos para exportar.');const filas=movimientos.map((m,i)=>({'N°':i+1,'Fecha efectiva':m.fechaEfectiva,'Fecha registro':m.fechaRegistro,'Serie':m.serie,'Código arma':m.codigoArma,'Movimiento':etiquetaMovimientoHistorial(m.tipoMovimiento),'Estado movimiento':m.estadoMovimiento,'Estado anterior':m.estadoAnterior,'Estado nuevo':m.estadoNuevo,'Provincia origen':m.provinciaOrigen,'Ciudad origen':m.ciudadOrigen,'Proyecto origen':m.proyectoOrigen,'Puesto origen':m.puestoOrigen,'Ubicación origen':m.ubicacionOrigen,'Responsable anterior':m.responsableAnterior,'Cédula anterior':m.cedulaAnterior,'Provincia destino':m.provinciaDestino,'Ciudad destino':m.ciudadDestino,'Proyecto destino':m.proyectoDestino,'Puesto destino':m.puestoDestino,'Ubicación destino':m.ubicacionDestino,'Responsable nuevo':m.responsableNuevo,'Cédula nueva':m.cedulaNuevo,'Acta':m.codigoActa,'Lote':m.loteId,'Usuario registra':m.usuarioRegistra,'Fecha recepción':m.fechaRecepcion,'Usuario recibe':m.usuarioRecepciona,'Observación':m.observacion,'Guía':m.urlGuia}));const ws=XLSX.utils.json_to_sheet(filas);ws['!cols']=Object.keys(filas[0]).map(k=>({wch:Math.min(45,Math.max(12,k.length+2))}));const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Movimientos');XLSX.writeFile(wb,`Historial_Movimientos_DEFEN_${new Date().toISOString().slice(0,10)}.xlsx`);}catch(e){alert(e.message||String(e));}}
 async function exportarHistorialMovimientosPDF(){try{const movimientos=await obtenerHistorialParaExportar();if(!movimientos.length)return alert('No hay movimientos para exportar.');const {jsPDF}=window.jspdf,doc=new jsPDF({orientation:'landscape',unit:'mm',format:'a4'}),fecha=new Date().toLocaleDateString('es-EC');if(typeof dibujarMembretePDF==='function')dibujarMembretePDF(doc,'Historial de Movimientos de Armamento',fecha);doc.setFontSize(13);doc.setFont('helvetica','bold');doc.text(`Historial de Movimientos (${movimientos.length})`,14,28);doc.autoTable({startY:34,margin:{left:8,right:8,top:25,bottom:14},head:[['Fecha','Serie','Movimiento','Estado anterior','Estado nuevo','Origen','Destino','Responsable','Usuario','Acta','Observación']],body:movimientos.map(m=>[m.fechaEfectiva||m.fechaRegistro,m.serie,etiquetaMovimientoHistorial(m.tipoMovimiento),m.estadoAnterior,m.estadoNuevo,[m.provinciaOrigen,m.proyectoOrigen,m.puestoOrigen].filter(Boolean).join(' / '),[m.provinciaDestino,m.proyectoDestino,m.puestoDestino].filter(Boolean).join(' / '),m.responsableNuevo||m.responsableAnterior,m.usuarioRegistra,m.codigoActa,m.observacion]),styles:{fontSize:5.5,cellPadding:1.4,valign:'middle'},headStyles:{fillColor:[15,23,42],textColor:[255,255,255],fontSize:5.7},alternateRowStyles:{fillColor:[248,250,252]},didDrawPage:()=>{if(typeof dibujarMembretePDF==='function')dibujarMembretePDF(doc,'Historial de Movimientos de Armamento',fecha);}});doc.save(`Historial_Movimientos_DEFEN_${new Date().toISOString().slice(0,10)}.pdf`);}catch(e){alert(e.message||String(e));}}
+
+// ── Evidencias privadas (credencial / foto del arma) ──
+function codificarEvidenciaInline(valor){return encodeURIComponent(String(valor||'')).replace(/'/g,'%27');}
+
+function botonesEvidenciaArmamento(a,tipo){
+    const esCredencial=tipo==='credential',ruta=esCredencial?a.rutaCredencial:a.rutaImagenArma,url=esCredencial?a.urlCredencial:a.urlImagenArma,tiene=Boolean(ruta||url),puede=backendUsaSupabase()&&typeof usuarioPuedeGestionarEvidenciasArmamento==='function'&&usuarioPuedeGestionarEvidenciasArmamento(),titulo=`${esCredencial?'Credencial':'Foto del arma'} · Serie ${a.serie||''}`,color=esCredencial?'background:#ede9fe;color:#6d28d9':'background:#e0f2fe;color:#0369a1';
+    const ver=tiene?`<button onclick="verEvidenciaArmamento('${codificarEvidenciaInline(ruta)}','${codificarEvidenciaInline(url)}','${codificarEvidenciaInline(titulo)}')" style="font-size:8px;font-weight:800;${color};padding:2px 6px;border-radius:5px;border:none;cursor:pointer" title="Ver ${esCredencial?'credencial':'fotografía'}">${esCredencial?'📇':'📷'}</button>`:'';
+    const cargar=puede?`<button onclick="gestionarEvidenciaArmamento('${a.idArma}','${tipo}')" style="font-size:8px;font-weight:900;background:${tiene?'#475569':'#f97316'};color:white;padding:2px 6px;border-radius:5px;border:none;cursor:pointer" title="${tiene?'Reemplazar':'Subir'} ${esCredencial?'credencial':'fotografía'}">${tiene?'↻':'＋'}</button>`:'';
+    return ver||cargar?`<div style="display:flex;justify-content:center;gap:3px">${ver}${cargar}</div>`:'<span style="color:#e2e8f0">—</span>';
+}
+
+function evidenciaCanvasBlob(canvas,tipo,calidad){return new Promise((resolve,reject)=>canvas.toBlob(blob=>blob?resolve(blob):reject(new Error('El navegador no pudo comprimir la imagen.')),tipo,calidad));}
+
+async function prepararEvidenciaArmamento(archivo){
+    const permitidos=['image/jpeg','image/png','image/webp'];
+    if(!archivo||!permitidos.includes(String(archivo.type||'').toLowerCase()))throw new Error('Selecciona una imagen JPG, PNG o WEBP.');
+    if(archivo.size>20*1024*1024)throw new Error('La imagen supera 20 MB. Debes reducirla antes de subirla.');
+    if(archivo.size<=5*1024*1024)return archivo;
+    const bitmap=await createImageBitmap(archivo);
+    try{
+        let escala=Math.min(1,2400/Math.max(bitmap.width,bitmap.height));
+        for(let intento=0;intento<7;intento++){
+            const canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round(bitmap.width*escala));canvas.height=Math.max(1,Math.round(bitmap.height*escala));
+            const contexto=canvas.getContext('2d',{alpha:false});contexto.fillStyle='#fff';contexto.fillRect(0,0,canvas.width,canvas.height);contexto.drawImage(bitmap,0,0,canvas.width,canvas.height);
+            const comprimida=await evidenciaCanvasBlob(canvas,'image/jpeg',Math.max(.5,.9-intento*.07));canvas.width=canvas.height=1;
+            if(comprimida.size<=4.8*1024*1024)return comprimida;
+            escala*=.78;
+        }
+        throw new Error('No se pudo reducir la imagen por debajo de 5 MB.');
+    }finally{if(typeof bitmap.close==='function')bitmap.close();}
+}
+
+async function gestionarEvidenciaArmamento(weaponId,tipo){
+    if(!backendUsaSupabase()||typeof usuarioPuedeGestionarEvidenciasArmamento!=='function'||!usuarioPuedeGestionarEvidenciasArmamento())return alert('Solo Administrador y Operaciones pueden gestionar evidencias.');
+    const arma=armamentoDetalle.find(a=>String(a.idArma)===String(weaponId));if(!arma)return alert('No se encontró el arma seleccionada.');
+    const esCredencial=tipo==='credential',rutaAnterior=esCredencial?arma.rutaCredencial:arma.rutaImagenArma,tieneAnterior=Boolean(rutaAnterior||(esCredencial?arma.urlCredencial:arma.urlImagenArma)),nombre=esCredencial?'credencial':'fotografía del arma';
+    const input=document.createElement('input');input.type='file';input.accept='image/jpeg,image/png,image/webp';
+    input.onchange=async()=>{
+        const archivo=input.files?.[0];if(!archivo)return;
+        if(tieneAnterior&&!confirm(`La ${nombre} de la serie ${arma.serie} será reemplazada.\n\n¿Deseas continuar?`))return;
+        let rutaNueva='',registrada=false;
+        try{
+            const preparada=await prepararEvidenciaArmamento(archivo);
+            rutaNueva=await supabaseSubirEvidenciaArmamento(preparada,arma.idArma,tipo);
+            const respuesta=await supabaseRegistrarEvidenciaArmamento(arma.idArma,tipo,rutaNueva);if(!respuesta?.ok)throw new Error('Supabase no confirmó el registro de la evidencia.');registrada=true;
+            let advertencia='';if(rutaAnterior&&rutaAnterior!==rutaNueva){try{await supabaseEliminarEvidenciaArmamento(rutaAnterior);}catch(_){advertencia=' El archivo anterior quedó pendiente de limpieza.';}}
+            invalidarWorkspaceArmamentoSupabase();await cargarWorkspaceArmamentoSupabase(true);renderTablaArmamento();
+            alert(`${esCredencial?'Credencial':'Fotografía'} guardada correctamente.${preparada.size<archivo.size?` Se redujo de ${(archivo.size/1048576).toFixed(1)} MB a ${(preparada.size/1048576).toFixed(1)} MB.`:''}${advertencia}`);
+        }catch(error){if(rutaNueva&&!registrada)try{await supabaseEliminarEvidenciaArmamento(rutaNueva);}catch(_){}alert(error.message||String(error));}
+    };
+    input.click();
+}
 
 // ── Lightbox de imágenes (credencial / foto del arma) ──
 function verImagen(url, titulo) {
