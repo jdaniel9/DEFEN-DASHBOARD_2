@@ -56,6 +56,11 @@ function usuarioPuedeRegularizarArmamento() {
         && (!backendUsaSupabase() || SUPABASE_WEAPON_REGULARIZATION_ENABLED);
 }
 
+function usuarioPuedeGestionarEvidenciasArmamento() {
+    return ['admin','operaciones'].includes(rolActual())
+        && (!backendUsaSupabase() || SUPABASE_WEAPON_EVIDENCE_ENABLED);
+}
+
 function usuarioPuedeGestionarNovedadArmamento() {
     return ['admin','operaciones'].includes(rolActual())
         && (!backendUsaSupabase() || !SUPABASE_READ_ONLY_PHASE);
