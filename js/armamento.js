@@ -466,7 +466,21 @@ function asegurarModalNovedadArmamento() {
     const modal = document.createElement('div');
     modal.id = 'novedad-armamento-modal';
     modal.style.cssText = 'display:none;position:fixed;inset:0;z-index:23000;background:rgba(15,23,42,.82);align-items:center;justify-content:center;padding:18px';
-    modal.innerHTML = `<div style="width:100%;max-width:510px;background:white;border-radius:16px;overflow:hidden;box-shadow:0 28px 80px rgba(0,0,0,.45)"><div style="background:#0f172a;color:white;padding:15px 18px;display:flex;align-items:center;gap:10px"><div style="flex:1"><h3 id="novedad-armamento-titulo" style="margin:0;font-size:15px;font-weight:900">Novedad de armamento</h3><p id="novedad-armamento-serie" style="margin:3px 0 0;color:#94a3b8;font-size:10px"></p></div><button onclick="cerrarNovedadArmamento()" style="border:0;border-radius:8px;background:rgba(255,255,255,.12);color:white;padding:6px 10px;cursor:pointer">✕</button></div><div style="padding:17px"><div id="novedad-armamento-tipo-wrap"><label style="display:block;font-size:10px;font-weight:900;color:#475569;margin-bottom:5px">Tipo de novedad</label><select id="novedad-armamento-tipo" style="width:100%;padding:9px;border:1px solid #cbd5e1;border-radius:8px;font-size:11px"><option value="Perdida">Perdida/Robada</option><option value="Confiscada">Confiscada</option></select></div><div id="novedad-armamento-destino-wrap" style="display:none"><label style="display:block;font-size:10px;font-weight:900;color:#475569;margin-bottom:5px">Rastrillo de destino</label><select id="novedad-armamento-destino" style="width:100%;padding:9px;border:1px solid #cbd5e1;border-radius:8px;font-size:11px"><option value="">Selecciona destino</option><option value="GUAYAS">GUAYAS · Guayaquil / Matriz</option><option value="MANABI">MANABÍ · Manta / Sucursal</option><option value="PICHINCHA">PICHINCHA · Quito / Sucursal</option></select></div><div style="margin-top:10px"><label style="display:block;font-size:10px;font-weight:900;color:#475569;margin-bottom:5px">Fecha efectiva</label><input id="novedad-armamento-fecha" type="date" style="width:100%;padding:9px;border:1px solid #cbd5e1;border-radius:8px;font-size:11px"></div><div style="margin-top:10px"><label style="display:block;font-size:10px;font-weight:900;color:#475569;margin-bottom:5px">Observación</label><textarea id="novedad-armamento-observacion" maxlength="500" rows="3" placeholder="Comentario o detalle de la novedad" style="width:100%;padding:9px;border:1px solid #cbd5e1;border-radius:8px;font-size:11px;resize:vertical"></textarea></div><p id="novedad-armamento-ayuda" style="margin:10px 0 0;color:#64748b;font-size:10px;line-height:1.4"></p><button id="novedad-armamento-guardar" onclick="guardarNovedadArmamento()" style="width:100%;margin-top:14px;border:0;border-radius:9px;background:#dc2626;color:white;padding:10px;font-size:11px;font-weight:900;cursor:pointer">Guardar novedad</button></div></div>`;
+    modal.innerHTML = `<div style="width:100%;max-width:510px;background:white;border-radius:16px;overflow:hidden;box-shadow:0 28px 80px rgba(0,0,0,.45)">
+      <div style="background:#0f172a;color:white;padding:15px 18px;display:flex;align-items:center;gap:10px">
+        <div style="flex:1"><h3 id="novedad-armamento-titulo" style="margin:0;font-size:15px;font-weight:900">Novedad de armamento</h3><p id="novedad-armamento-serie" style="margin:3px 0 0;color:#94a3b8;font-size:10px"></p></div>
+        <button onclick="cerrarNovedadArmamento()" style="border:0;border-radius:8px;background:rgba(255,255,255,.12);color:white;padding:6px 10px;cursor:pointer">✕</button>
+      </div>
+      <div style="padding:17px">
+        <div id="novedad-armamento-tipo-wrap"><label style="display:block;font-size:10px;font-weight:900;color:#475569;margin-bottom:5px">Tipo de novedad</label><select id="novedad-armamento-tipo" style="width:100%;padding:9px;border:1px solid #cbd5e1;border-radius:8px;font-size:11px"><option value="Perdida">Perdida/Robada</option><option value="Confiscada">Confiscada</option></select></div>
+        <div id="novedad-armamento-destino-wrap" style="display:none"><label style="display:block;font-size:10px;font-weight:900;color:#475569;margin-bottom:5px">Rastrillo de destino</label><select id="novedad-armamento-destino" style="width:100%;padding:9px;border:1px solid #cbd5e1;border-radius:8px;font-size:11px"><option value="">Selecciona destino</option><option value="GUAYAS">GUAYAS · Guayaquil / Matriz</option><option value="MANABI">MANABÍ · Manta / Sucursal</option><option value="PICHINCHA">PICHINCHA · Quito / Sucursal</option></select></div>
+        <div style="margin-top:10px"><label style="display:block;font-size:10px;font-weight:900;color:#475569;margin-bottom:5px">Fecha efectiva</label><input id="novedad-armamento-fecha" type="date" style="width:100%;padding:9px;border:1px solid #cbd5e1;border-radius:8px;font-size:11px"></div>
+        <div id="novedad-armamento-guia-wrap" style="display:none;margin-top:10px"><label style="display:block;font-size:10px;font-weight:900;color:#475569;margin-bottom:5px">Guía PDF de recuperación · obligatoria</label><input id="novedad-armamento-guia" type="file" accept="application/pdf,.pdf" style="width:100%;padding:9px;border:1px solid #cbd5e1;border-radius:8px;font-size:11px;background:white"><p style="margin:5px 0 0;color:#64748b;font-size:9px">Máximo 10 MB. Se guardará en el almacenamiento privado.</p></div>
+        <div style="margin-top:10px"><label style="display:block;font-size:10px;font-weight:900;color:#475569;margin-bottom:5px">Observación</label><textarea id="novedad-armamento-observacion" maxlength="500" rows="3" placeholder="Comentario o detalle de la novedad" style="width:100%;padding:9px;border:1px solid #cbd5e1;border-radius:8px;font-size:11px;resize:vertical"></textarea></div>
+        <p id="novedad-armamento-ayuda" style="margin:10px 0 0;color:#64748b;font-size:10px;line-height:1.4"></p>
+        <button id="novedad-armamento-guardar" onclick="guardarNovedadArmamento()" style="width:100%;margin-top:14px;border:0;border-radius:9px;background:#dc2626;color:white;padding:10px;font-size:11px;font-weight:900;cursor:pointer">Guardar novedad</button>
+      </div>
+    </div>`;
     document.body.appendChild(modal);
 }
 
@@ -480,7 +494,9 @@ function abrirNovedadArmamento(serieCodificada, modo) {
     document.getElementById('novedad-armamento-serie').textContent = `Serie ${arma.serie} · Estado actual: ${arma.estado}`;
     document.getElementById('novedad-armamento-tipo-wrap').style.display = recuperacion ? 'none' : 'block';
     document.getElementById('novedad-armamento-destino-wrap').style.display = recuperacion ? 'block' : 'none';
+    document.getElementById('novedad-armamento-guia-wrap').style.display = recuperacion ? 'block' : 'none';
     document.getElementById('novedad-armamento-fecha').value = hoy; document.getElementById('novedad-armamento-observacion').value = ''; document.getElementById('novedad-armamento-destino').value = '';
+    document.getElementById('novedad-armamento-guia').value = '';
     document.getElementById('novedad-armamento-ayuda').textContent = recuperacion ? 'El arma pasará a Transito. Cuando llegue físicamente, deberá confirmarse su recepción para cambiarla a Rastrillo.' : 'La asignación, el responsable y el acta vigente se conservarán como evidencia.';
     const boton = document.getElementById('novedad-armamento-guardar'); boton.textContent = recuperacion ? '♻ Iniciar recuperación' : '⚠️ Guardar novedad'; boton.style.background = recuperacion ? '#0891b2' : '#dc2626'; boton.disabled = false;
     document.getElementById('novedad-armamento-modal').style.display = 'flex';
@@ -491,16 +507,55 @@ function cerrarNovedadArmamento() { const modal=document.getElementById('novedad
 async function guardarNovedadArmamento() {
     if (!armaNovedadActual) return;
     const { arma, modo } = armaNovedadActual, recuperacion = modo === 'RECUPERAR', fecha = document.getElementById('novedad-armamento-fecha').value, observacion = document.getElementById('novedad-armamento-observacion').value.trim(), destino = document.getElementById('novedad-armamento-destino').value, tipo = document.getElementById('novedad-armamento-tipo').value, boton = document.getElementById('novedad-armamento-guardar');
-    if (!fecha) return alert('Selecciona la fecha efectiva.'); if (recuperacion && !destino) return alert('Selecciona el rastrillo de destino.');
+    const guia = document.getElementById('novedad-armamento-guia')?.files?.[0] || null;
+    if (!fecha) return alert('Selecciona la fecha efectiva.');
+    if (observacion.length < 5) return alert('Describe la novedad con al menos 5 caracteres.');
+    if (recuperacion && !destino) return alert('Selecciona el rastrillo de destino.');
+    if (recuperacion && !guia) return alert('Selecciona la guía PDF obligatoria para la recuperación.');
+    if (recuperacion && guia && guia.type && guia.type !== 'application/pdf') return alert('La guía debe estar en formato PDF.');
+    if (recuperacion && guia && guia.size > 10 * 1024 * 1024) return alert('La guía PDF no puede superar 10 MB.');
     const descripcion = recuperacion ? `registrar la recuperación de la serie ${arma.serie} y enviarla en Transito al rastrillo seleccionado` : `cambiar la serie ${arma.serie} de ${arma.estado} a ${tipo}`;
     if (!confirm(`¿Confirmas que deseas ${descripcion}?`)) return;
+    let rutaGuia = '', guiaReutilizada = false, rpcIniciado = false;
     try {
         boton.disabled = true; boton.textContent = 'Registrando…';
         const idSolicitud = typeof nuevoIdSolicitudActa === 'function' ? nuevoIdSolicitudActa() : `nov_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-        const payload = recuperacion ? { accion:'iniciar_recuperacion_arma',token:tokenSesionActual(),idSolicitud,series:[arma.serie],destino,fecha,observacion } : { accion:'registrar_novedad_arma',token:tokenSesionActual(),idSolicitud,series:[arma.serie],tipo,fecha,observacion };
-        const respuesta = await postActas(payload, 90000); if (!respuesta.ok) throw new Error(respuesta.mensaje || 'No se pudo registrar la novedad.');
-        alert(respuesta.mensaje); cerrarNovedadArmamento(); if (typeof cargarDatos === 'function') await cargarDatos(); renderTablaArmamento();
-    } catch (error) { alert(error.message || String(error)); } finally { if (boton) { boton.disabled=false; boton.textContent=recuperacion?'♻ Iniciar recuperación':'⚠️ Guardar novedad'; } }
+        let respuesta;
+        if (backendUsaSupabase()) {
+            if (recuperacion) {
+                const carga = await supabaseSubirGuiaArmamento(guia, idSolicitud, 'recovery');
+                rutaGuia = carga.path; guiaReutilizada = carga.reused;
+                rpcIniciado = true;
+                respuesta = await supabaseIniciarRecuperacionArmamento(arma, destino, fecha, observacion, idSolicitud, rutaGuia);
+                if (respuesta?.idempotent && !guiaReutilizada) {
+                    await supabaseEliminarGuiaArmamento(rutaGuia);
+                }
+            } else {
+                rpcIniciado = true;
+                respuesta = await supabaseDeclararNovedadArmamento(arma, tipo, fecha, observacion, idSolicitud);
+            }
+        } else {
+            const payload = recuperacion ? { accion:'iniciar_recuperacion_arma',token:tokenSesionActual(),idSolicitud,series:[arma.serie],destino,fecha,observacion } : { accion:'registrar_novedad_arma',token:tokenSesionActual(),idSolicitud,series:[arma.serie],tipo,fecha,observacion };
+            respuesta = await postActas(payload, 90000);
+        }
+        if (respuesta?.ok === false) throw new Error(respuesta.mensaje || 'No se pudo registrar la novedad.');
+        rutaGuia = '';
+        alert(recuperacion ? 'Recuperación registrada. El arma quedó EN TRÁNSITO hasta confirmar su llegada al rastrillo.' : `Novedad registrada. El arma quedó ${tipo.toUpperCase()}.`);
+        cerrarNovedadArmamento();
+        if (backendUsaSupabase()) {
+            if (typeof cargarDatos === 'function') await cargarDatos();
+            invalidarWorkspaceArmamentoSupabase();
+            invalidarWorkspaceDespachoArmamentoSupabase();
+            await Promise.all([cargarWorkspaceArmamentoSupabase(true), cargarWorkspaceDespachoArmamentoSupabase(true)]);
+        } else if (typeof cargarDatos === 'function') await cargarDatos();
+        renderTablaArmamento();
+    } catch (error) {
+        const errorConfirmadoSinEscritura = Number(error?.status) >= 400 && Number(error?.status) < 500;
+        if (rutaGuia && (!rpcIniciado || errorConfirmadoSinEscritura) && backendUsaSupabase()) {
+            try { await supabaseEliminarGuiaArmamento(rutaGuia); } catch (_) {}
+        }
+        alert(error.message || String(error));
+    } finally { if (boton) { boton.disabled=false; boton.textContent=recuperacion?'♻ Iniciar recuperación':'⚠️ Guardar novedad'; } }
 }
 
 function mantenimientoInputStyle(){return 'width:100%;padding:9px;border:1px solid #cbd5e1;border-radius:8px;font-size:11px;background:white';}
