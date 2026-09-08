@@ -492,6 +492,42 @@ async function supabaseEliminarGuiaArmamento(ruta) {
     }
 }
 
+function supabaseHuellaNovedadArmamento(partes) {
+    return partes.map(valor => String(valor ?? '').trim().toUpperCase().replace(/\s+/g, ' ')).join('|');
+}
+
+async function supabaseDeclararNovedadArmamento(arma, tipo, fecha, observacion, solicitudId) {
+    if (!arma?.idArma) throw new Error('El arma seleccionada no tiene identificador en Supabase.');
+    const tipoRpc = String(tipo || '').toUpperCase() === 'CONFISCADA' ? 'CONFISCADA' : 'PERDIDA';
+    const huella = supabaseHuellaNovedadArmamento([
+        'INCIDENT', arma.idArma, tipoRpc, fecha, observacion
+    ]);
+    return supabaseRpc('declare_weapon_incident', { p_payload: {
+        weapon_id: arma.idArma,
+        incident_type: tipoRpc,
+        effective_at: `${fecha}T12:00:00-05:00`,
+        observation: observacion,
+        request_id: solicitudId,
+        request_fingerprint: huella
+    }});
+}
+
+async function supabaseIniciarRecuperacionArmamento(arma, destino, fecha, observacion, solicitudId, rutaGuia) {
+    if (!arma?.idArma) throw new Error('El arma seleccionada no tiene identificador en Supabase.');
+    const huella = supabaseHuellaNovedadArmamento([
+        'RECOVERY', arma.idArma, destino, fecha, observacion
+    ]);
+    return supabaseRpc('start_weapon_recovery', { p_payload: {
+        weapon_id: arma.idArma,
+        destination_province: destino,
+        effective_at: `${fecha}T12:00:00-05:00`,
+        observation: observacion,
+        guide_storage_path: rutaGuia,
+        request_id: solicitudId,
+        request_fingerprint: huella
+    }});
+}
+
 async function supabaseUrlFirmadaGuiaArmamento(ruta, segundos = 300) {
     const respuesta = await supabaseRpcStorageFirmada(ruta, segundos);
     const firmada = respuesta?.signedURL || respuesta?.signedUrl || '';
