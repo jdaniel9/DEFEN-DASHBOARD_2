@@ -11,6 +11,7 @@ const SUPABASE_WEAPON_DISPATCH_ENABLED = true;
 const SUPABASE_WEAPON_GUIDE_REMEDIATION_ENABLED = true;
 const SUPABASE_WEAPON_RETURN_ENABLED = true;
 const SUPABASE_WEAPON_EVIDENCE_ENABLED = true;
+const SUPABASE_WEAPON_INCIDENT_ENABLED = true;
 
 // Supabase: la clave publicable puede estar en el navegador. Nunca colocar
 // aquí la service_role ni la contraseña de la base de datos.
