@@ -63,7 +63,7 @@ function usuarioPuedeGestionarEvidenciasArmamento() {
 
 function usuarioPuedeGestionarNovedadArmamento() {
     return ['admin','operaciones'].includes(rolActual())
-        && (!backendUsaSupabase() || !SUPABASE_READ_ONLY_PHASE);
+        && (!backendUsaSupabase() || SUPABASE_WEAPON_INCIDENT_ENABLED);
 }
 
 function usuarioPuedeGestionarMantenimientoArmamento() {
