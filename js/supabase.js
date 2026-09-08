@@ -520,6 +520,40 @@ async function supabaseEvidenciaArmamentoBase64(ruta) {
     });
 }
 
+async function supabaseSubirEvidenciaArmamento(archivo, weaponId, tipo) {
+    const id = String(weaponId || '').trim(), kind = tipo === 'credential' ? 'credentials' : tipo === 'photo' ? 'photos' : '';
+    if (!/^[0-9a-f-]{36}$/i.test(id) || !kind) throw new Error('El arma o el tipo de evidencia no es válido.');
+    const mime = String(archivo?.type || '').toLowerCase(), extensiones = {'image/jpeg':'jpg','image/png':'png','image/webp':'webp'}, extension = extensiones[mime] || '';
+    if (!extension) throw new Error('La evidencia debe ser JPG, PNG o WEBP.');
+    if (!archivo.size || archivo.size > 5 * 1024 * 1024) throw new Error('La evidencia preparada debe pesar menos de 5 MB.');
+    const ruta = `${kind}/${id}/${crypto.randomUUID()}.${extension}`;
+    let token = await supabaseTokenVigente();
+    const subir = async () => {
+        const respuesta = await fetch(`${SUPABASE_URL}/storage/v1/object/weapon-evidence/${supabaseRutaStorage(ruta)}`, {
+            method:'POST', headers:{...supabaseHeaders(token),'Content-Type':mime,'x-upsert':'false'}, body:archivo
+        });
+        if (respuesta.ok) return ruta;
+        const texto = await respuesta.text();let cuerpo=null;try{cuerpo=texto?JSON.parse(texto):null}catch(_){cuerpo=texto}
+        const error = new Error(cuerpo?.message || cuerpo?.error || `No se pudo cargar la evidencia (HTTP ${respuesta.status}).`);error.status=respuesta.status;throw error;
+    };
+    try{return await subir();}catch(error){if(error.status!==401)throw error;token=await supabaseRenovarSesion();return subir();}
+}
+
+async function supabaseEliminarEvidenciaArmamento(ruta) {
+    if (!ruta) return;
+    let token = await supabaseTokenVigente();
+    const eliminar = () => supabasePeticion(`/storage/v1/object/weapon-evidence/${supabaseRutaStorage(ruta)}`, {method:'DELETE',headers:supabaseHeaders(token)});
+    try{return await eliminar();}catch(error){if(error.status!==401)throw error;token=await supabaseRenovarSesion();return eliminar();}
+}
+
+async function supabaseRegistrarEvidenciaArmamento(weaponId, tipo, ruta) {
+    return supabaseRpc('set_weapon_evidence_paths', {
+        p_weapon_id:weaponId,
+        p_credential_storage_path:tipo==='credential'?ruta:null,
+        p_photo_storage_path:tipo==='photo'?ruta:null
+    });
+}
+
 async function supabaseRpcStorageFirmadaEnBucket(bucket, ruta, segundos) {
     let token = await supabaseTokenVigente();
     const crear = () => supabasePeticion(
