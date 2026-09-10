@@ -4,7 +4,7 @@
 
 const API_TIMEOUT_MS = 60000;
 const API_AVISO_DEMORA_MS = 15000;
-const CACHE_DATOS_PREFIJO = 'defen_dashboard_datos_v1_';
+const CACHE_DATOS_PREFIJO = 'defen_dashboard_datos_v3_';
 let cargaDatosEnCurso = null;
 let cargaImagenesEnCurso = null;
 
@@ -284,6 +284,8 @@ function procesarDatosAPI(json) {
                 .join(' | ');
 
             puestosData[prov][proy].push({
+                puestoId:   p.puesto_id || null,
+                proyectoId: p.proyecto_id || null,
                 nombre:     nombrePuesto,
                 lat:        Number(p.lat)   || 0,
                 lng:        Number(p.lng)   || 0,
