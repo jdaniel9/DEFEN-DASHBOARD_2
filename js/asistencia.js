@@ -52,7 +52,7 @@ function crearModalAsistencia() {
       <div class="as-shell">
         <header class="as-header">
           <div><h2>CONTROL MENSUAL DE ASISTENCIA</h2><p id="as-periodo-subtitulo">CARGANDO PERIODO…</p></div>
-          <div class="as-header-actions"><button id="as-btn-cierre" onclick="abrirCierreMensualAsistencia()">📦 CIERRE MENSUAL</button><button onclick="abrirGestorCoberturasAsistencia()">👥 COBERTURAS</button><button onclick="recargarModuloAsistencia()">↻ ACTUALIZAR</button><button onclick="cerrarModuloAsistencia()">✕ CERRAR</button></div>
+          <div class="as-header-actions"><button id="as-btn-ingreso" onclick="abrirIngresoPersonalAsistencia()">➕ INGRESO</button><button id="as-btn-salida" onclick="abrirSalidaPersonalAsistencia()">↪ SALIDA</button><button id="as-btn-cierre" onclick="abrirCierreMensualAsistencia()">📦 CIERRE MENSUAL</button><button onclick="abrirGestorCoberturasAsistencia()">👥 COBERTURAS</button><button onclick="recargarModuloAsistencia()">↻ ACTUALIZAR</button><button onclick="cerrarModuloAsistencia()">✕ CERRAR</button></div>
         </header>
         <div class="as-body">
           <section class="as-kpis">
@@ -151,6 +151,77 @@ function prepararControlesAsistencia() {
     document.getElementById('as-leyenda').innerHTML = (w.codes || []).map(c => `<span class="${asistenciaCodigoClase(c.code)}"><b>${asistenciaEsc(c.code)}</b> ${asistenciaEsc(c.label)}</span>`).join('');
     const botonCierre = document.getElementById('as-btn-cierre');
     if (botonCierre) botonCierre.style.display = w.period.status === 'OPEN' ? '' : 'none';
+    ['as-btn-ingreso', 'as-btn-salida'].forEach(id => {
+        const boton = document.getElementById(id);
+        if (boton) boton.style.display = w.permissions?.manage && w.period.status === 'OPEN' ? '' : 'none';
+    });
+}
+
+function asistenciaFinPeriodo() {
+    const inicio = asistenciaModulo.workspace?.period?.month_start || '';
+    return inicio ? asistenciaSumarDias(inicio, asistenciaDiasMes(inicio) - 1) : '';
+}
+
+function abrirSalidaPersonalAsistencia() {
+    const w = asistenciaModulo.workspace;
+    if (!w?.permissions?.manage || w.period.status !== 'OPEN') return alert('SOLO ADMINISTRADOR U OPERACIONES PUEDEN REGISTRAR SALIDAS EN EL PERIODO ABIERTO.');
+    const asignaciones = (w.assignments || []).filter(a => ['ACTIVO', 'CAMBIO'].includes(a.status) && !a.mobile_coverage && !asignacionEsApoyoCobertura(a.assignment_id));
+    if (!asignaciones.length) return alert('NO EXISTE PERSONAL ACTIVO DISPONIBLE PARA REGISTRAR UNA SALIDA.');
+    const opciones = asignaciones.map(a => `<option value="${asistenciaEsc(a.assignment_id)}">${asistenciaEsc(a.full_name || 'SIN NOMBRE')} · ${asistenciaEsc(a.national_id || 'SIN CÉDULA')} · ${asistenciaEsc(a.project || 'SIN PROYECTO')} · ${asistenciaEsc(a.post || 'SIN PUESTO')}</option>`).join('');
+    const editor = asistenciaEditorElemento();
+    editor.innerHTML = `<div class="as-editor-card as-coverage-form"><h3>SALIDA DE PERSONAL</h3><p>REGISTRA EL ÚLTIMO DÍA TRABAJADO. LA ASIGNACIÓN SE CERRARÁ Y EL PUESTO QUEDARÁ COMO VACANTE.</p><div class="as-form-grid"><label class="as-form-wide">PERSONAL<select id="as-salida-asignacion">${opciones}</select></label><label>ÚLTIMO DÍA TRABAJADO<input id="as-salida-fecha" type="date" min="${asistenciaEsc(w.period.month_start)}" max="${asistenciaEsc(asistenciaFinPeriodo())}" value="${asistenciaEsc(asistenciaHoyEcuador())}"></label><label class="as-form-wide">MOTIVO / OBSERVACIÓN<textarea id="as-salida-motivo" rows="3" placeholder="EJ.: RENUNCIA VOLUNTARIA"></textarea></label></div><div class="as-editor-actions"><button class="danger" onclick="guardarSalidaPersonalAsistencia()">CONFIRMAR SALIDA</button><button onclick="cerrarEditorAsistencia()">CANCELAR</button></div></div>`;
+    editor.style.display = 'flex';
+}
+
+async function guardarSalidaPersonalAsistencia() {
+    if (asistenciaModulo.guardando) return;
+    const assignmentId = document.getElementById('as-salida-asignacion')?.value;
+    const fecha = document.getElementById('as-salida-fecha')?.value;
+    const motivo = document.getElementById('as-salida-motivo')?.value.trim();
+    if (!assignmentId || !fecha || !motivo) return alert('SELECCIONA EL PERSONAL, LA FECHA Y ESCRIBE EL MOTIVO DE SALIDA.');
+    if (!confirm('¿CONFIRMAS LA SALIDA? EL PUESTO SE CONVERTIRÁ EN VACANTE.')) return;
+    asistenciaModulo.guardando = true;
+    try {
+        const respuesta = await supabaseRpc('register_attendance_personnel_exit', { p_assignment_id: assignmentId, p_last_worked_date: fecha, p_reason: motivo });
+        cerrarEditorAsistencia();
+        await refrescarCoberturasAsistencia();
+        alert(`SALIDA REGISTRADA. ${respuesta?.vacancies_created || 1} VACANTE(S) CREADA(S).`);
+    } catch (error) {
+        alert(`NO SE PUDO REGISTRAR LA SALIDA: ${error.message || error}`);
+    } finally { asistenciaModulo.guardando = false; }
+}
+
+function abrirIngresoPersonalAsistencia() {
+    const w = asistenciaModulo.workspace;
+    if (!w?.permissions?.manage || w.period.status !== 'OPEN') return alert('SOLO ADMINISTRADOR U OPERACIONES PUEDEN REGISTRAR INGRESOS EN EL PERIODO ABIERTO.');
+    const vacantes = (w.assignments || []).filter(a => a.status === 'VACANTE');
+    if (!vacantes.length) return alert('NO EXISTEN VACANTES DISPONIBLES PARA REGISTRAR UN INGRESO.');
+    const opciones = vacantes.map(a => `<option value="${asistenciaEsc(a.assignment_id)}">${asistenciaEsc(a.province || 'SIN PROVINCIA')} · ${asistenciaEsc(a.project || 'SIN PROYECTO')} · ${asistenciaEsc(a.post || 'SIN PUESTO')}</option>`).join('');
+    const editor = asistenciaEditorElemento();
+    editor.innerHTML = `<div class="as-editor-card as-coverage-form"><h3>INGRESO DE PERSONAL</h3><p>REGISTRA A LA PERSONA QUE CUBRIRÁ DE FORMA PERMANENTE UNA VACANTE.</p><div class="as-form-grid"><label class="as-form-wide">VACANTE A CUBRIR<select id="as-ingreso-vacante">${opciones}</select></label><label class="as-form-wide">NOMBRES Y APELLIDOS<input id="as-ingreso-nombre" type="text" maxlength="150" placeholder="NOMBRE COMPLETO"></label><label>CÉDULA<input id="as-ingreso-cedula" type="text" inputmode="numeric" maxlength="10" placeholder="10 DÍGITOS"></label><label>PRIMER DÍA DE TRABAJO<input id="as-ingreso-fecha" type="date" min="${asistenciaEsc(w.period.month_start)}" max="${asistenciaEsc(asistenciaFinPeriodo())}" value="${asistenciaEsc(asistenciaHoyEcuador())}"></label><label class="as-form-wide">OBSERVACIÓN<textarea id="as-ingreso-nota" rows="3" placeholder="DETALLE DEL INGRESO"></textarea></label></div><div class="as-editor-actions"><button class="primary" onclick="guardarIngresoPersonalAsistencia()">CONFIRMAR INGRESO</button><button onclick="cerrarEditorAsistencia()">CANCELAR</button></div></div>`;
+    editor.style.display = 'flex';
+    const cedula = document.getElementById('as-ingreso-cedula');
+    cedula.addEventListener('input', () => { cedula.value = cedula.value.replace(/\D/g, '').slice(0, 10); });
+}
+
+async function guardarIngresoPersonalAsistencia() {
+    if (asistenciaModulo.guardando) return;
+    const vacancyId = document.getElementById('as-ingreso-vacante')?.value;
+    const nombre = document.getElementById('as-ingreso-nombre')?.value.trim().toUpperCase();
+    const cedula = document.getElementById('as-ingreso-cedula')?.value.trim();
+    const fecha = document.getElementById('as-ingreso-fecha')?.value;
+    const nota = document.getElementById('as-ingreso-nota')?.value.trim();
+    if (!vacancyId || !nombre || nombre.length < 5 || !/^\d{10}$/.test(cedula || '') || !fecha) return alert('COMPLETA LA VACANTE, EL NOMBRE, LA CÉDULA DE 10 DÍGITOS Y LA FECHA DE INGRESO.');
+    if (!confirm('¿CONFIRMAS EL INGRESO PERMANENTE EN LA VACANTE SELECCIONADA?')) return;
+    asistenciaModulo.guardando = true;
+    try {
+        await supabaseRpc('register_attendance_personnel_entry', { p_vacancy_assignment_id: vacancyId, p_national_id: cedula, p_full_name: nombre, p_start_date: fecha, p_note: nota || null });
+        cerrarEditorAsistencia();
+        await refrescarCoberturasAsistencia();
+        alert('INGRESO REGISTRADO Y VACANTE CUBIERTA CORRECTAMENTE.');
+    } catch (error) {
+        alert(`NO SE PUDO REGISTRAR EL INGRESO: ${error.message || error}`);
+    } finally { asistenciaModulo.guardando = false; }
 }
 
 function filtrarModuloAsistencia() {
