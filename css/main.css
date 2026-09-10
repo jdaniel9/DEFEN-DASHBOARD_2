@@ -276,6 +276,8 @@
     font-size: 7px; font-weight: 900;
 }
 .as-cover-row:hover { background: #bfdbfe; }
+.as-exit-row { margin:4px 0 0 5px;border:0;border-radius:6px;padding:3px 7px;background:#fee2e2;color:#b91c1c;font-size:7px;font-weight:900;cursor:pointer; }
+.as-exit-row:hover { background:#fecaca; }
 .as-coverage-badge {
     display: block !important; width: fit-content; margin-top: 4px;
     padding: 3px 6px; border-radius: 999px;
