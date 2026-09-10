@@ -250,6 +250,7 @@ function adaptarSnapshotSupabase(snapshot) {
                 rotacion: asistencia.rotacion
             };
             salida.__puestos__.push({
+                puesto_id: po.id || null, proyecto_id: p.id || null,
                 provincia, proyecto: p.name || '', nombre_puesto: po.name || '',
                 lat: Number(po.latitude) || 0, lng: Number(po.longitude) || 0,
                 tipo: po.service_type || '', guardia: asistencia.rotacion.join(', '),
@@ -290,12 +291,35 @@ async function supabaseCargarDashboardLegacy() {
     const puedeVerRadios = typeof usuarioPuedeVerRadiosDetalle === 'function'
         ? usuarioPuedeVerRadiosDetalle()
         : ['admin', 'operaciones', 'sistemas'].includes((sessionStorage.getItem('defen_auth_rol') || '').toLowerCase());
-    const [snapshot, radios] = await Promise.all([
+    const puedeVerArmamento = ['admin', 'operaciones'].includes((sessionStorage.getItem('defen_auth_rol') || '').toLowerCase());
+    const [snapshot, radios, workspaceArmamento] = await Promise.all([
         supabaseRpc('get_dashboard_snapshot_v2'),
-        puedeVerRadios ? supabaseCargarRadiosDetalle() : Promise.resolve([])
+        puedeVerRadios ? supabaseCargarRadiosDetalle() : Promise.resolve([]),
+        puedeVerArmamento ? cargarWorkspaceArmamentoSupabase() : Promise.resolve(null)
     ]);
     const salida = adaptarSnapshotSupabase(snapshot);
     if (puedeVerRadios) salida.__radios_detalle__ = radios;
+    if (workspaceArmamento) {
+        const armasPorPuesto = new Map();
+        (workspaceArmamento.weapons || [])
+            .filter(w => w.post_id && String(w.state || '').toUpperCase() === 'ACTIVO')
+            .forEach(w => {
+                const clave = String(w.post_id);
+                if (!armasPorPuesto.has(clave)) armasPorPuesto.set(clave, []);
+                armasPorPuesto.get(clave).push(w);
+            });
+        (salida.__puestos__ || []).forEach(puesto => {
+            const armas = armasPorPuesto.get(String(puesto.puesto_id || '')) || [];
+            if (!armas.length) return;
+            puesto.arma = armas.map(w => w.serial_number).filter(Boolean).join(' · ');
+            puesto.tieneLetal = armas.some(w => {
+                const clase = String(w.weapon_class || '').toUpperCase().replace(/\s/g, '');
+                return clase.includes('LETAL') && !clase.includes('NOLETAL');
+            });
+            puesto.tieneNoLetal = armas.some(w => String(w.weapon_class || '').toUpperCase().replace(/\s/g, '').includes('NOLETAL'));
+        });
+        salida.__armamento_detalle__ = armamentoDetalle.map(arma => ({ ...arma }));
+    }
     return salida;
 }
 
