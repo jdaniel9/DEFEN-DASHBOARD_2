@@ -4,7 +4,7 @@
 // ================================================================
 
 // ── Estado de filtros del modal de armamento (multi-select) ──
-let filtrosArmamento = { estado: [], tipo: [], clase: [], categoria: [], provincia: [], proyecto: [] };
+let filtrosArmamento = { estado: [], condicionTecnica: [], tipo: [], clase: [], categoria: [], provincia: [], proyecto: [] };
 let filtrosRadios    = { provincia: [], proyecto: [] };
 let busquedaArmamento = '';
 let busquedaRadios    = '';
@@ -38,7 +38,7 @@ async function abrirModalArmamento(preset) {
         alert('Tu perfil no tiene permiso para ver el detalle de armamento.');
         return;
     }
-    filtrosArmamento = { estado: [], tipo: [], clase: [], categoria: [], provincia: [], proyecto: [] };
+    filtrosArmamento = { estado: [], condicionTecnica: [], tipo: [], clase: [], categoria: [], provincia: [], proyecto: [] };
     busquedaArmamento = '';
 
     if (backendUsaSupabase()) {
@@ -233,6 +233,7 @@ function renderFiltrosArmamento() {
 
     const grupos = [
         { key:'estado',     label:'Estado',     valores:['activo','transito','rastrillo','perdida','confiscada'], colores:{activo:'active-green',transito:'active-blue',rastrillo:'active-slate',perdida:'active-red',confiscada:'active-amber'} },
+        { key:'condicionTecnica', label:'Condición técnica', valores: valoresUnicos('condicionTecnica') },
         { key:'provincia',  label:'Provincia',  valores: valoresUnicos('provincia') },
         { key:'proyecto',   label:'Proyecto' + (provinciasElegidas.length > 0 ? ' (de la provincia elegida)' : ' — elige provincia primero'), valores: proyectosDisponibles },
         { key:'tipo',       label:'Tipo',       valores: valoresUnicos('tipo') },
@@ -338,6 +339,7 @@ function armaPasaFiltros(a) {
         const texto = normalizarTexto(busquedaArmamento);
         const campos = [a.codigoArma, a.serie, a.nDocumento, a.nombreRazon, a.marca, a.calibre,
                          a.categoria, a.proyecto, a.provincia, a.ubicacion, a.tipo, a.clase];
+                         a.categoria, a.condicionTecnica, a.proyecto, a.provincia, a.ubicacion, a.tipo, a.clase];
         const coincide = campos.some(c => normalizarTexto(c).includes(texto));
         if (!coincide) return false;
     }
