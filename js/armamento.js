@@ -1,0 +1,1119 @@
+// ================================================================
+// armamento.js — Módulo interactivo de Armamento y Radios
+// Tabla detallada + filtros multi-selección + reportes PDF
+// ================================================================
+
+// ── Estado de filtros del modal de armamento (multi-select) ──
+let filtrosArmamento = { estado: [], condicionTecnica: [], tipo: [], clase: [], categoria: [], provincia: [], proyecto: [] };
+let filtrosRadios    = { provincia: [], proyecto: [] };
+let busquedaArmamento = '';
+let busquedaRadios    = '';
+let armaNovedadActual = null;
+let mantenimientoArmaActual = null;
+let historialMovimientosActual = [];
+let paginaHistorialMovimientos = 1;
+let catalogosHistorialMovimientos = { tipos:[], estados:[], provincias:[], proyectos:[] };
+let vistaHistorialArmamento = 'MOVIMIENTOS';
+let indicadoresHistorialArmamento = null;
+let busquedaHistorialMantenimiento = '';
+
+// Columnas "sueltas" (sin grupo) — el grupo Fotos/Guías se arma aparte en el thead
+const ARM_COLUMNAS = [
+    { key:'codigoArma',      label:'Código' },
+    { key:'serie',           label:'Serie' },
+    { key:'clase',           label:'Clase' },
+    { key:'tipo',            label:'Tipo' },
+    { key:'marca',           label:'Marca' },
+    { key:'calibre',         label:'Calibre' },
+    { key:'categoria',       label:'Categoría' },
+    { key:'fechaEmision',    label:'Emisión' },
+    { key:'fechaExpiracion', label:'Expiración' },
+    { key:'estado',          label:'Estado' },
+    { key:'condicionTecnica',label:'Condición técnica' },
+    { key:'proyecto',        label:'Proyecto' },
+    { key:'provincia',       label:'Provincia' },
+    { key:'ubicacion',       label:'Ubicación' }
+];
+
+// ── Abrir modal de armamento, opcionalmente pre-filtrado por estado ──
+async function abrirModalArmamento(preset) {
+    if (typeof usuarioPuedeVerArmamentoDetalle === 'function' && !usuarioPuedeVerArmamentoDetalle()) {
+        alert('Tu perfil no tiene permiso para ver el detalle de armamento.');
+        return;
+    }
+    filtrosArmamento = { estado: [], condicionTecnica: [], tipo: [], clase: [], categoria: [], provincia: [], proyecto: [] };
+    busquedaArmamento = '';
+
+    const modal = document.getElementById('armamento-modal');
+    const cuerpo = document.getElementById('armamento-tbody');
+    if (!modal || !cuerpo) {
+        alert('NO SE ENCONTRÓ LA VENTANA DE INVENTARIO. RECARGA LA PÁGINA CON CTRL+F5.');
+        return;
+    }
+    modal.style.display = 'flex';
+    cuerpo.innerHTML = '<tr><td colspan="24" style="padding:28px;text-align:center;color:#64748b;font-weight:800">Cargando inventario de armamento…</td></tr>';
+
+    if (backendUsaSupabase()) {
+        try {
+            await cargarWorkspaceArmamentoSupabase();
+        } catch (error) {
+            console.error('No se pudo abrir el detalle de armamento:', error);
+            cuerpo.innerHTML = `<tr><td colspan="24" style="padding:28px;text-align:center;color:#b91c1c;font-weight:800">NO SE PUDO CARGAR EL INVENTARIO.<br><small>${histMovEsc(error.message || error)}</small><br><button onclick="invalidarWorkspaceArmamentoSupabase();abrirModalArmamento()" style="margin-top:10px;border:0;border-radius:7px;background:#0f172a;color:white;padding:7px 10px;font-weight:900;cursor:pointer">REINTENTAR</button></td></tr>`;
+            return;
+        }
+    }
+
+    // Acepta un string simple (compatibilidad: solo estado) o un objeto
+    // con varios filtros preseleccionados a la vez, ej: {estado:'activo', clase:'letal', tipo:'pistola'}
+    if (typeof preset === 'string' && preset) {
+        filtrosArmamento.estado = [preset];
+    } else if (preset && typeof preset === 'object') {
+        Object.keys(preset).forEach(k => {
+            if (filtrosArmamento.hasOwnProperty(k) && preset[k]) filtrosArmamento[k] = [preset[k]];
+        });
+    }
+
+    // Cerrar los desgloses inline si estaban abiertos
+    ['desglose-en-campo','desglose-en-campo-letal','desglose-en-campo-noletal','desglose-rastrillo'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) { el.style.display = 'none'; el.innerHTML = ''; }
+    });
+
+    modal.style.display = 'flex';
+    const buscador = document.getElementById('armamento-buscador');
+    if (buscador) buscador.value = '';
+    try {
+        renderFiltrosArmamento();
+        renderTablaArmamento();
+    } catch (error) {
+        console.error('Error al dibujar el inventario de armamento:', error);
+        cuerpo.innerHTML = `<tr><td colspan="24" style="padding:28px;text-align:center;color:#b91c1c;font-weight:800">NO SE PUDO MOSTRAR LA TABLA.<br><small>${histMovEsc(error.message || error)}</small></td></tr>`;
+    }
+}
+
+function cerrarModalArmamento() {
+    document.getElementById('armamento-modal').style.display = 'none';
+}
+
+// =====================================================================
+// DESGLOSES INLINE — resumen numérico antes de abrir el detalle completo
+// =====================================================================
+
+// Rastrillo → desglosado por provincia/sede (Matriz, Sucursales, etc.)
+// Si algún desglose está abierto cuando cambian los filtros globales,
+// lo vuelve a abrir en el mismo estado (se llama desde filters.js)
+function refrescarDesglosesArmamento() {
+    if (document.getElementById('desglose-rastrillo')?.style.display === 'block') {
+        toggleDesgloseRastrillo(); toggleDesgloseRastrillo();
+    }
+    const campoAbierto = document.getElementById('desglose-en-campo')?.style.display === 'block';
+    const letalAbierto = document.getElementById('desglose-en-campo-letal')?.style.display === 'block';
+    const noLetalAbierto = document.getElementById('desglose-en-campo-noletal')?.style.display === 'block';
+
+    if (campoAbierto) {
+        toggleDesgloseEnCampo(); toggleDesgloseEnCampo();
+        if (letalAbierto)   toggleDesgloseEnCampoClase('letal');
+        if (noLetalAbierto) toggleDesgloseEnCampoClase('noletal');
+    }
+}
+
+function toggleDesgloseRastrillo() {
+    const cont = document.getElementById('desglose-rastrillo');
+    if (cont.style.display === 'block') { cont.style.display = 'none'; cont.innerHTML = ''; return; }
+
+    const porProvincia = {};
+    armamentoDetalle.filter(armaPasaFiltrosGlobales).forEach(a => {
+        if (normalizarTexto(a.estado) !== 'rastrillo') return;
+        const prov = a.provincia || 'SIN PROVINCIA';
+        porProvincia[prov] = (porProvincia[prov] || 0) + 1;
+    });
+
+    const provincias = Object.keys(porProvincia).sort();
+    cont.innerHTML = provincias.length === 0
+        ? `<p style="font-size:10px;color:#94a3b8;font-style:italic;padding:6px 12px;">Sin armas en rastrillo registradas.</p>`
+        : provincias.map(p => {
+            const tipoSede = (data[p] && data[p].tipo) ? data[p].tipo.toUpperCase() : '';
+            const etiqueta = tipoSede ? `${p} - ${tipoSede}` : p;
+            return `
+            <div onclick="event.stopPropagation(); abrirModalArmamento({estado:'rastrillo', provincia:'${normalizarTexto(p)}'})"
+                 style="display:flex;justify-content:space-between;align-items:center;padding:6px 12px;margin-left:12px;border-left:2px solid #cbd5e1;cursor:pointer;border-radius:0 8px 8px 0;"
+                 onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='transparent'">
+                <span style="font-size:10px;font-weight:700;color:#475569;">🏢 ${etiqueta}</span>
+                <span style="font-size:11px;font-weight:900;color:#1e293b;">${porProvincia[p]}</span>
+            </div>`;
+        }).join('');
+    cont.style.display = 'block';
+}
+
+// En Campo → nivel 1: Letal (AL) / No Letal (ANL)
+function toggleDesgloseEnCampo() {
+    const cont = document.getElementById('desglose-en-campo');
+    if (cont.style.display === 'block') { cont.style.display = 'none'; cont.innerHTML = ''; return; }
+
+    const activas = armamentoDetalle.filter(a => normalizarTexto(a.estado) === 'activo' && armaPasaFiltrosGlobales(a));
+    const letales = activas.filter(a => {
+        const c = normalizarTexto(a.clase).replace(/\s/g,'');
+        return c.includes('letal') && !c.includes('noletal');
+    }).length;
+    const noLetales = activas.filter(a => normalizarTexto(a.clase).replace(/\s/g,'').includes('noletal')).length;
+    const sinClasificar = activas.length - letales - noLetales;
+
+    cont.innerHTML = `
+        <div onclick="event.stopPropagation(); toggleDesgloseEnCampoClase('letal')"
+             style="display:flex;justify-content:space-between;align-items:center;padding:6px 12px;margin-left:12px;border-left:2px solid #fca5a5;cursor:pointer;border-radius:0 8px 8px 0;"
+             onmouseover="this.style.background='#fef2f2'" onmouseout="this.style.background='transparent'">
+            <span style="font-size:10px;font-weight:800;color:#b91c1c;">☠️ Letal (AL)</span>
+            <span style="font-size:11px;font-weight:900;color:#991b1b;">${letales}</span>
+        </div>
+        <div id="desglose-en-campo-letal" style="display:none;"></div>
+
+        <div onclick="event.stopPropagation(); toggleDesgloseEnCampoClase('noletal')"
+             style="display:flex;justify-content:space-between;align-items:center;padding:6px 12px;margin-left:12px;border-left:2px solid #fde68a;cursor:pointer;border-radius:0 8px 8px 0;"
+             onmouseover="this.style.background='#fffbeb'" onmouseout="this.style.background='transparent'">
+            <span style="font-size:10px;font-weight:800;color:#92400e;">🛡️ No Letal (ANL)</span>
+            <span style="font-size:11px;font-weight:900;color:#78350f;">${noLetales}</span>
+        </div>
+        <div id="desglose-en-campo-noletal" style="display:none;"></div>
+
+        ${sinClasificar > 0 ? `<p style="font-size:9px;color:#94a3b8;font-style:italic;padding:4px 12px;">${sinClasificar} arma(s) sin clase registrada</p>` : ''}
+    `;
+    cont.style.display = 'block';
+}
+
+// En Campo → nivel 2: desglose por Tipo (Pistola, Revólver, Escopeta...) dentro de Letal/No Letal
+function toggleDesgloseEnCampoClase(clase) {
+    const contId = clase === 'letal' ? 'desglose-en-campo-letal' : 'desglose-en-campo-noletal';
+    const cont = document.getElementById(contId);
+    if (cont.style.display === 'block') { cont.style.display = 'none'; cont.innerHTML = ''; return; }
+
+    const activas = armamentoDetalle.filter(a => {
+        if (normalizarTexto(a.estado) !== 'activo') return false;
+        if (!armaPasaFiltrosGlobales(a)) return false;
+        const c = normalizarTexto(a.clase).replace(/\s/g,'');
+        return clase === 'letal' ? (c.includes('letal') && !c.includes('noletal')) : c.includes('noletal');
+    });
+
+    // Por cada tipo, guardamos el valor de 'clase' EXACTO como aparece en tus
+    // datos (ej. "No Letal") normalizado igual que lo hacen los chips del
+    // filtro (con espacio incluido) — así el preset coincide de verdad
+    const porTipo = {};
+    const claseRealPorTipo = {};
+    activas.forEach(a => {
+        const t = a.tipo || 'Sin tipo';
+        porTipo[t] = (porTipo[t] || 0) + 1;
+        if (!claseRealPorTipo[t]) claseRealPorTipo[t] = normalizarTexto(a.clase);
+    });
+
+    const tipos = Object.keys(porTipo).sort();
+    cont.innerHTML = tipos.length === 0
+        ? `<p style="font-size:9px;color:#94a3b8;font-style:italic;padding:4px 12px 4px 24px;">Sin datos.</p>`
+        : tipos.map(t => {
+            const claseValor = (claseRealPorTipo[t] || '').replace(/'/g,"\\'");
+            const tipoValor  = normalizarTexto(t).replace(/'/g,"\\'");
+            return `
+            <div onclick="event.stopPropagation(); abrirModalArmamento({estado:'activo', clase:'${claseValor}', tipo:'${tipoValor}'})"
+                 style="display:flex;justify-content:space-between;align-items:center;padding:4px 12px 4px 24px;cursor:pointer;border-radius:8px;"
+                 onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background='transparent'">
+                <span style="font-size:9px;font-weight:600;color:#64748b;">🔫 ${t}</span>
+                <span style="font-size:10px;font-weight:800;color:#334155;">${porTipo[t]}</span>
+            </div>`;
+        }).join('');
+    cont.style.display = 'block';
+}
+
+// Construye los chips de filtro dinámicamente a partir de los valores únicos presentes.
+// El filtro de PROYECTO es dependiente: si hay provincia(s) seleccionada(s), solo
+// muestra los proyectos que existen dentro de esas provincias (filtro en cascada)
+function renderFiltrosArmamento() {
+    const bar = document.getElementById('armamento-filtros-bar');
+    const valoresUnicos = (campo) => [...new Set(armamentoDetalle.map(a => a[campo]).filter(Boolean))].sort();
+
+    // Proyectos disponibles: SOLO se muestran una vez elegida al menos una
+    // provincia — evita la lista larga y desordenada de todos los proyectos
+    // del país cuando no hay ningún filtro aplicado todavía
+    const provinciasElegidas = filtrosArmamento.provincia;
+    const proyectosDisponibles = provinciasElegidas.length === 0 ? [] : [...new Set(
+        armamentoDetalle
+            .filter(a => provinciasElegidas.includes(normalizarTexto(a.provincia)))
+            .map(a => a.proyecto)
+            .filter(Boolean)
+    )].sort();
+
+    // Si cambiaron las provincias y algún proyecto seleccionado ya no aplica, lo quitamos
+    filtrosArmamento.proyecto = filtrosArmamento.proyecto.filter(p =>
+        proyectosDisponibles.some(pd => normalizarTexto(pd) === p)
+    );
+
+    const grupos = [
+        { key:'estado',     label:'Estado',     valores:['activo','transito','rastrillo','perdida','confiscada'], colores:{activo:'active-green',transito:'active-blue',rastrillo:'active-slate',perdida:'active-red',confiscada:'active-amber'} },
+        { key:'condicionTecnica', label:'Condición técnica', valores: valoresUnicos('condicionTecnica') },
+        { key:'provincia',  label:'Provincia',  valores: valoresUnicos('provincia') },
+        { key:'proyecto',   label:'Proyecto' + (provinciasElegidas.length > 0 ? ' (de la provincia elegida)' : ' — elige provincia primero'), valores: proyectosDisponibles },
+        { key:'tipo',       label:'Tipo',       valores: valoresUnicos('tipo') },
+        { key:'clase',      label:'Clase',      valores: valoresUnicos('clase') },
+        { key:'categoria',  label:'Categoría',  valores: valoresUnicos('categoria') },
+    ];
+
+    bar.innerHTML = grupos.map(g => `
+        <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;">
+            <span style="font-size:9px;font-weight:800;color:#94a3b8;text-transform:uppercase;margin-right:2px;">${g.label}:</span>
+            ${g.valores.length > 0 ? g.valores.map(v => {
+                const valNorm = normalizarTexto(v);
+                const activo = filtrosArmamento[g.key].includes(valNorm);
+                const colorClass = g.colores && g.colores[valNorm] ? g.colores[valNorm] : 'active-blue';
+                return `<button onclick="toggleFiltroArmamento('${g.key}','${valNorm}',this)"
+                        class="chip ${activo ? colorClass : ''}" style="font-size:9px;padding:3px 9px;">${v}</button>`;
+            }).join('') : `<span style="font-size:9px;color:#cbd5e1;font-style:italic;">— elige una provincia primero —</span>`}
+        </div>
+    `).join('<div style="width:100%;height:1px;background:#f1f5f9;margin:2px 0;"></div>');
+}
+
+function toggleFiltroArmamento(grupo, valor, btn) {
+    const idx = filtrosArmamento[grupo].indexOf(valor);
+    if (idx > -1) { filtrosArmamento[grupo].splice(idx, 1); }
+    else { filtrosArmamento[grupo].push(valor); }
+    renderFiltrosArmamento();
+    renderTablaArmamento();
+}
+
+// Quita tildes y normaliza — para que "Tránsito" y "Transito" se traten igual
+function normalizarTexto(s) {
+    return String(s||'').trim().toLowerCase()
+        .normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+}
+
+// Determina si un arma (por su provincia/proyecto/puesto) pasa los FILTROS
+// GLOBALES activos (jornada, arma, clase de arma, radio, vencimiento,
+// contrato, categoría) — los mismos que se usan en el resto del dashboard.
+function armaPasaFiltrosGlobales(a) {
+    const todosNeutros = !Object.keys(filtrosActivos).some(g => grupoActivo(g));
+    if (todosNeutros) return true;
+
+    const prov = a.provincia;
+    const proyUp = (a.proyecto || '').toUpperCase().trim();
+
+    // Categoría — nivel provincia
+    if (grupoActivo('cat')) {
+        const info = data[prov];
+        if (!info || !filtrosActivos.cat.includes(info.cat)) return false;
+    }
+
+    // Vencimiento / Tipo de contrato — nivel proyecto
+    if (grupoActivo('vence') || grupoActivo('contrato')) {
+        const det = detalleProvincias[prov];
+        const proyObj = det && det.proyectosList
+            ? det.proyectosList.find(p => (p.nombre||'').toUpperCase().trim() === proyUp)
+            : null;
+        if (!proyObj) return false;
+        if (grupoActivo('vence')) {
+            const d = diasRestantes(proyObj.fin);
+            const estadoV = d <= 30 ? 'critico' : d <= 60 ? 'alerta' : 'ok';
+            if (!filtrosActivos.vence.includes(estadoV)) return false;
+        }
+        if (grupoActivo('contrato')) {
+            if (!filtrosActivos.contrato.includes((proyObj.tipoContrato||'').toLowerCase())) return false;
+        }
+    }
+
+    // Jornada / Arma / Clase de arma / Radio — nivel puesto
+    if (grupoActivo('jornada') || grupoActivo('arma') || grupoActivo('claseArma') || grupoActivo('radio')) {
+        const puestosProy = (puestosData[prov] || {})[proyUp] || [];
+        const puestoObj = puestosProy.find(p => (p.nombre||'').toUpperCase().trim() === (a.puesto||'').toUpperCase().trim());
+        if (!puestoObj) return false;
+
+        if (grupoActivo('jornada')) {
+            const tipo = (puestoObj.tipo||'').toLowerCase().replace(/\s/g,'');
+            if (!filtrosActivos.jornada.some(j => tipo.includes(j))) return false;
+        }
+        if (grupoActivo('arma')) {
+            const armado = puestoObj.armado === true;
+            if (!filtrosActivos.arma.some(v => (v==='armado'&&armado)||(v==='desarmado'&&!armado))) return false;
+        }
+        if (grupoActivo('claseArma')) {
+            if (!filtrosActivos.claseArma.some(v => (v==='letal'&&puestoObj.tieneLetal)||(v==='noletal'&&puestoObj.tieneNoLetal))) return false;
+        }
+        if (grupoActivo('radio')) {
+            const conRadio = puestoObj.radio === true;
+            if (!filtrosActivos.radio.some(v => (v==='conradio'&&conRadio)||(v==='sinradio'&&!conRadio))) return false;
+        }
+    }
+
+    return true;
+}
+
+function armaPasaFiltros(a) {
+    if (!armaPasaFiltrosGlobales(a)) return false;
+    for (const grupo of Object.keys(filtrosArmamento)) {
+        if (filtrosArmamento[grupo].length === 0) continue;
+        const valorArma = normalizarTexto(a[grupo]);
+        if (!filtrosArmamento[grupo].includes(valorArma)) return false;
+    }
+    if (busquedaArmamento) {
+        const texto = normalizarTexto(busquedaArmamento);
+        const campos = [a.codigoArma, a.serie, a.nDocumento, a.nombreRazon, a.marca, a.calibre,
+                         a.categoria, a.condicionTecnica, a.proyecto, a.provincia, a.ubicacion, a.tipo, a.clase];
+        const coincide = campos.some(c => normalizarTexto(c).includes(texto));
+        if (!coincide) return false;
+    }
+    return true;
+}
+
+function buscarArmamento(valor) {
+    busquedaArmamento = valor;
+    renderTablaArmamento();
+}
+
+function obtenerArmasFiltradas() {
+    return armamentoDetalle.filter(armaPasaFiltros);
+}
+
+function renderTablaArmamento() {
+    const filtradas = obtenerArmasFiltradas();
+    document.getElementById('armamento-modal-contador').textContent = `${filtradas.length} de ${armamentoDetalle.length} arma(s)`;
+
+    // ── Fila 1 del thead: grupos (Fotos / GDLT) ──
+    const theadGrupos = document.getElementById('armamento-thead-grupos');
+    theadGrupos.innerHTML =
+        `<th style="padding:4px 8px;"></th>` +
+        ARM_COLUMNAS.map(() => `<th style="padding:4px 8px;"></th>`).join('') +
+        `<th colspan="2" style="padding:4px 8px;text-align:center;background:#312e81;font-size:9px;letter-spacing:0.06em;border-left:2px solid #4338ca;border-right:2px solid #4338ca;">FOTOS</th>` +
+        `<th colspan="2" style="padding:4px 8px;text-align:center;background:#3730a3;font-size:9px;letter-spacing:0.06em;border-left:2px solid #312e81;border-right:2px solid #312e81;">GDLT</th>` +
+        `<th style="padding:4px 8px;"></th>` +
+        `<th style="padding:4px 8px;"></th>` +
+        `<th style="padding:4px 8px;"></th>` +
+        `<th style="padding:4px 8px;"></th>`;
+
+    // ── Fila 2 del thead: columnas reales ──
+    const thead = document.getElementById('armamento-thead-row');
+    thead.innerHTML = '<th style="padding:8px;">N°</th>'
+        + ARM_COLUMNAS.map(c => `<th style="padding:8px;white-space:nowrap;">${c.label}</th>`).join('')
+        + `<th style="padding:8px;white-space:nowrap;border-left:2px solid #4338ca;">Credencial</th>`
+        + `<th style="padding:8px;white-space:nowrap;border-right:2px solid #4338ca;">Arma</th>`
+        + `<th style="padding:8px;white-space:nowrap;border-left:2px solid #312e81;">Envío</th>`
+        + `<th style="padding:8px;white-space:nowrap;border-right:2px solid #312e81;">Retorno</th>`
+        + `<th style="padding:8px;white-space:nowrap;">Mapa</th>`
+        + `<th style="padding:8px;white-space:nowrap;">Novedad</th>`
+        + `<th style="padding:8px;white-space:nowrap;">Mantenimiento</th>`
+        + `<th style="padding:8px;white-space:nowrap;">Acta</th>`;
+
+    const tbody = document.getElementById('armamento-tbody');
+    const badgeEstado = (e) => {
+        const map = { activo:'#dcfce7;color:#15803d', transito:'#dbeafe;color:#1d4ed8', 'en transito':'#dbeafe;color:#1d4ed8', rastrillo:'#f1f5f9;color:#475569', mantenimiento:'#ede9fe;color:#6d28d9', perdida:'#fee2e2;color:#b91c1c', confiscada:'#fef3c7;color:#92400e' };
+        const key = String(e||'').toLowerCase();
+        const style = map[key] || '#f1f5f9;color:#475569';
+        return `<span style="background:${style.split(';')[0]};color:${style.split(';')[1].replace('color:','')};font-size:9px;font-weight:800;padding:2px 8px;border-radius:999px;">${e||'—'}</span>`;
+    };
+    const badgeCondicion = (valor,bloqueada) => {const c=String(valor||'BUEN ESTADO').toUpperCase(),map={'BUEN ESTADO':'#dcfce7;color:#166534','CON NOVEDAD':'#fef3c7;color:#92400e','MAL ESTADO':'#ffedd5;color:#c2410c','NO OPERATIVA':'#fee2e2;color:#b91c1c','EN MANTENIMIENTO':'#ede9fe;color:#6d28d9','EN DIAGNÓSTICO':'#e0f2fe;color:#075985','REPARADA PENDIENTE DE PRUEBA':'#cffafe;color:#155e75','NO REPARABLE':'#fecaca;color:#991b1b'},style=map[c]||'#f1f5f9;color:#475569';return `<span title="${histMovEsc(bloqueada?'BLOQUEADA PARA ASIGNACIÓN':'')}" style="display:inline-block;background:${style.split(';')[0]};color:${style.split(';')[1].replace('color:','')};font-size:8px;font-weight:900;padding:3px 7px;border-radius:999px;white-space:nowrap">${bloqueada?'🔒 ':''}${histMovEsc(c)}</span>`;};
+
+    tbody.innerHTML = filtradas.map((a, i) => {
+        const esActiva = normalizarTexto(a.estado) === 'activo';
+        const estadoNormalizado = normalizarTexto(a.estado);
+        const puedeGestionarNovedad = typeof usuarioPuedeGestionarNovedadArmamento === 'function' && usuarioPuedeGestionarNovedadArmamento();
+        const puedeGestionarMantenimiento = typeof usuarioPuedeGestionarMantenimientoArmamento === 'function' && usuarioPuedeGestionarMantenimientoArmamento();
+        const puedeDeclararNovedad = ['activo','en campo','rastrillo'].includes(estadoNormalizado);
+        const puedeRecuperar = ['perdida','confiscada'].includes(estadoNormalizado);
+        const tieneUbicacion = esActiva && a.puesto && a.provincia && a.proyecto;
+        const puestoSeguro = (a.puesto||'').replace(/'/g,"\\'");
+        const proyectoSeguro = (a.proyecto||'').replace(/'/g,"\\'");
+
+        return `
+        <tr style="border-bottom:1px solid #f1f5f9;${i%2===0?'background:#f8fafc;':''}">
+            <td style="padding:6px 8px;text-align:center;color:#94a3b8;">${i+1}</td>
+            <td style="padding:6px 8px;font-weight:700;">${a.codigoArma||'—'}</td>
+            <td style="padding:6px 8px;">${a.serie||'—'}</td>
+            <td style="padding:6px 8px;">${a.clase||'—'}</td>
+            <td style="padding:6px 8px;">${a.tipo||'—'}</td>
+            <td style="padding:6px 8px;">${a.marca||'—'}</td>
+            <td style="padding:6px 8px;">${a.calibre||'—'}</td>
+            <td style="padding:6px 8px;">${a.categoria||'—'}</td>
+            <td style="padding:6px 8px;">${a.fechaEmision ? formatFecha(a.fechaEmision) : '—'}</td>
+            <td style="padding:6px 8px;">${a.fechaExpiracion ? formatFecha(a.fechaExpiracion) : '—'}</td>
+            <td style="padding:6px 8px;">${badgeEstado(a.estado)}</td>
+            <td style="padding:6px 8px;">${badgeCondicion(a.condicionTecnica,a.bloqueadaAsignacion)}</td>
+            <td style="padding:6px 8px;">${a.proyecto||'—'}</td>
+            <td style="padding:6px 8px;">${a.provincia||'—'}</td>
+            <td style="padding:6px 8px;">${a.ubicacion||'—'}</td>
+            <td style="padding:6px 8px;white-space:nowrap;border-left:2px solid #e0e7ff;">
+                ${botonesEvidenciaArmamento(a,'credential')}
+            </td>
+            <td style="padding:6px 8px;white-space:nowrap;border-right:2px solid #e0e7ff;">
+                ${botonesEvidenciaArmamento(a,'photo')}
+            </td>
+            <td style="padding:6px 8px;white-space:nowrap;border-left:2px solid #ddd6fe;">
+                ${a.urlGuiaEnvio ? `<a href="${a.urlGuiaEnvio}" target="_blank" style="font-size:8px;font-weight:800;background:#dbeafe;color:#1d4ed8;padding:2px 6px;border-radius:5px;text-decoration:none;">📄</a>` : '<span style="color:#e2e8f0;">—</span>'}
+            </td>
+            <td style="padding:6px 8px;white-space:nowrap;border-right:2px solid #ddd6fe;">
+                ${a.urlGuiaRetorno ? `<a href="${a.urlGuiaRetorno}" target="_blank" style="font-size:8px;font-weight:800;background:#fef3c7;color:#92400e;padding:2px 6px;border-radius:5px;text-decoration:none;">📄</a>` : '<span style="color:#e2e8f0;">—</span>'}
+            </td>
+            <td style="padding:6px 8px;white-space:nowrap;">
+                ${tieneUbicacion
+                    ? `<button onclick="cerrarModalArmamento(); mostrarArmaEnMapa('${a.provincia}','${proyectoSeguro}','${puestoSeguro}')"
+                         style="font-size:8px;font-weight:800;background:#16a34a;color:white;padding:3px 7px;border-radius:5px;border:none;cursor:pointer;" title="Ver dónde está ubicada esta arma">
+                         📍 Ver
+                       </button>`
+                    : '<span style="color:#e2e8f0;">—</span>'}
+            </td>
+            <td style="padding:6px 8px;white-space:nowrap;">
+                ${puedeGestionarNovedad && puedeDeclararNovedad
+                    ? `<button onclick="abrirNovedadArmamento('${encodeURIComponent(a.serie||'')}','DECLARAR')" style="font-size:8px;font-weight:900;background:#dc2626;color:white;padding:3px 7px;border-radius:5px;border:none;cursor:pointer;" title="Declarar pérdida o confiscación">⚠️ Novedad</button>`
+                    : puedeGestionarNovedad && puedeRecuperar
+                    ? `<button onclick="abrirNovedadArmamento('${encodeURIComponent(a.serie||'')}','RECUPERAR')" style="font-size:8px;font-weight:900;background:#0891b2;color:white;padding:3px 7px;border-radius:5px;border:none;cursor:pointer;" title="Registrar recuperación">♻ Recuperar</button>`
+                    : '<span style="color:#e2e8f0;">—</span>'}
+            </td>
+            <td style="padding:6px 8px;white-space:nowrap;">
+                ${puedeGestionarMantenimiento && !['perdida','confiscada'].includes(estadoNormalizado)
+                    ? `<button onclick="abrirMantenimientoArmamento('${encodeURIComponent(a.serie||'')}')" style="font-size:8px;font-weight:900;background:${a.idMantenimientoActual?'#7c3aed':'#0f766e'};color:white;padding:3px 7px;border-radius:5px;border:none;cursor:pointer" title="${a.idMantenimientoActual?'Gestionar mantenimiento '+(a.codigoMantenimiento||''):'Reportar condición o iniciar mantenimiento'}">🔧 ${a.idMantenimientoActual?'Gestionar':'Mantenimiento'}</button>`
+                    : '<span style="color:#e2e8f0;">—</span>'}
+            </td>
+            <td style="padding:6px 8px;white-space:nowrap;">
+                ${esActiva && !a.bloqueadaAsignacion && !a.idMantenimientoActual && typeof usuarioPuedeGenerarActas === 'function' && usuarioPuedeGenerarActas()
+                    ? `<button onclick="abrirGeneradorActa('${(a.serie||'').replace(/'/g,"\\'")}')"
+                         style="font-size:8px;font-weight:900;background:#0f172a;color:white;padding:3px 8px;border-radius:5px;border:none;cursor:pointer;" title="Generar acta de entrega">📄 Acta</button>`
+                    : '<span style="color:#e2e8f0;">—</span>'}
+            </td>
+        </tr>`;
+    }).join('') || `<tr><td colspan="${ARM_COLUMNAS.length+9}" style="padding:20px;text-align:center;color:#94a3b8;">Sin resultados para este filtro.</td></tr>`;
+}
+
+function asegurarModalNovedadArmamento() {
+    if (document.getElementById('novedad-armamento-modal')) return;
+    const modal = document.createElement('div');
+    modal.id = 'novedad-armamento-modal';
+    modal.style.cssText = 'display:none;position:fixed;inset:0;z-index:23000;background:rgba(15,23,42,.82);align-items:center;justify-content:center;padding:18px';
+    modal.innerHTML = `<div style="width:100%;max-width:510px;background:white;border-radius:16px;overflow:hidden;box-shadow:0 28px 80px rgba(0,0,0,.45)">
+      <div style="background:#0f172a;color:white;padding:15px 18px;display:flex;align-items:center;gap:10px">
+        <div style="flex:1"><h3 id="novedad-armamento-titulo" style="margin:0;font-size:15px;font-weight:900">Novedad de armamento</h3><p id="novedad-armamento-serie" style="margin:3px 0 0;color:#94a3b8;font-size:10px"></p></div>
+        <button onclick="cerrarNovedadArmamento()" style="border:0;border-radius:8px;background:rgba(255,255,255,.12);color:white;padding:6px 10px;cursor:pointer">✕</button>
+      </div>
+      <div style="padding:17px">
+        <div id="novedad-armamento-tipo-wrap"><label style="display:block;font-size:10px;font-weight:900;color:#475569;margin-bottom:5px">Tipo de novedad</label><select id="novedad-armamento-tipo" style="width:100%;padding:9px;border:1px solid #cbd5e1;border-radius:8px;font-size:11px"><option value="Perdida">Perdida/Robada</option><option value="Confiscada">Confiscada</option></select></div>
+        <div id="novedad-armamento-destino-wrap" style="display:none"><label style="display:block;font-size:10px;font-weight:900;color:#475569;margin-bottom:5px">Rastrillo de destino</label><select id="novedad-armamento-destino" style="width:100%;padding:9px;border:1px solid #cbd5e1;border-radius:8px;font-size:11px"><option value="">Selecciona destino</option><option value="GUAYAS">GUAYAS · Guayaquil / Matriz</option><option value="MANABI">MANABÍ · Manta / Sucursal</option><option value="PICHINCHA">PICHINCHA · Quito / Sucursal</option></select></div>
+        <div style="margin-top:10px"><label style="display:block;font-size:10px;font-weight:900;color:#475569;margin-bottom:5px">Fecha efectiva</label><input id="novedad-armamento-fecha" type="date" style="width:100%;padding:9px;border:1px solid #cbd5e1;border-radius:8px;font-size:11px"></div>
+        <div id="novedad-armamento-guia-wrap" style="display:none;margin-top:10px"><label style="display:block;font-size:10px;font-weight:900;color:#475569;margin-bottom:5px">Guía PDF de recuperación · obligatoria</label><input id="novedad-armamento-guia" type="file" accept="application/pdf,.pdf" style="width:100%;padding:9px;border:1px solid #cbd5e1;border-radius:8px;font-size:11px;background:white"><p style="margin:5px 0 0;color:#64748b;font-size:9px">Máximo 10 MB. Se guardará en el almacenamiento privado.</p></div>
+        <div style="margin-top:10px"><label style="display:block;font-size:10px;font-weight:900;color:#475569;margin-bottom:5px">Observación</label><textarea id="novedad-armamento-observacion" maxlength="500" rows="3" placeholder="Comentario o detalle de la novedad" style="width:100%;padding:9px;border:1px solid #cbd5e1;border-radius:8px;font-size:11px;resize:vertical"></textarea></div>
+        <p id="novedad-armamento-ayuda" style="margin:10px 0 0;color:#64748b;font-size:10px;line-height:1.4"></p>
+        <button id="novedad-armamento-guardar" onclick="guardarNovedadArmamento()" style="width:100%;margin-top:14px;border:0;border-radius:9px;background:#dc2626;color:white;padding:10px;font-size:11px;font-weight:900;cursor:pointer">Guardar novedad</button>
+      </div>
+    </div>`;
+    document.body.appendChild(modal);
+}
+
+function abrirNovedadArmamento(serieCodificada, modo) {
+    if (typeof usuarioPuedeGestionarNovedadArmamento === 'function' && !usuarioPuedeGestionarNovedadArmamento()) return alert('Esta función todavía no está habilitada en la migración actual.');
+    const serie = decodeURIComponent(serieCodificada || ''), arma = (armamentoDetalle || []).find(a => String(a.serie || '') === serie);
+    if (!arma) return alert('No se encontró el arma seleccionada.');
+    asegurarModalNovedadArmamento(); armaNovedadActual = { arma, modo };
+    const recuperacion = modo === 'RECUPERAR', hoy = typeof fechaISOHoy === 'function' ? fechaISOHoy() : new Date().toISOString().slice(0,10);
+    document.getElementById('novedad-armamento-titulo').textContent = recuperacion ? 'Registrar recuperación' : 'Declarar novedad de armamento';
+    document.getElementById('novedad-armamento-serie').textContent = `Serie ${arma.serie} · Estado actual: ${arma.estado}`;
+    document.getElementById('novedad-armamento-tipo-wrap').style.display = recuperacion ? 'none' : 'block';
+    document.getElementById('novedad-armamento-destino-wrap').style.display = recuperacion ? 'block' : 'none';
+    document.getElementById('novedad-armamento-guia-wrap').style.display = recuperacion ? 'block' : 'none';
+    document.getElementById('novedad-armamento-fecha').value = hoy; document.getElementById('novedad-armamento-observacion').value = ''; document.getElementById('novedad-armamento-destino').value = '';
+    document.getElementById('novedad-armamento-guia').value = '';
+    document.getElementById('novedad-armamento-ayuda').textContent = recuperacion ? 'El arma pasará a Transito. Cuando llegue físicamente, deberá confirmarse su recepción para cambiarla a Rastrillo.' : 'La asignación, el responsable y el acta vigente se conservarán como evidencia.';
+    const boton = document.getElementById('novedad-armamento-guardar'); boton.textContent = recuperacion ? '♻ Iniciar recuperación' : '⚠️ Guardar novedad'; boton.style.background = recuperacion ? '#0891b2' : '#dc2626'; boton.disabled = false;
+    document.getElementById('novedad-armamento-modal').style.display = 'flex';
+}
+
+function cerrarNovedadArmamento() { const modal=document.getElementById('novedad-armamento-modal');if(modal)modal.style.display='none';armaNovedadActual=null; }
+
+async function guardarNovedadArmamento() {
+    if (!armaNovedadActual) return;
+    const { arma, modo } = armaNovedadActual, recuperacion = modo === 'RECUPERAR', fecha = document.getElementById('novedad-armamento-fecha').value, observacion = document.getElementById('novedad-armamento-observacion').value.trim(), destino = document.getElementById('novedad-armamento-destino').value, tipo = document.getElementById('novedad-armamento-tipo').value, boton = document.getElementById('novedad-armamento-guardar');
+    const guia = document.getElementById('novedad-armamento-guia')?.files?.[0] || null;
+    if (!fecha) return alert('Selecciona la fecha efectiva.');
+    if (observacion.length < 5) return alert('Describe la novedad con al menos 5 caracteres.');
+    if (recuperacion && !destino) return alert('Selecciona el rastrillo de destino.');
+    if (recuperacion && !guia) return alert('Selecciona la guía PDF obligatoria para la recuperación.');
+    if (recuperacion && guia && guia.type && guia.type !== 'application/pdf') return alert('La guía debe estar en formato PDF.');
+    if (recuperacion && guia && guia.size > 10 * 1024 * 1024) return alert('La guía PDF no puede superar 10 MB.');
+    const descripcion = recuperacion ? `registrar la recuperación de la serie ${arma.serie} y enviarla en Transito al rastrillo seleccionado` : `cambiar la serie ${arma.serie} de ${arma.estado} a ${tipo}`;
+    if (!confirm(`¿Confirmas que deseas ${descripcion}?`)) return;
+    let rutaGuia = '', guiaReutilizada = false, rpcIniciado = false;
+    try {
+        boton.disabled = true; boton.textContent = 'Registrando…';
+        const idSolicitud = typeof nuevoIdSolicitudActa === 'function' ? nuevoIdSolicitudActa() : `nov_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+        let respuesta;
+        if (backendUsaSupabase()) {
+            if (recuperacion) {
+                const carga = await supabaseSubirGuiaArmamento(guia, idSolicitud, 'recovery');
+                rutaGuia = carga.path; guiaReutilizada = carga.reused;
+                rpcIniciado = true;
+                respuesta = await supabaseIniciarRecuperacionArmamento(arma, destino, fecha, observacion, idSolicitud, rutaGuia);
+                if (respuesta?.idempotent && !guiaReutilizada) {
+                    await supabaseEliminarGuiaArmamento(rutaGuia);
+                }
+            } else {
+                rpcIniciado = true;
+                respuesta = await supabaseDeclararNovedadArmamento(arma, tipo, fecha, observacion, idSolicitud);
+            }
+        } else {
+            const payload = recuperacion ? { accion:'iniciar_recuperacion_arma',token:tokenSesionActual(),idSolicitud,series:[arma.serie],destino,fecha,observacion } : { accion:'registrar_novedad_arma',token:tokenSesionActual(),idSolicitud,series:[arma.serie],tipo,fecha,observacion };
+            respuesta = await postActas(payload, 90000);
+        }
+        if (respuesta?.ok === false) throw new Error(respuesta.mensaje || 'No se pudo registrar la novedad.');
+        rutaGuia = '';
+        alert(recuperacion ? 'Recuperación registrada. El arma quedó EN TRÁNSITO hasta confirmar su llegada al rastrillo.' : `Novedad registrada. El arma quedó ${tipo.toUpperCase()}.`);
+        cerrarNovedadArmamento();
+        if (backendUsaSupabase()) {
+            if (typeof cargarDatos === 'function') await cargarDatos();
+            invalidarWorkspaceArmamentoSupabase();
+            invalidarWorkspaceDespachoArmamentoSupabase();
+            await Promise.all([cargarWorkspaceArmamentoSupabase(true), cargarWorkspaceDespachoArmamentoSupabase(true)]);
+        } else if (typeof cargarDatos === 'function') await cargarDatos();
+        renderTablaArmamento();
+    } catch (error) {
+        const errorConfirmadoSinEscritura = Number(error?.status) >= 400 && Number(error?.status) < 500;
+        if (rutaGuia && (!rpcIniciado || errorConfirmadoSinEscritura) && backendUsaSupabase()) {
+            try { await supabaseEliminarGuiaArmamento(rutaGuia); } catch (_) {}
+        }
+        alert(error.message || String(error));
+    } finally { if (boton) { boton.disabled=false; boton.textContent=recuperacion?'♻ Iniciar recuperación':'⚠️ Guardar novedad'; } }
+}
+
+function mantenimientoInputStyle(){return 'width:100%;padding:9px;border:1px solid #cbd5e1;border-radius:8px;font-size:11px;background:white';}
+function mantenimientoCampo(etiqueta,contenido){return `<label style="display:block;font-size:9px;font-weight:900;color:#475569"><span style="display:block;margin-bottom:4px">${etiqueta}</span>${contenido}</label>`;}
+function mantenimientoLocalPermitido(arma){return normalizarTexto(arma?.estado)==='activo';}
+function observacionTecnicaMantenimiento(arma){return String(arma?.motivoBloqueo||'').trim();}
+function opcionesModalidadMantenimiento(arma){
+    return mantenimientoLocalPermitido(arma)
+        ? '<option value="LOCAL">LOCAL · SIN TRASLADO</option><option value="EXTERNO">EXTERNO · CON TRASLADO</option>'
+        : '<option value="EXTERNO">EXTERNO · CON TRASLADO</option>';
+}
+function botonesGuiasMantenimiento(mantenimiento){
+    const botones=[];
+    if(mantenimiento?.rutaGuiaEnvio)botones.push(`<button type="button" onclick="verGuiaMantenimientoArmamento('${encodeURIComponent(mantenimiento.rutaGuiaEnvio)}','Guía de envío')" style="border:0;border-radius:7px;background:#1d4ed8;color:white;padding:6px 9px;font-size:9px;font-weight:900;cursor:pointer">📄 Ver guía de envío</button>`);
+    if(mantenimiento?.rutaGuiaRetorno)botones.push(`<button type="button" onclick="verGuiaMantenimientoArmamento('${encodeURIComponent(mantenimiento.rutaGuiaRetorno)}','Guía de retorno')" style="border:0;border-radius:7px;background:#d97706;color:white;padding:6px 9px;font-size:9px;font-weight:900;cursor:pointer">📄 Ver guía de retorno</button>`);
+    return botones.length?`<div style="display:flex;gap:7px;flex-wrap:wrap;margin-top:9px">${botones.join('')}</div>`:'';
+}
+async function verGuiaMantenimientoArmamento(rutaCodificada,titulo){
+    let ventana;
+    try{
+        ventana=window.open('about:blank','_blank');
+        const ruta=decodeURIComponent(rutaCodificada||''),url=await supabaseUrlFirmadaGuiaArmamento(ruta,300);
+        if(!url)throw new Error('No se pudo generar el enlace temporal.');
+        if(ventana){ventana.document.title=titulo||'Guía de mantenimiento';ventana.location.href=url;}
+        else window.location.href=url;
+    }catch(error){if(ventana)ventana.close();alert(error.message||String(error));}
+}
+function asegurarModalMantenimientoArmamento(){
+    if(document.getElementById('mantenimiento-armamento-modal'))return;
+    const modal=document.createElement('div');modal.id='mantenimiento-armamento-modal';modal.style.cssText='display:none;position:fixed;inset:0;z-index:23500;background:rgba(15,23,42,.86);align-items:center;justify-content:center;padding:14px';
+    modal.innerHTML=`<div style="width:100%;max-width:760px;max-height:94vh;background:#f8fafc;border-radius:18px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 30px 90px rgba(0,0,0,.5)"><div style="background:#0f172a;color:white;padding:15px 18px;display:flex;align-items:center;gap:10px"><div style="flex:1"><h3 style="margin:0;font-size:15px;font-weight:900">🔧 Gestión técnica y mantenimiento</h3><p id="mtto-modal-resumen" style="margin:3px 0 0;color:#94a3b8;font-size:10px"></p></div><button onclick="cerrarMantenimientoArmamento()" style="border:0;border-radius:8px;background:rgba(255,255,255,.12);color:white;padding:7px 10px;cursor:pointer">✕ Cerrar</button></div><div id="mtto-modal-contenido" style="padding:16px;overflow:auto"></div></div>`;document.body.appendChild(modal);
+}
+function hoyMantenimiento(){return typeof fechaISOHoy==='function'?fechaISOHoy():new Date().toISOString().slice(0,10);}
+async function abrirMantenimientoArmamento(serieCodificada){
+    if(typeof usuarioPuedeGestionarMantenimientoArmamento==='function'&&!usuarioPuedeGestionarMantenimientoArmamento())return alert('Esta función todavía no está habilitada en la migración actual.');
+    const serie=decodeURIComponent(serieCodificada||''),arma=(armamentoDetalle||[]).find(a=>String(a.serie||'')===serie);if(!arma)return alert('No se encontró el arma seleccionada.');
+    asegurarModalMantenimientoArmamento();mantenimientoArmaActual={arma,mantenimiento:null};document.getElementById('mantenimiento-armamento-modal').style.display='flex';document.getElementById('mtto-modal-resumen').textContent=`SERIE ${arma.serie} · ${arma.estado} · ${arma.condicionTecnica||'BUEN ESTADO'}`;
+    const c=document.getElementById('mtto-modal-contenido');c.innerHTML='<div style="padding:24px;text-align:center;color:#64748b;font-size:11px">Consultando estado técnico…</div>';
+    try{if(arma.idMantenimientoActual){const r=backendUsaSupabase()?await cargarWorkspaceMantenimientoArmamentoSupabase(true):await postActas({accion:'listar_mantenimientos_armamento',token:tokenSesionActual()},90000);if(r?.ok===false)throw new Error(r.mensaje);mantenimientoArmaActual.mantenimiento=(r.mantenimientos||[]).find(m=>m.idMantenimiento===arma.idMantenimientoActual)||null;}renderFormularioMantenimiento();}catch(e){c.innerHTML=`<div style="padding:18px;color:#b91c1c;font-weight:800">${histMovEsc(e.message||String(e))}</div>`;}
+}
+function cerrarMantenimientoArmamento(){const m=document.getElementById('mantenimiento-armamento-modal');if(m)m.style.display='none';mantenimientoArmaActual=null;}
+function renderFormularioMantenimiento(){
+    if(!mantenimientoArmaActual)return;const {arma,mantenimiento}=mantenimientoArmaActual,c=document.getElementById('mtto-modal-contenido'),s=mantenimientoInputStyle(),hoy=hoyMantenimiento(),observacionPrevia=observacionTecnicaMantenimiento(arma),localPermitido=mantenimientoLocalPermitido(arma),avisoObservacion=observacionPrevia?`<div style="background:#fff7ed;border:1px solid #fdba74;border-left:5px solid #ea580c;border-radius:10px;padding:10px 12px;margin-bottom:12px"><div style="font-size:9px;font-weight:900;color:#9a3412;margin-bottom:4px">OBSERVACIÓN TÉCNICA REGISTRADA</div><div style="font-size:11px;font-weight:800;color:#431407;white-space:pre-wrap">${histMovEsc(observacionPrevia)}</div></div>`:'',avisoModalidad=!localPermitido?`<div style="background:#eff6ff;border:1px solid #93c5fd;border-radius:9px;padding:9px 11px;margin:9px 0 0;color:#1e3a8a;font-size:9px;font-weight:800">El arma está en ${histMovEsc(arma.estado||'otro estado')}. El mantenimiento LOCAL solo está disponible para armas ACTIVO en un proyecto; para esta arma corresponde EXTERNO con guía de traslado.</div>`:'';
+    if(!arma.idMantenimientoActual){c.innerHTML=avisoObservacion+`<div style="background:white;border:1px solid #e2e8f0;border-radius:12px;padding:14px;margin-bottom:12px"><h4 style="margin:0 0 10px;color:#0f172a;font-size:12px">⚠ REPORTAR CONDICIÓN TÉCNICA</h4><div style="display:grid;grid-template-columns:1fr 1fr;gap:9px">${mantenimientoCampo('Condición',`<select id="mtto-condicion" style="${s}"><option>CON NOVEDAD</option><option> MAL ESTADO</option><option>NO OPERATIVA</option></select>`)}${mantenimientoCampo('Fecha',`<input id="mtto-fecha-novedad" type="date" value="${hoy}" style="${s}">`)}</div><div style="margin-top:9px">${mantenimientoCampo('Comentario obligatorio',`<textarea id="mtto-observacion-novedad" maxlength="500" rows="2" style="${s};resize:vertical" placeholder="Describe la falla, daño o novedad encontrada"></textarea>`)}</div><button onclick="registrarCondicionTecnica()" style="width:100%;margin-top:10px;border:0;border-radius:8px;background:#c2410c;color:white;padding:9px;font-size:10px;font-weight:900;cursor:pointer">Guardar condición técnica</button></div><div style="background:white;border:1px solid #ddd6fe;border-radius:12px;padding:14px"><h4 style="margin:0 0 10px;color:#0f172a;font-size:12px">🔧 INICIAR MANTENIMIENTO</h4><div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px">${mantenimientoCampo('Tipo de servicio',`<select id="mtto-tipo-servicio" style="${s}"><option>CORRECTIVO</option><option>PREVENTIVO</option><option>INSPECCIÓN</option></select>`)}${mantenimientoCampo('Modalidad',`<select id="mtto-modalidad" onchange="cambiarModalidadMantenimiento()" style="${s}">${opcionesModalidadMantenimiento(arma)}</select>`)}${mantenimientoCampo('Tipo de armero',`<select id="mtto-armero-tipo" style="${s}"><option>INTERNO</option><option>EXTERNO</option></select>`)}${mantenimientoCampo('Armero o taller',`<input id="mtto-armero-nombre" maxlength="120" style="${s}" placeholder="Nombre del responsable o taller">`)}${mantenimientoCampo('Ubicación del armero',`<input id="mtto-armero-ubicacion" maxlength="160" style="${s}" placeholder="Ciudad, dirección o instalación">`)}${mantenimientoCampo('Fecha de inicio/salida',`<input id="mtto-fecha-inicio" type="date" value="${hoy}" style="${s}">`)}</div>${avisoModalidad}<div style="margin-top:9px">${mantenimientoCampo('Problema o motivo',`<textarea id="mtto-problema" maxlength="500" rows="2" style="${s};resize:vertical" placeholder="Describe el mantenimiento requerido">${histMovEsc(observacionPrevia)}</textarea>`)}</div><div id="mtto-guia-envio-wrap" style="display:${localPermitido?'none':'block'};margin-top:9px">${mantenimientoCampo('Guía PDF de envío · obligatoria',`<input id="mtto-guia-envio" type="file" accept="application/pdf,.pdf" style="${s}">`)}</div><button onclick="iniciarMantenimientoDesdeModal()" style="width:100%;margin-top:11px;border:0;border-radius:8px;background:#6d28d9;color:white;padding:10px;font-size:10px;font-weight:900;cursor:pointer">Iniciar mantenimiento</button></div>`;return;}
+    if(!mantenimiento){c.innerHTML='<div style="padding:18px;color:#b91c1c">El arma indica un mantenimiento activo, pero no se encontró su expediente.</div>';return;}
+    const estado=mantenimiento.estadoMantenimiento,info=`<div style="background:white;border:1px solid #ddd6fe;border-left:5px solid #7c3aed;border-radius:12px;padding:13px;margin-bottom:12px"><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><b style="font-size:13px;color:#0f172a">${histMovEsc(mantenimiento.codigo)}</b><span style="background:#ede9fe;color:#6d28d9;border-radius:99px;padding:4px 8px;font-size:8px;font-weight:900">${histMovEsc(estado)}</span></div><div style="font-size:10px;color:#475569;margin-top:6px">${histMovEsc(mantenimiento.modalidad)} · ${histMovEsc(mantenimiento.tipoServicio)} · ${histMovEsc(mantenimiento.armeroNombre)}</div><div style="font-size:9px;color:#64748b;margin-top:3px">${histMovEsc(mantenimiento.problema)}</div>${botonesGuiasMantenimiento(mantenimiento)}</div>`;
+    if(estado==='EN_TRANSITO_ARMERO')c.innerHTML=info+`<div style="background:white;border:1px solid #e2e8f0;border-radius:12px;padding:14px">${mantenimientoCampo('Fecha de recepción por el armero',`<input id="mtto-fecha-etapa" type="date" value="${hoy}" style="${s}">`)}<button onclick="confirmarRecepcionArmeroDesdeModal()" style="width:100%;margin-top:10px;border:0;border-radius:8px;background:#2563eb;color:white;padding:10px;font-size:10px;font-weight:900;cursor:pointer">Confirmar llegada al armero</button></div>`;
+    else if(['EN_REPARACION','EN_DIAGNOSTICO'].includes(estado))c.innerHTML=info+`<div style="background:white;border:1px solid #e2e8f0;border-radius:12px;padding:14px"><div style="display:grid;grid-template-columns:1fr 1fr;gap:9px">${mantenimientoCampo('Fecha del resultado',`<input id="mtto-fecha-etapa" type="date" value="${hoy}" style="${s}">`)}${mantenimientoCampo('Resultado',`<select id="mtto-resultado" style="${s}"><option value="APTA">APTA / REPARADA</option><option value="NO REPARABLE">NO REPARABLE</option></select>`)}</div><div style="margin-top:9px">${mantenimientoCampo('Diagnóstico y trabajo realizado',`<textarea id="mtto-diagnostico" maxlength="1000" rows="3" style="${s};resize:vertical"></textarea>`)}</div><div style="margin-top:9px">${mantenimientoCampo('Observación final',`<textarea id="mtto-observacion-final" maxlength="500" rows="2" style="${s};resize:vertical"></textarea>`)}</div><button onclick="finalizarMantenimientoDesdeModal()" style="width:100%;margin-top:10px;border:0;border-radius:8px;background:#15803d;color:white;padding:10px;font-size:10px;font-weight:900;cursor:pointer">Registrar resultado</button></div>`;
+    else if(estado==='REPARADA_PENDIENTE_RETORNO')c.innerHTML=info+`<div style="background:white;border:1px solid #e2e8f0;border-radius:12px;padding:14px"><div style="display:grid;grid-template-columns:1fr 1fr;gap:9px">${mantenimientoCampo('Rastrillo de destino',`<select id="mtto-destino" style="${s}"><option value="">Selecciona</option><option value="GUAYAS">GUAYAS · MATRIZ</option><option value="MANABI">MANABÍ · SUCURSAL</option><option value="PICHINCHA">PICHINCHA · SUCURSAL</option></select>`)}${mantenimientoCampo('Fecha de salida',`<input id="mtto-fecha-etapa" type="date" value="${hoy}" style="${s}">`)}</div><div style="margin-top:9px">${mantenimientoCampo('Guía PDF de retorno · obligatoria',`<input id="mtto-guia-retorno" type="file" accept="application/pdf,.pdf" style="${s}">`)}</div><button onclick="iniciarRetornoMantenimientoDesdeModal()" style="width:100%;margin-top:10px;border:0;border-radius:8px;background:#d97706;color:white;padding:10px;font-size:10px;font-weight:900;cursor:pointer">Iniciar retorno al rastrillo</button></div>`;
+    else if(estado==='EN_TRANSITO_RASTRILLO')c.innerHTML=info+`<div style="background:white;border:1px solid #e2e8f0;border-radius:12px;padding:14px">${mantenimientoCampo('Fecha de recepción en rastrillo',`<input id="mtto-fecha-etapa" type="date" value="${hoy}" style="${s}">`)}<button onclick="confirmarRetornoMantenimientoDesdeModal()" style="width:100%;margin-top:10px;border:0;border-radius:8px;background:#0f766e;color:white;padding:10px;font-size:10px;font-weight:900;cursor:pointer">Confirmar recepción en rastrillo</button></div>`;
+    else c.innerHTML=info+`<div style="background:#fee2e2;color:#991b1b;border:1px solid #fecaca;border-radius:12px;padding:14px;font-size:10px;font-weight:800">El arma quedó ${histMovEsc(estado)} y permanece bloqueada. Su expediente continúa disponible en el historial.</div>`;
+}
+function cambiarModalidadMantenimiento(){const externo=document.getElementById('mtto-modalidad')?.value==='EXTERNO',w=document.getElementById('mtto-guia-envio-wrap');if(w)w.style.display=externo?'block':'none';}
+async function guiaMantenimientoBase64(id){const archivo=document.getElementById(id)?.files?.[0];if(!archivo)throw new Error('Selecciona la guía PDF obligatoria.');if(archivo.type&&archivo.type!=='application/pdf')throw new Error('La guía debe estar en formato PDF.');if(archivo.size>10*1024*1024)throw new Error('La guía PDF no puede superar 10 MB.');if(backendUsaSupabase())return archivo;if(typeof actasV3ArchivoPdfABase64!=='function')throw new Error('No se cargó el lector de guías PDF. Actualiza la página.');return actasV3ArchivoPdfABase64(archivo);}
+async function completarAccionMantenimiento(payload,mensajeConfirmacion){if(mensajeConfirmacion&&!confirm(mensajeConfirmacion))return;const r=backendUsaSupabase()?await supabaseEjecutarAccionMantenimiento(payload):await postActas({...payload,token:tokenSesionActual()},90000);if(!r.ok)throw new Error(r.mensaje||'No se pudo completar la operación.');alert(r.mensaje);cerrarMantenimientoArmamento();if(typeof cargarDatos==='function')await cargarDatos();if(backendUsaSupabase()){invalidarWorkspaceArmamentoSupabase();invalidarWorkspaceDespachoArmamentoSupabase();invalidarWorkspaceMantenimientoArmamentoSupabase();await Promise.all([cargarWorkspaceArmamentoSupabase(true),cargarWorkspaceDespachoArmamentoSupabase(true)]);}renderTablaArmamento();}
+async function registrarCondicionTecnica(){try{const {arma}=mantenimientoArmaActual,condicion=document.getElementById('mtto-condicion').value.trim(),fecha=document.getElementById('mtto-fecha-novedad').value,observacion=document.getElementById('mtto-observacion-novedad').value.trim();if(observacion.length<5)return alert('Describe la novedad con al menos 5 caracteres.');await completarAccionMantenimiento({accion:'reportar_estado_tecnico',serie:arma.serie,condicion,fecha,observacion},`¿Registrar la condición ${condicion} para la serie ${arma.serie}?`);}catch(e){alert(e.message||String(e));}}
+async function iniciarMantenimientoDesdeModal(){try{const {arma}=mantenimientoArmaActual,modalidad=document.getElementById('mtto-modalidad').value;if(modalidad==='LOCAL'&&!mantenimientoLocalPermitido(arma))return alert(`El arma está en ${arma.estado||'otro estado'}. El mantenimiento LOCAL requiere un arma ACTIVO en un proyecto.`);const guia=modalidad==='EXTERNO'?await guiaMantenimientoBase64('mtto-guia-envio'):null,payload={accion:'iniciar_mantenimiento_arma',idSolicitud:typeof nuevoIdSolicitudActa==='function'?nuevoIdSolicitudActa():'',serie:arma.serie,tipoServicio:document.getElementById('mtto-tipo-servicio').value,modalidad,armeroTipo:document.getElementById('mtto-armero-tipo').value,armeroNombre:document.getElementById('mtto-armero-nombre').value.trim(),armeroUbicacion:document.getElementById('mtto-armero-ubicacion').value.trim(),fecha:document.getElementById('mtto-fecha-inicio').value,problema:document.getElementById('mtto-problema').value.trim(),guia};if(!payload.armeroNombre||payload.problema.length<5)return alert('Indica el armero y describe el problema.');await completarAccionMantenimiento(payload,`¿Iniciar mantenimiento ${modalidad} para la serie ${arma.serie}?`);}catch(e){alert(e.message||String(e));}}
+async function confirmarRecepcionArmeroDesdeModal(){try{await completarAccionMantenimiento({accion:'confirmar_recepcion_armero',idMantenimiento:mantenimientoArmaActual.mantenimiento.idMantenimiento,fecha:document.getElementById('mtto-fecha-etapa').value},'¿Confirmas que el arma llegó físicamente al armero?');}catch(e){alert(e.message||String(e));}}
+async function finalizarMantenimientoDesdeModal(){try{const diagnostico=document.getElementById('mtto-diagnostico').value.trim();if(diagnostico.length<5)return alert('Registra el diagnóstico y trabajo realizado.');await completarAccionMantenimiento({accion:'finalizar_mantenimiento_arma',idMantenimiento:mantenimientoArmaActual.mantenimiento.idMantenimiento,fecha:document.getElementById('mtto-fecha-etapa').value,resultado:document.getElementById('mtto-resultado').value,diagnostico,observacion:document.getElementById('mtto-observacion-final').value.trim()},'¿Confirmas el resultado técnico registrado?');}catch(e){alert(e.message||String(e));}}
+async function iniciarRetornoMantenimientoDesdeModal(){try{const guia=await guiaMantenimientoBase64('mtto-guia-retorno'),destino=document.getElementById('mtto-destino').value;if(!destino)return alert('Selecciona el rastrillo de destino.');await completarAccionMantenimiento({accion:'iniciar_retorno_mantenimiento',idSolicitud:typeof nuevoIdSolicitudActa==='function'?nuevoIdSolicitudActa():'',idMantenimiento:mantenimientoArmaActual.mantenimiento.idMantenimiento,fecha:document.getElementById('mtto-fecha-etapa').value,destino,guia},'¿Iniciar el retorno del arma reparada hacia el rastrillo?');}catch(e){alert(e.message||String(e));}}
+async function confirmarRetornoMantenimientoDesdeModal(){try{await completarAccionMantenimiento({accion:'confirmar_retorno_mantenimiento',idMantenimiento:mantenimientoArmaActual.mantenimiento.idMantenimiento,fecha:document.getElementById('mtto-fecha-etapa').value},'¿Confirmas que el arma reparada llegó físicamente al rastrillo?');}catch(e){alert(e.message||String(e));}}
+
+function histMovEsc(valor) { return String(valor??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function histMovUrl(valor) { try { const u=new URL(String(valor||''),location.href);return ['http:','https:'].includes(u.protocol)?histMovEsc(u.href):''; } catch(_) { return ''; } }
+async function verGuiaHistorialMovimiento(rutaCodificada){try{const ruta=decodeURIComponent(rutaCodificada||''),url=await supabaseUrlFirmadaGuiaArmamento(ruta,300);window.open(url,'_blank','noopener');}catch(e){alert(e.message||String(e));}}
+function respaldoHistorialMovimiento(movimiento){if(movimiento?.rutaGuia)return `<button type="button" onclick="verGuiaHistorialMovimiento('${encodeURIComponent(movimiento.rutaGuia)}')" style="border:0;background:#dcfce7;color:#047857;border-radius:7px;padding:6px 9px;font-size:11px;font-weight:900;cursor:pointer">📄 VER GUÍA</button>`;const url=histMovUrl(movimiento?.urlGuia);if(url)return `<a href="${url}" target="_blank" rel="noopener" style="color:#047857;font-weight:900">📄 VER GUÍA</a>`;return '—';}
+function activarGuiasPrivadasHistorial(movimientos){const filas=[...document.querySelectorAll('#hist-mov-contenido tbody > tr:not([id])')];filas.forEach((fila,i)=>{const celda=fila.children[9],movimiento=movimientos?.[i];if(celda&&movimiento?.rutaGuia)celda.innerHTML=respaldoHistorialMovimiento(movimiento);});}
+function mejorarRecorridosHistorial(datos){
+    const seccion=document.querySelector('#hist-mov-contenido > section');
+    if(!seccion)return;
+    const ayuda=document.createElement('div');
+    ayuda.style.cssText='margin:8px 0 12px;padding:10px 12px;border-left:4px solid #2563eb;border-radius:8px;background:#eff6ff;color:#334155;font-size:11px;line-height:1.45';
+    ayuda.innerHTML='<b>¿Cómo leer este panel?</b> Cada tarjeta corresponde a un arma. Lee los eventos de izquierda a derecha: salida, asignación, mantenimiento y retorno. Usa <b>VER GUÍA</b> para abrir el respaldo privado sin iniciar otra sesión.';
+    const grilla=seccion.querySelector('div[style*="grid-template-columns:repeat(2"]');
+    if(grilla)grilla.parentNode.insertBefore(ayuda,grilla);
+    seccion.querySelectorAll('[style*="font-size:7px"],[style*="font-size:8px"]').forEach(el=>el.style.fontSize='10px');
+    const grupos={};(datos.movimientos||[]).forEach(m=>(grupos[m.serie]||(grupos[m.serie]=[])).push(m));
+    const duraciones=new Map((datos.resumen?.duraciones||[]).map(x=>[x.serie,x]));
+    const series=Object.keys(grupos).sort((a,b)=>(duraciones.get(b)?.diasFueraActual||0)-(duraciones.get(a)?.diasFueraActual||0)||a.localeCompare(b)).slice(0,12);
+    [...seccion.querySelectorAll('article')].forEach((articulo,indice)=>{
+        const eventos=[...(articulo.children[1]?.children||[])];
+        const lista=(grupos[series[indice]]||[]).slice().sort((a,b)=>String(a.fechaEfectiva||a.fechaRegistro).localeCompare(String(b.fechaEfectiva||b.fechaRegistro)));
+        eventos.forEach((evento,i)=>{
+            const movimiento=lista[i];if(!movimiento?.rutaGuia)return;
+            evento.querySelectorAll('a,button').forEach(el=>{if(String(el.textContent).includes('GUÍA'))el.remove();});
+            const caja=document.createElement('span');caja.innerHTML=respaldoHistorialMovimiento(movimiento);evento.appendChild(caja.firstElementChild);
+        });
+    });
+}
+function asegurarModalHistorialMovimientos() {
+    if (document.getElementById('historial-movimientos-modal')) return;
+    const modal=document.createElement('div');modal.id='historial-movimientos-modal';modal.style.cssText='display:none;position:fixed;inset:0;z-index:22500;background:rgba(15,23,42,.86);align-items:center;justify-content:center;padding:12px';
+    modal.innerHTML=`<div style="width:98vw;max-width:1450px;height:92vh;background:#f8fafc;border-radius:18px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 30px 90px rgba(0,0,0,.5)"><div style="background:#0f172a;color:white;padding:14px 18px;display:flex;align-items:center;gap:10px"><div style="flex:1"><h2 style="margin:0;font-size:17px;font-weight:900">🧭 Historial del Armamento</h2><p id="hist-mov-contador" style="margin:3px 0 0;color:#cbd5e1;font-size:11px">Cargando…</p></div><button onclick="cerrarHistorialMovimientosArmamento()" style="border:0;border-radius:8px;background:rgba(255,255,255,.12);color:white;padding:9px 13px;font-size:12px;cursor:pointer">✕ Cerrar</button></div><div style="display:flex;gap:8px;padding:10px 14px;background:#e2e8f0"><button id="hist-tab-movimientos" onclick="cambiarVistaHistorialArmamento('MOVIMIENTOS')" style="border:0;border-radius:9px;padding:10px 16px;font-size:12px;font-weight:900;cursor:pointer">🚚 MOVIMIENTOS Y PROYECTOS</button><button id="hist-tab-mantenimientos" onclick="cambiarVistaHistorialArmamento('MANTENIMIENTOS')" style="border:0;border-radius:9px;padding:10px 16px;font-size:12px;font-weight:900;cursor:pointer">🔧 MANTENIMIENTOS</button></div><div id="hist-mov-filtros" style="background:white;padding:11px 14px;border-bottom:1px solid #e2e8f0"><div style="display:grid;grid-template-columns:minmax(180px,2fr) repeat(4,minmax(120px,1fr));gap:7px"><input id="hist-mov-consulta" placeholder="Serie, arma, acta, responsable…" style="padding:9px;border:1px solid #cbd5e1;border-radius:8px;font-size:11px"><select id="hist-mov-tipo" style="padding:9px;border:1px solid #cbd5e1;border-radius:8px;font-size:11px"><option value="">Todos los movimientos</option></select><select id="hist-mov-estado" style="padding:9px;border:1px solid #cbd5e1;border-radius:8px;font-size:11px"><option value="">Todos los estados</option></select><select id="hist-mov-provincia" style="padding:9px;border:1px solid #cbd5e1;border-radius:8px;font-size:11px"><option value="">Todas las provincias</option></select><select id="hist-mov-proyecto" style="padding:9px;border:1px solid #cbd5e1;border-radius:8px;font-size:11px"><option value="">Todos los proyectos</option></select></div><div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap;margin-top:7px"><label style="font-size:10px;font-weight:800;color:#64748b">Desde <input id="hist-mov-desde" type="date" style="padding:7px;border:1px solid #cbd5e1;border-radius:8px;font-size:11px"></label><label style="font-size:10px;font-weight:800;color:#64748b">Hasta <input id="hist-mov-hasta" type="date" style="padding:7px;border:1px solid #cbd5e1;border-radius:8px;font-size:11px"></label><button onclick="consultarHistorialMovimientos(1)" style="border:0;border-radius:8px;background:#0369a1;color:white;padding:9px 13px;font-size:11px;font-weight:900;cursor:pointer">🔎 Consultar</button><button onclick="limpiarFiltrosHistorialMovimientos()" style="border:0;border-radius:8px;background:#e2e8f0;color:#334155;padding:9px 13px;font-size:11px;font-weight:900;cursor:pointer">Limpiar</button><span style="flex:1"></span><button onclick="exportarHistorialMovimientosPDF()" style="border:0;border-radius:8px;background:#d97706;color:white;padding:9px 13px;font-size:11px;font-weight:900;cursor:pointer">PDF</button><button onclick="exportarHistorialMovimientosExcel()" style="border:0;border-radius:8px;background:#15803d;color:white;padding:9px 13px;font-size:11px;font-weight:900;cursor:pointer">Excel</button></div></div><div id="hist-mov-contenido" style="flex:1;overflow:auto;padding:12px 14px"></div><div id="hist-mov-paginacion" style="background:white;border-top:1px solid #e2e8f0;padding:9px 14px;display:flex;justify-content:center;align-items:center;gap:8px"></div></div>`;document.body.appendChild(modal);
+    document.getElementById('hist-mov-consulta').addEventListener('keydown',e=>{if(e.key==='Enter')consultarHistorialMovimientos(1);});
+}
+function filtrosHistorialMovimientos(exportar=false){return {accion:'listar_historial_movimientos',token:tokenSesionActual(),consulta:document.getElementById('hist-mov-consulta')?.value.trim()||'',tipo:document.getElementById('hist-mov-tipo')?.value||'',estado:document.getElementById('hist-mov-estado')?.value||'',provincia:document.getElementById('hist-mov-provincia')?.value||'',proyecto:document.getElementById('hist-mov-proyecto')?.value||'',desde:document.getElementById('hist-mov-desde')?.value||'',hasta:document.getElementById('hist-mov-hasta')?.value||'',pagina:paginaHistorialMovimientos,limite:100,exportar};}
+function llenarCatalogoHistorial(id,valores,etiqueta){const select=document.getElementById(id),anterior=select.value;select.innerHTML=`<option value="">${etiqueta}</option>`+(valores||[]).map(v=>`<option value="${histMovEsc(v)}">${histMovEsc(v)}</option>`).join('');if([...select.options].some(o=>o.value===anterior))select.value=anterior;}
+function actualizarCatalogosHistorial(catalogos){catalogosHistorialMovimientos=catalogos||catalogosHistorialMovimientos;llenarCatalogoHistorial('hist-mov-tipo',catalogosHistorialMovimientos.tipos,'Todos los movimientos');llenarCatalogoHistorial('hist-mov-estado',catalogosHistorialMovimientos.estados,'Todos los estados');llenarCatalogoHistorial('hist-mov-provincia',catalogosHistorialMovimientos.provincias,'Todas las provincias');llenarCatalogoHistorial('hist-mov-proyecto',catalogosHistorialMovimientos.proyectos,'Todos los proyectos');}
+async function abrirHistorialMovimientosArmamento(){if(typeof usuarioPuedeVerHistorialMovimientosArmamento==='function'&&!usuarioPuedeVerHistorialMovimientosArmamento())return alert('Esta función todavía no está habilitada en la migración actual.');asegurarModalHistorialMovimientos();document.getElementById('historial-movimientos-modal').style.display='flex';indicadoresHistorialArmamento=null;await cambiarVistaHistorialArmamento('MOVIMIENTOS');}
+function cerrarHistorialMovimientosArmamento(){const modal=document.getElementById('historial-movimientos-modal');if(modal)modal.style.display='none';}
+async function cambiarVistaHistorialArmamento(vista){
+    vistaHistorialArmamento=vista;
+    const movimientos=vista==='MOVIMIENTOS';
+    document.getElementById('hist-mov-filtros').style.display=movimientos?'block':'none';
+    document.getElementById('hist-mov-paginacion').style.display=movimientos?'flex':'none';
+    ['movimientos','mantenimientos'].forEach(nombre=>{const activo=nombre.toUpperCase()===vista,boton=document.getElementById(`hist-tab-${nombre}`);if(boton)boton.style.cssText+=activo?';background:#0f172a;color:white':' ;background:white;color:#334155';});
+    if(movimientos)await consultarHistorialMovimientos(1);else await renderHistorialMantenimientos();
+}
+function limpiarFiltrosHistorialMovimientos(){['hist-mov-consulta','hist-mov-tipo','hist-mov-estado','hist-mov-provincia','hist-mov-proyecto','hist-mov-desde','hist-mov-hasta'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});consultarHistorialMovimientos(1);}
+async function cargarIndicadoresHistorialArmamento(){
+    if(!indicadoresHistorialArmamento)indicadoresHistorialArmamento=await supabaseCargarIndicadoresHistorialArmamento();
+    return indicadoresHistorialArmamento;
+}
+function aplicarIndicadoresHistorial(datos,indicadores){
+    const armas=indicadores?.weapons||[],resumen=indicadores?.summary||{};
+    datos.resumen={...(datos.resumen||{}),armasUnicas:resumen.total_weapons??datos.resumen?.armasUnicas,
+      promedioDiasFuera:resumen.average_out_days||0,
+      duraciones:armas.map(a=>({serie:a.serial_number,proyecto:a.project,estado:a.state,totalDiasFuera:Number(a.total_out_days)||0,diasFueraActual:Number(a.current_out_days)||0}))};
+}
+function insertarPanelGerencialHistorial(){
+    const c=document.getElementById('hist-mov-contenido'),datos=indicadoresHistorialArmamento;if(!c||!datos)return;
+    const s=datos.summary||{},armas=datos.weapons||[],afuera=armas.filter(a=>Number(a.current_out_days)>0).slice(0,12),nunca=armas.filter(a=>Number(a.deployment_count)===0);
+    const panel=document.createElement('section');panel.style.cssText='background:white;border:1px solid #cbd5e1;border-radius:12px;padding:12px;margin-bottom:11px;font-size:11px';
+    panel.innerHTML=`<div style="display:grid;grid-template-columns:repeat(5,minmax(120px,1fr));gap:8px"><div><small>TOTAL ARMAS</small><b style="display:block;font-size:20px">${s.total_weapons||0}</b></div><div><small>HAN SALIDO</small><b style="display:block;font-size:20px;color:#2563eb">${s.ever_deployed||0}</b></div><div><small>NUNCA HAN SALIDO</small><b style="display:block;font-size:20px;color:#64748b">${s.never_deployed||0}</b></div><div><small>FUERA ACTUALMENTE</small><b style="display:block;font-size:20px;color:#c2410c">${s.currently_out||0}</b></div><div><small>PROMEDIO FUERA</small><b style="display:block;font-size:20px;color:#7c3aed">${s.average_out_days||0} días</b></div></div><details style="margin-top:10px"><summary style="cursor:pointer;font-weight:900;color:#1d4ed8">ARMAS CON MÁS TIEMPO FUERA DEL RASTRILLO</summary><div style="display:grid;grid-template-columns:repeat(2,minmax(280px,1fr));gap:7px;margin-top:8px">${afuera.map(a=>`<button onclick="filtrarRecorridoArma('${encodeURIComponent(a.serial_number)}')" style="text-align:left;border:1px solid #fed7aa;background:#fff7ed;border-radius:8px;padding:8px;cursor:pointer"><b>SERIE ${histMovEsc(a.serial_number)}</b> · ${a.current_out_days} días actuales<br><span>${histMovEsc([a.province,a.project,a.post].filter(Boolean).join(' · ')||a.state)}</span></button>`).join('')||'Ninguna arma se encuentra fuera.'}</div></details><details style="margin-top:8px"><summary style="cursor:pointer;font-weight:900;color:#475569">ARMAS QUE NUNCA HAN SALIDO (${nunca.length})</summary><div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">${nunca.map(a=>`<span style="background:#f1f5f9;border-radius:7px;padding:6px 8px"><b>${histMovEsc(a.serial_number)}</b> · ${histMovEsc(a.weapon_type||'ARMA')}</span>`).join('')||'Todas las armas registran al menos una salida.'}</div></details>`;
+    c.insertBefore(panel,c.firstChild);
+}
+function diasEntreHistorial(inicio,fin){if(!inicio)return 0;const a=new Date(inicio),b=fin?new Date(fin):new Date();return Number.isFinite(a.getTime())&&Number.isFinite(b.getTime())?Math.max(0,Math.floor((b-a)/86400000)):0;}
+async function renderHistorialMantenimientos(){
+    const c=document.getElementById('hist-mov-contenido');c.innerHTML='<div style="padding:28px;text-align:center">Cargando mantenimientos…</div>';
+    try{
+        const [workspace,indicadores]=await Promise.all([cargarWorkspaceMantenimientoArmamentoSupabase(),cargarIndicadoresHistorialArmamento()]);
+        const q=busquedaHistorialMantenimiento.toUpperCase(),todos=workspace?.mantenimientos||[],filas=todos.filter(m=>!q||[m.serie,m.codigo,m.armeroNombre,m.estadoMantenimiento,m.problema].some(v=>String(v||'').toUpperCase().includes(q)));
+        const s=indicadores.summary||{};document.getElementById('hist-mov-contador').textContent=`${todos.length} mantenimiento(s) registrados · ${s.maintenance_open||0} abierto(s)`;
+        c.innerHTML=`<div style="padding:12px;border-left:4px solid #7c3aed;background:#f5f3ff;border-radius:9px;font-size:12px;line-height:1.5;margin-bottom:12px"><b>Historial de mantenimiento</b><br>Aquí puedes conocer cuántas veces ingresó cada arma, cuánto tiempo permaneció en proceso o con el armero, el diagnóstico y el resultado.</div><input value="${histMovEsc(busquedaHistorialMantenimiento)}" oninput="busquedaHistorialMantenimiento=this.value;renderHistorialMantenimientos()" placeholder="Buscar por serie, código, armero o estado…" style="width:100%;padding:11px;border:1px solid #cbd5e1;border-radius:9px;font-size:12px;margin-bottom:12px"><div style="display:grid;grid-template-columns:repeat(4,minmax(130px,1fr));gap:8px;margin-bottom:12px"><div class="hist-kpi"><small>TOTAL</small><b>${s.maintenance_total||0}</b></div><div class="hist-kpi"><small>ABIERTOS</small><b>${s.maintenance_open||0}</b></div><div class="hist-kpi"><small>ARMAS CON MANTENIMIENTO</small><b>${(indicadores.weapons||[]).filter(a=>Number(a.maintenance_count)>0).length}</b></div><div class="hist-kpi"><small>PROMEDIO</small><b>${s.average_maintenance_days||0} días</b></div></div><div style="display:grid;grid-template-columns:repeat(2,minmax(360px,1fr));gap:10px">${filas.map(m=>{const total=diasEntreHistorial(m.fechaSalida||m.fechaReporte,m.fechaRetornoRastrillo||m.fechaFinalizacion),arma=(indicadores.weapons||[]).find(a=>a.serial_number===m.serie)||{};return `<article style="background:white;border:1px solid #ddd6fe;border-radius:12px;padding:13px;font-size:11px;line-height:1.45"><div style="display:flex;justify-content:space-between;gap:8px"><h3 style="margin:0;font-size:14px">SERIE ${histMovEsc(m.serie||'—')}</h3><span style="background:#ede9fe;color:#6d28d9;border-radius:99px;padding:5px 8px;font-weight:900">${histMovEsc(m.estadoMantenimiento||'—')}</span></div><p style="margin:5px 0;color:#64748b"><b>${histMovEsc(m.codigo||'')}</b> · ${histMovEsc(m.modalidad||'')} · ${histMovEsc(m.tipoServicio||'')}</p><p><b>Tiempo de este mantenimiento:</b> ${total} día(s)<br><b>Total histórico del arma:</b> ${arma.maintenance_count||0} mantenimiento(s) · ${arma.total_maintenance_days||0} día(s)<br><b>Tiempo acumulado con armero:</b> ${arma.total_armorer_days||0} día(s)</p><p><b>Armero:</b> ${histMovEsc(m.armeroNombre||'—')} ${m.armeroUbicacion?'· '+histMovEsc(m.armeroUbicacion):''}<br><b>Problema reportado:</b> ${histMovEsc(m.problema||'—')}<br><b>Diagnóstico:</b> ${histMovEsc(m.diagnostico||'PENDIENTE')}<br><b>Resultado:</b> ${histMovEsc(m.resultado||'PENDIENTE')}</p><div style="display:flex;gap:7px;flex-wrap:wrap">${m.rutaGuiaEnvio?`<button onclick="verGuiaHistorialMovimiento('${encodeURIComponent(m.rutaGuiaEnvio)}')" style="border:0;border-radius:7px;padding:6px 9px;background:#dbeafe;color:#1d4ed8;font-weight:900;cursor:pointer">GUÍA DE ENVÍO</button>`:''}${m.rutaGuiaRetorno?`<button onclick="verGuiaHistorialMovimiento('${encodeURIComponent(m.rutaGuiaRetorno)}')" style="border:0;border-radius:7px;padding:6px 9px;background:#fef3c7;color:#92400e;font-weight:900;cursor:pointer">GUÍA DE RETORNO</button>`:''}</div></article>`;}).join('')||'<div style="padding:30px">No existen mantenimientos con esta búsqueda.</div>'}</div>`;
+        const buscador=c.querySelector('input');if(buscador){buscador.removeAttribute('oninput');buscador.addEventListener('keydown',e=>{if(e.key==='Enter'){busquedaHistorialMantenimiento=e.target.value;renderHistorialMantenimientos();}});buscador.placeholder+=' · presiona ENTER';}
+        c.querySelectorAll('.hist-kpi').forEach(el=>el.style.cssText='background:white;border:1px solid #ddd6fe;border-top:4px solid #7c3aed;border-radius:10px;padding:10px');c.querySelectorAll('.hist-kpi b').forEach(el=>el.style.cssText='display:block;font-size:20px;color:#6d28d9;margin-top:3px');
+    }catch(e){c.innerHTML=`<div style="padding:20px;color:#b91c1c;font-weight:800">${histMovEsc(e.message||String(e))}</div>`;}
+}
+function etiquetaMovimientoHistorial(tipo){return ({ASIGNACION:'Asignación',REASIGNACION:'Reasignación',TRASLADO:'Traslado',RETORNO:'Retorno',REGULARIZACION:'Regularización',PERDIDA:'Pérdida/Robada',CONFISCACION:'Confiscación',RECUPERACION:'Recuperación',NOVEDAD_TECNICA:'Novedad técnica',MANTENIMIENTO_LOCAL:'Mantenimiento local',MANTENIMIENTO_SALIDA:'Envío al armero',MANTENIMIENTO_ENVIO:'Envío al armero',MANTENIMIENTO_RESULTADO:'Resultado de mantenimiento',MANTENIMIENTO_RETORNO:'Retorno de mantenimiento'}[tipo]||tipo||'Movimiento');}
+function renderHistorialMovimientos(datos){const c=document.getElementById('hist-mov-contenido'),movimientos=datos.movimientos||[];historialMovimientosActual=movimientos;document.getElementById('hist-mov-contador').textContent=`${datos.total||0} movimiento(s) encontrado(s) · página ${datos.pagina||1} de ${datos.totalPaginas||1}`;if(!movimientos.length){c.innerHTML='<div style="padding:28px;text-align:center;color:#94a3b8;font-size:11px">No existen movimientos con estos filtros.</div>';return;}c.innerHTML=`<div style="overflow:auto;background:white;border:1px solid #e2e8f0;border-radius:12px"><table style="width:100%;border-collapse:collapse;font-size:9px;min-width:1180px"><thead style="position:sticky;top:0;background:#0f172a;color:white;z-index:2"><tr><th style="padding:8px">Fecha</th><th>Serie</th><th>Movimiento</th><th>Cambio de estado</th><th>Origen</th><th>Destino</th><th>Responsable</th><th>Usuario</th><th>Acta</th><th>Respaldo</th><th>Detalle</th></tr></thead><tbody>${movimientos.map((m,i)=>{const guiaSegura=histMovUrl(m.urlGuia);return `<tr style="border-bottom:1px solid #e2e8f0;${i%2?'background:#f8fafc':''}"><td style="padding:8px;white-space:nowrap">${histMovEsc(m.fechaEfectiva||m.fechaRegistro||'—')}</td><td style="padding:6px;font-weight:900">${histMovEsc(m.serie||'—')}<br><span style="color:#94a3b8;font-weight:600">${histMovEsc(m.codigoArma||'')}</span></td><td style="padding:6px"><span style="background:#dbeafe;color:#1d4ed8;border-radius:99px;padding:3px 7px;font-weight:900;white-space:nowrap">${histMovEsc(etiquetaMovimientoHistorial(m.tipoMovimiento))}</span><br><span style="color:#64748b">${histMovEsc(m.estadoMovimiento)}</span></td><td style="padding:6px">${histMovEsc(m.estadoAnterior||'—')} → <b>${histMovEsc(m.estadoNuevo||'—')}</b></td><td style="padding:6px">${histMovEsc([m.provinciaOrigen,m.proyectoOrigen,m.puestoOrigen].filter(Boolean).join(' · ')||'—')}</td><td style="padding:6px">${histMovEsc([m.provinciaDestino,m.proyectoDestino,m.puestoDestino].filter(Boolean).join(' · ')||'—')}</td><td style="padding:6px">${histMovEsc(m.responsableNuevo||m.responsableAnterior||'—')}</td><td style="padding:6px">${histMovEsc(m.usuarioRegistra||'—')}<br><span style="color:#94a3b8">${histMovEsc(m.fechaRegistro||'')}</span></td><td style="padding:6px">${histMovEsc(m.codigoActa||'—')}</td><td style="padding:6px;text-align:center">${guiaSegura?`<a href="${guiaSegura}" target="_blank" rel="noopener" style="color:#047857;font-weight:900">📄 Ver</a>`:'—'}</td><td style="padding:6px;text-align:center"><button onclick="alternarDetalleMovimiento(${i})" style="border:0;border-radius:6px;background:#e2e8f0;color:#334155;padding:5px 7px;font-size:8px;font-weight:900;cursor:pointer">Ver</button></td></tr><tr id="hist-mov-detalle-${i}" style="display:none;background:#eff6ff"><td colspan="11" style="padding:10px 14px"><div style="display:grid;grid-template-columns:repeat(3,minmax(220px,1fr));gap:10px"><div><b>Origen completo</b><br>${histMovEsc([m.provinciaOrigen,m.ciudadOrigen,m.proyectoOrigen,m.puestoOrigen,m.ubicacionOrigen].filter(Boolean).join(' · ')||'—')}</div><div><b>Destino completo</b><br>${histMovEsc([m.provinciaDestino,m.ciudadDestino,m.proyectoDestino,m.puestoDestino,m.ubicacionDestino].filter(Boolean).join(' · ')||'—')}</div><div><b>Responsabilidad</b><br>Anterior: ${histMovEsc(m.responsableAnterior||'—')} ${m.cedulaAnterior?'· '+histMovEsc(m.cedulaAnterior):''}<br>Nueva: ${histMovEsc(m.responsableNuevo||'—')} ${m.cedulaNuevo?'· '+histMovEsc(m.cedulaNuevo):''}</div><div><b>Lote / movimiento</b><br>${histMovEsc(m.loteId||'—')}<br>${histMovEsc(m.idMovimiento||'')}</div><div><b>Recepción</b><br>${histMovEsc(m.fechaRecepcion||'Pendiente')} ${m.usuarioRecepciona?'· '+histMovEsc(m.usuarioRecepciona):''}</div><div><b>Observación</b><br>${histMovEsc(m.observacion||'Sin observación')}</div></div></td></tr>`;}).join('')}</tbody></table></div>`;}
+function insertarResumenVisualHistorial(datos){const r=datos.resumen,c=document.getElementById('hist-mov-contenido');if(!r||!c)return;const tarjetas=[['ARMAS TRAZADAS',r.armasUnicas,'#1d4ed8'],['EN CAMPO',r.enCampo,'#15803d'],['EN TRÁNSITO',r.enTransito,'#2563eb'],['MANTENIMIENTO',r.enMantenimiento,'#7c3aed'],['RASTRILLO',r.enRastrillo,'#475569'],['PROMEDIO FUERA',`${r.promedioDiasFuera||0} DÍAS`,'#c2410c']],top=(r.duraciones||[]).filter(x=>x.totalDiasFuera>0),max=Math.max(1,...top.map(x=>x.totalDiasFuera));c.insertAdjacentHTML('afterbegin',`<div style="display:grid;grid-template-columns:repeat(6,minmax(105px,1fr));gap:7px;margin-bottom:10px">${tarjetas.map(t=>`<div style="background:white;border:1px solid #e2e8f0;border-top:3px solid ${t[2]};border-radius:10px;padding:9px"><div style="font-size:8px;font-weight:900;color:#64748b">${t[0]}</div><div style="font-size:17px;font-weight:950;color:${t[2]};margin-top:3px">${t[1]}</div></div>`).join('')}</div>${top.length?`<div style="background:white;border:1px solid #e2e8f0;border-radius:12px;padding:11px;margin-bottom:10px"><div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><b style="font-size:10px;color:#0f172a">PERMANENCIA FUERA DEL RASTRILLO</b><span style="font-size:8px;color:#94a3b8">Haz clic en una serie para ver su recorrido</span></div><div style="display:grid;grid-template-columns:repeat(2,minmax(260px,1fr));gap:6px 14px">${top.map(x=>`<button onclick="filtrarRecorridoArma('${histMovEsc(x.serie)}')" style="border:0;background:transparent;text-align:left;cursor:pointer;padding:2px"><div style="display:flex;justify-content:space-between;font-size:8px;font-weight:900;color:#334155"><span>${histMovEsc(x.serie)} · ${histMovEsc(x.proyecto||x.estado||'')}</span><span>${x.diasFueraActual?x.diasFueraActual+' ACTUALES · ':''}${x.totalDiasFuera} DÍAS</span></div><div style="height:6px;background:#e2e8f0;border-radius:99px;overflow:hidden;margin-top:3px"><div style="height:100%;width:${Math.max(4,Math.round(x.totalDiasFuera/max*100))}%;background:${x.diasFueraActual?'#f97316':'#2563eb'}"></div></div></button>`).join('')}</div></div>`:''}`);}
+function iconoMovimientoHistorial(tipo){return ({ASIGNACION:'↗',REGULARIZACION:'✓',RETORNO:'↩',RECUPERACION:'♻',PERDIDA:'!',CONFISCACION:'⚠',NOVEDAD_TECNICA:'◆',MANTENIMIENTO_LOCAL:'🔧',MANTENIMIENTO_ENVIO:'🚚',MANTENIMIENTO_RESULTADO:'✓',MANTENIMIENTO_RETORNO:'↩'}[tipo]||'•');}
+function colorMovimientoHistorial(tipo){if(String(tipo).includes('MANTENIMIENTO'))return '#7c3aed';if(['RETORNO','RECUPERACION'].includes(tipo))return '#0f766e';if(['PERDIDA','CONFISCACION'].includes(tipo))return '#dc2626';if(tipo==='REGULARIZACION')return '#ea580c';return '#2563eb';}
+function insertarRecorridosHistorial(datos){
+    const c=document.getElementById('hist-mov-contenido'),movs=datos.movimientos||[];if(!c||!movs.length)return;const grupos={};movs.forEach(m=>(grupos[m.serie]||(grupos[m.serie]=[])).push(m));const duraciones=new Map((datos.resumen?.duraciones||[]).map(x=>[x.serie,x])),series=Object.keys(grupos).sort((a,b)=>(duraciones.get(b)?.diasFueraActual||0)-(duraciones.get(a)?.diasFueraActual||0)||a.localeCompare(b)).slice(0,12);
+    const html=series.map(serie=>{const lista=grupos[serie].slice().sort((a,b)=>String(a.fechaEfectiva||a.fechaRegistro).localeCompare(String(b.fechaEfectiva||b.fechaRegistro))),ultimo=lista[lista.length-1],d=duraciones.get(serie)||{},actual=d.diasFueraActual>0,ubicacion=[ultimo.provinciaDestino,ultimo.proyectoDestino,ultimo.puestoDestino].filter(Boolean).join(' · ')||ultimo.ubicacionDestino||ultimo.estadoNuevo||'SIN UBICACIÓN';return `<article style="background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:12px;box-shadow:0 4px 14px rgba(15,23,42,.05)"><header style="display:flex;align-items:flex-start;gap:10px"><div style="flex:1"><button onclick="filtrarRecorridoArma('${encodeURIComponent(serie)}')" style="border:0;background:none;padding:0;color:#0f172a;font-size:12px;font-weight:950;cursor:pointer">SERIE ${histMovEsc(serie)}</button><div style="font-size:8px;color:#64748b;margin-top:3px">${histMovEsc(ubicacion)}</div></div><span style="background:${actual?'#fff7ed':'#ecfdf5'};color:${actual?'#c2410c':'#047857'};border-radius:99px;padding:5px 8px;font-size:8px;font-weight:950;white-space:nowrap">${actual?d.diasFueraActual+' DÍAS AFUERA':histMovEsc(ultimo.estadoNuevo||'REGISTRADA')}</span></header><div style="display:flex;align-items:flex-start;overflow:auto;padding:13px 2px 4px;margin-top:3px">${lista.map((m,i)=>{const color=colorMovimientoHistorial(m.tipoMovimiento),guia=histMovUrl(m.urlGuia);return `<div style="min-width:128px;position:relative;padding-right:9px"><div style="position:absolute;top:13px;left:22px;right:-3px;height:2px;background:${i===lista.length-1?'transparent':'#cbd5e1'}"></div><div style="position:relative;width:28px;height:28px;border-radius:50%;background:${color};color:white;display:grid;place-items:center;font-size:11px;font-weight:900;box-shadow:0 0 0 4px white">${iconoMovimientoHistorial(m.tipoMovimiento)}</div><div style="font-size:8px;font-weight:950;color:#334155;margin-top:7px">${histMovEsc(etiquetaMovimientoHistorial(m.tipoMovimiento))}</div><div style="font-size:7px;color:#64748b;margin-top:2px">${histMovEsc(m.fechaEfectiva||'SIN FECHA')}</div><div style="font-size:7px;color:#94a3b8;margin-top:2px">${histMovEsc(m.estadoNuevo||'')}</div>${guia?`<a href="${guia}" target="_blank" rel="noopener" style="font-size:7px;color:#047857;font-weight:900">VER GUÍA</a>`:''}</div>`;}).join('')}</div></article>`;}).join('');
+    c.insertAdjacentHTML('afterbegin',`<section style="margin-bottom:12px"><div style="display:flex;align-items:center;gap:8px;margin:2px 0 8px"><div style="flex:1"><b style="font-size:11px;color:#0f172a">RECORRIDO OPERATIVO POR ARMA</b><div style="font-size:8px;color:#64748b">Línea de tiempo desde la salida, asignación, mantenimientos y retorno</div></div><span style="font-size:8px;color:#94a3b8">Mostrando ${series.length} serie(s) de esta página</span></div><div style="display:grid;grid-template-columns:repeat(2,minmax(360px,1fr));gap:9px">${html}</div><details style="margin-top:10px"><summary style="cursor:pointer;background:#e2e8f0;color:#334155;border-radius:9px;padding:8px 11px;font-size:9px;font-weight:900">VER TABLA TÉCNICA COMPLETA</summary></details></section>`);
+    const details=c.querySelector('details');const tabla=[...c.children].find(x=>x.matches?.('div')&&x.querySelector?.('table'));if(details&&tabla){details.appendChild(tabla);details.addEventListener('toggle',()=>{if(details.open){agregarDatosTecnicosHistorialMovimientos();agregarAccionesAdminHistorialMovimientos();}});}
+}
+function filtrarRecorridoArma(serie){const input=document.getElementById('hist-mov-consulta');let valor=String(serie||'');try{valor=decodeURIComponent(valor);}catch(_){}if(input)input.value=valor;consultarHistorialMovimientos(1);}
+function alternarDetalleMovimiento(indice){const fila=document.getElementById(`hist-mov-detalle-${indice}`);if(fila)fila.style.display=fila.style.display==='none'?'table-row':'none';}
+function agregarDatosTecnicosHistorialMovimientos(){historialMovimientosActual.forEach((m,i)=>{if(!m.idMantenimiento&&!m.condicionAnterior&&!m.condicionNueva)return;const grid=document.querySelector(`#hist-mov-detalle-${i} td > div`);if(!grid||grid.querySelector('.hist-mov-tecnico'))return;const bloque=document.createElement('div');bloque.className='hist-mov-tecnico';bloque.innerHTML=`<b>Mantenimiento / condición técnica</b><br>${histMovEsc(m.condicionAnterior||'—')} → <b>${histMovEsc(m.condicionNueva||'—')}</b><br><span style="color:#64748b">${histMovEsc(m.idMantenimiento||'')}</span>`;grid.appendChild(bloque);});}
+function agregarAccionesAdminHistorialMovimientos(){
+    if(backendUsaSupabase()||typeof rolActual!=='function'||rolActual()!=='admin')return;
+    const contenedor=document.getElementById('hist-mov-contenido');if(!contenedor)return;
+    const filas=[...contenedor.querySelectorAll('tbody > tr')].filter(fila=>!fila.id);
+    filas.forEach((fila,indice)=>{
+        const celda=fila.lastElementChild,movimiento=historialMovimientosActual[indice];
+        if(!celda||!movimiento?.idMovimiento||celda.querySelector('.hist-mov-borrar'))return;
+        const boton=document.createElement('button');boton.type='button';boton.className='hist-mov-borrar';boton.textContent='🗑 Borrar';boton.title='Eliminar este movimiento del historial';
+        boton.style.cssText='display:block;margin:5px auto 0;border:0;border-radius:6px;background:#fee2e2;color:#b91c1c;padding:5px 7px;font-size:8px;font-weight:900;cursor:pointer';
+        boton.addEventListener('click',()=>eliminarMovimientoHistorialAdmin(indice));celda.appendChild(boton);
+    });
+}
+async function eliminarMovimientoHistorialAdmin(indice){
+    if(typeof rolActual!=='function'||rolActual()!=='admin')return alert('Solo Administrador puede borrar movimientos del historial.');
+    const movimiento=historialMovimientosActual[indice];if(!movimiento?.idMovimiento)return alert('No se pudo identificar el movimiento seleccionado.');
+    const motivo=prompt(`Indica por qué se eliminará este movimiento:\n\nSerie: ${movimiento.serie||'—'}\nTipo: ${etiquetaMovimientoHistorial(movimiento.tipoMovimiento)}\nActa: ${movimiento.codigoActa||'—'}`,'REGISTRO DE PRUEBA O MOVIMIENTO CREADO POR ERROR');
+    if(motivo===null)return;if(motivo.trim().length<5)return alert('El motivo debe tener al menos 5 caracteres.');
+    if(!confirm(`Esta acción eliminará permanentemente el movimiento ${movimiento.idMovimiento}.\n\nNo cambiará el estado actual del arma ni eliminará el acta. El servidor bloqueará la operación si el movimiento todavía está en uso.\n\n¿Confirmas la eliminación?`))return;
+    try{
+        const r=await postActas({accion:'eliminar_movimiento_historial',token:tokenSesionActual(),idMovimiento:movimiento.idMovimiento,motivo:motivo.trim()},90000);
+        if(!r.ok)throw new Error(r.mensaje||'No se pudo eliminar el movimiento.');
+        alert(r.mensaje);const paginaDestino=historialMovimientosActual.length===1&&paginaHistorialMovimientos>1?paginaHistorialMovimientos-1:paginaHistorialMovimientos;await consultarHistorialMovimientos(paginaDestino);
+    }catch(e){alert(e.message||String(e));}
+}
+function renderPaginacionHistorial(datos){const c=document.getElementById('hist-mov-paginacion'),pagina=datos.pagina||1,total=datos.totalPaginas||1;c.innerHTML=`<button ${pagina<=1?'disabled':''} onclick="consultarHistorialMovimientos(${pagina-1})" style="border:0;border-radius:7px;padding:6px 10px;font-size:9px;font-weight:900;cursor:pointer">← Anterior</button><span style="font-size:10px;color:#64748b">Página ${pagina} de ${total}</span><button ${pagina>=total?'disabled':''} onclick="consultarHistorialMovimientos(${pagina+1})" style="border:0;border-radius:7px;padding:6px 10px;font-size:9px;font-weight:900;cursor:pointer">Siguiente →</button>`;}
+async function consultarHistorialMovimientos(pagina=1){
+    paginaHistorialMovimientos=pagina;
+    const c=document.getElementById('hist-mov-contenido');
+    c.innerHTML='<div style="padding:28px;text-align:center;color:#64748b;font-size:12px">Consultando movimientos…</div>';
+    try{
+        const filtros=filtrosHistorialMovimientos(false),r=backendUsaSupabase()?await supabaseListarHistorialMovimientos(filtros):await postActas(filtros,90000);
+        if(!r.ok)throw new Error(r.mensaje);
+        if(backendUsaSupabase())aplicarIndicadoresHistorial(r,await cargarIndicadoresHistorialArmamento());
+        actualizarCatalogosHistorial(r.catalogos);renderHistorialMovimientos(r);activarGuiasPrivadasHistorial(r.movimientos);
+        insertarRecorridosHistorial(r);mejorarRecorridosHistorial(r);insertarResumenVisualHistorial(r);insertarPanelGerencialHistorial();renderPaginacionHistorial(r);
+    }catch(e){c.innerHTML=`<div style="padding:20px;color:#b91c1c;font-weight:800">${histMovEsc(e.message||String(e))}</div>`;}
+}
+async function obtenerHistorialParaExportar(){const filtros=filtrosHistorialMovimientos(true),r=backendUsaSupabase()?await supabaseListarHistorialMovimientos(filtros):await postActas(filtros,90000);if(!r.ok)throw new Error(r.mensaje);if(r.truncado)alert('La exportación se limitó a los 5.000 movimientos más recientes del filtro.');return r.movimientos||[];}
+async function exportarHistorialMovimientosExcel(){try{const movimientos=await obtenerHistorialParaExportar();if(!movimientos.length)return alert('No hay movimientos para exportar.');const filas=movimientos.map((m,i)=>({'N°':i+1,'Fecha efectiva':m.fechaEfectiva,'Fecha registro':m.fechaRegistro,'Serie':m.serie,'Código arma':m.codigoArma,'Movimiento':etiquetaMovimientoHistorial(m.tipoMovimiento),'Estado movimiento':m.estadoMovimiento,'Estado anterior':m.estadoAnterior,'Estado nuevo':m.estadoNuevo,'Provincia origen':m.provinciaOrigen,'Ciudad origen':m.ciudadOrigen,'Proyecto origen':m.proyectoOrigen,'Puesto origen':m.puestoOrigen,'Ubicación origen':m.ubicacionOrigen,'Responsable anterior':m.responsableAnterior,'Cédula anterior':m.cedulaAnterior,'Provincia destino':m.provinciaDestino,'Ciudad destino':m.ciudadDestino,'Proyecto destino':m.proyectoDestino,'Puesto destino':m.puestoDestino,'Ubicación destino':m.ubicacionDestino,'Responsable nuevo':m.responsableNuevo,'Cédula nueva':m.cedulaNuevo,'Acta':m.codigoActa,'Lote':m.loteId,'Usuario registra':m.usuarioRegistra,'Fecha recepción':m.fechaRecepcion,'Usuario recibe':m.usuarioRecepciona,'Observación':m.observacion,'Guía':m.urlGuia}));const ws=XLSX.utils.json_to_sheet(filas);ws['!cols']=Object.keys(filas[0]).map(k=>({wch:Math.min(45,Math.max(12,k.length+2))}));const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,'Movimientos');XLSX.writeFile(wb,`Historial_Movimientos_DEFEN_${new Date().toISOString().slice(0,10)}.xlsx`);}catch(e){alert(e.message||String(e));}}
+async function exportarHistorialMovimientosPDF(){try{const movimientos=await obtenerHistorialParaExportar();if(!movimientos.length)return alert('No hay movimientos para exportar.');const {jsPDF}=window.jspdf,doc=new jsPDF({orientation:'landscape',unit:'mm',format:'a4'}),fecha=new Date().toLocaleDateString('es-EC');if(typeof dibujarMembretePDF==='function')dibujarMembretePDF(doc,'Historial de Movimientos de Armamento',fecha);doc.setFontSize(13);doc.setFont('helvetica','bold');doc.text(`Historial de Movimientos (${movimientos.length})`,14,28);doc.autoTable({startY:34,margin:{left:8,right:8,top:25,bottom:14},head:[['Fecha','Serie','Movimiento','Estado anterior','Estado nuevo','Origen','Destino','Responsable','Usuario','Acta','Observación']],body:movimientos.map(m=>[m.fechaEfectiva||m.fechaRegistro,m.serie,etiquetaMovimientoHistorial(m.tipoMovimiento),m.estadoAnterior,m.estadoNuevo,[m.provinciaOrigen,m.proyectoOrigen,m.puestoOrigen].filter(Boolean).join(' / '),[m.provinciaDestino,m.proyectoDestino,m.puestoDestino].filter(Boolean).join(' / '),m.responsableNuevo||m.responsableAnterior,m.usuarioRegistra,m.codigoActa,m.observacion]),styles:{fontSize:5.5,cellPadding:1.4,valign:'middle'},headStyles:{fillColor:[15,23,42],textColor:[255,255,255],fontSize:5.7},alternateRowStyles:{fillColor:[248,250,252]},didDrawPage:()=>{if(typeof dibujarMembretePDF==='function')dibujarMembretePDF(doc,'Historial de Movimientos de Armamento',fecha);}});doc.save(`Historial_Movimientos_DEFEN_${new Date().toISOString().slice(0,10)}.pdf`);}catch(e){alert(e.message||String(e));}}
+
+// ── Evidencias privadas (credencial / foto del arma) ──
+function codificarEvidenciaInline(valor){return encodeURIComponent(String(valor||'')).replace(/'/g,'%27');}
+
+function botonesEvidenciaArmamento(a,tipo){
+    const esCredencial=tipo==='credential',ruta=esCredencial?a.rutaCredencial:a.rutaImagenArma,url=esCredencial?a.urlCredencial:a.urlImagenArma,tiene=Boolean(ruta||url),puede=backendUsaSupabase()&&typeof usuarioPuedeGestionarEvidenciasArmamento==='function'&&usuarioPuedeGestionarEvidenciasArmamento(),titulo=`${esCredencial?'Credencial':'Foto del arma'} · Serie ${a.serie||''}`,color=esCredencial?'background:#ede9fe;color:#6d28d9':'background:#e0f2fe;color:#0369a1';
+    const ver=tiene?`<button onclick="verEvidenciaArmamento('${codificarEvidenciaInline(ruta)}','${codificarEvidenciaInline(url)}','${codificarEvidenciaInline(titulo)}')" style="font-size:8px;font-weight:800;${color};padding:2px 6px;border-radius:5px;border:none;cursor:pointer" title="Ver ${esCredencial?'credencial':'fotografía'}">${esCredencial?'📇':'📷'}</button>`:'';
+    const cargar=puede?`<button onclick="gestionarEvidenciaArmamento('${a.idArma}','${tipo}')" style="font-size:8px;font-weight:900;background:${tiene?'#475569':'#f97316'};color:white;padding:2px 6px;border-radius:5px;border:none;cursor:pointer" title="${tiene?'Reemplazar':'Subir'} ${esCredencial?'credencial':'fotografía'}">${tiene?'↻':'＋'}</button>`:'';
+    return ver||cargar?`<div style="display:flex;justify-content:center;gap:3px">${ver}${cargar}</div>`:'<span style="color:#e2e8f0">—</span>';
+}
+
+function evidenciaCanvasBlob(canvas,tipo,calidad){return new Promise((resolve,reject)=>canvas.toBlob(blob=>blob?resolve(blob):reject(new Error('El navegador no pudo comprimir la imagen.')),tipo,calidad));}
+
+async function prepararEvidenciaArmamento(archivo){
+    const permitidos=['image/jpeg','image/png','image/webp'];
+    if(!archivo||!permitidos.includes(String(archivo.type||'').toLowerCase()))throw new Error('Selecciona una imagen JPG, PNG o WEBP.');
+    if(archivo.size>20*1024*1024)throw new Error('La imagen supera 20 MB. Debes reducirla antes de subirla.');
+    if(archivo.size<=5*1024*1024)return archivo;
+    const bitmap=await createImageBitmap(archivo);
+    try{
+        let escala=Math.min(1,2400/Math.max(bitmap.width,bitmap.height));
+        for(let intento=0;intento<7;intento++){
+            const canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round(bitmap.width*escala));canvas.height=Math.max(1,Math.round(bitmap.height*escala));
+            const contexto=canvas.getContext('2d',{alpha:false});contexto.fillStyle='#fff';contexto.fillRect(0,0,canvas.width,canvas.height);contexto.drawImage(bitmap,0,0,canvas.width,canvas.height);
+            const comprimida=await evidenciaCanvasBlob(canvas,'image/jpeg',Math.max(.5,.9-intento*.07));canvas.width=canvas.height=1;
+            if(comprimida.size<=4.8*1024*1024)return comprimida;
+            escala*=.78;
+        }
+        throw new Error('No se pudo reducir la imagen por debajo de 5 MB.');
+    }finally{if(typeof bitmap.close==='function')bitmap.close();}
+}
+
+async function gestionarEvidenciaArmamento(weaponId,tipo){
+    if(!backendUsaSupabase()||typeof usuarioPuedeGestionarEvidenciasArmamento!=='function'||!usuarioPuedeGestionarEvidenciasArmamento())return alert('Solo Administrador y Operaciones pueden gestionar evidencias.');
+    const arma=armamentoDetalle.find(a=>String(a.idArma)===String(weaponId));if(!arma)return alert('No se encontró el arma seleccionada.');
+    const esCredencial=tipo==='credential',rutaAnterior=esCredencial?arma.rutaCredencial:arma.rutaImagenArma,tieneAnterior=Boolean(rutaAnterior||(esCredencial?arma.urlCredencial:arma.urlImagenArma)),nombre=esCredencial?'credencial':'fotografía del arma';
+    const input=document.createElement('input');input.type='file';input.accept='image/jpeg,image/png,image/webp';
+    input.onchange=async()=>{
+        const archivo=input.files?.[0];if(!archivo)return;
+        if(tieneAnterior&&!confirm(`La ${nombre} de la serie ${arma.serie} será reemplazada.\n\n¿Deseas continuar?`))return;
+        let rutaNueva='',registrada=false;
+        try{
+            const preparada=await prepararEvidenciaArmamento(archivo);
+            rutaNueva=await supabaseSubirEvidenciaArmamento(preparada,arma.idArma,tipo);
+            const respuesta=await supabaseRegistrarEvidenciaArmamento(arma.idArma,tipo,rutaNueva);if(!respuesta?.ok)throw new Error('Supabase no confirmó el registro de la evidencia.');registrada=true;
+            let advertencia='';if(rutaAnterior&&rutaAnterior!==rutaNueva){try{await supabaseEliminarEvidenciaArmamento(rutaAnterior);}catch(_){advertencia=' El archivo anterior quedó pendiente de limpieza.';}}
+            invalidarWorkspaceArmamentoSupabase();await cargarWorkspaceArmamentoSupabase(true);renderTablaArmamento();
+            alert(`${esCredencial?'Credencial':'Fotografía'} guardada correctamente.${preparada.size<archivo.size?` Se redujo de ${(archivo.size/1048576).toFixed(1)} MB a ${(preparada.size/1048576).toFixed(1)} MB.`:''}${advertencia}`);
+        }catch(error){if(rutaNueva&&!registrada)try{await supabaseEliminarEvidenciaArmamento(rutaNueva);}catch(_){}alert(error.message||String(error));}
+    };
+    input.click();
+}
+
+// ── Lightbox de imágenes (credencial / foto del arma) ──
+function verImagen(url, titulo) {
+    if (!url) return;
+    document.getElementById('lightbox-titulo').textContent = titulo || '';
+    document.getElementById('lightbox-error').style.display = 'none';
+    const img = document.getElementById('lightbox-img');
+    img.style.display = 'block';
+
+    // Si el formato principal falla, intenta un formato alternativo antes
+    // de darse por vencido — algunos archivos responden mejor a uno u otro
+    const match  = url.match(/\/d\/([a-zA-Z0-9_-]+)/) || url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+    const fileId = match ? match[1] : null;
+    let intento  = 0;
+    const formatos = fileId ? [
+        `https://lh3.googleusercontent.com/d/${fileId}`,
+        `https://drive.google.com/thumbnail?id=${fileId}&sz=w1600`,
+        `https://drive.google.com/uc?export=view&id=${fileId}`
+    ] : [url];
+
+    img.onerror = () => {
+        intento++;
+        if (intento < formatos.length) {
+            img.src = formatos[intento];
+        } else {
+            img.style.display = 'none';
+            document.getElementById('lightbox-error').style.display = 'block';
+        }
+    };
+    img.src = formatos[0];
+    document.getElementById('imagen-lightbox').style.display = 'flex';
+}
+
+async function verEvidenciaArmamento(rutaCodificada, urlCodificada, tituloCodificado) {
+    const ruta = decodeURIComponent(rutaCodificada || '');
+    const urlAnterior = decodeURIComponent(urlCodificada || '');
+    const titulo = decodeURIComponent(tituloCodificado || '');
+    try {
+        const url = ruta && typeof supabaseUrlFirmadaEvidenciaArmamento === 'function'
+            ? await supabaseUrlFirmadaEvidenciaArmamento(ruta, 300)
+            : urlAnterior;
+        if (!url) throw new Error('Esta arma todavía no tiene la evidencia disponible.');
+        verImagen(url, titulo);
+    } catch (error) {
+        alert(error.message || String(error));
+    }
+}
+
+function cerrarImagenLightbox() {
+    document.getElementById('imagen-lightbox').style.display = 'none';
+    document.getElementById('lightbox-img').src = '';
+}
+
+// ── Excel del inventario filtrado ──
+function exportarExcelArmamento() {
+    const filtradas = obtenerArmasFiltradas();
+    if (filtradas.length === 0) { alert('No hay armas para exportar con este filtro.'); return; }
+
+    const filas = filtradas.map((a, i) => ({
+        'N°':            i + 1,
+        'Código':        a.codigoArma || '',
+        'N° Documento':  a.nDocumento || '',
+        'Nombre/Razón':  a.nombreRazon || '',
+        'Serie':         a.serie || '',
+        'Clase':         a.clase || '',
+        'Tipo':          a.tipo || '',
+        'Marca':         a.marca || '',
+        'Calibre':       a.calibre || '',
+        'Categoría':     a.categoria || '',
+        'Fecha Emisión':    a.fechaEmision    ? formatFecha(a.fechaEmision)    : '',
+        'Fecha Expiración': a.fechaExpiracion ? formatFecha(a.fechaExpiracion) : '',
+        'Estado':        a.estado || '',
+        'Proyecto':      a.proyecto || '',
+        'Provincia':     a.provincia || '',
+        'Ubicación':     a.ubicacion || '',
+        'Credencial':    (a.rutaCredencial || a.urlCredencial) ? 'DISPONIBLE' : '',
+        'Foto Arma':     (a.rutaImagenArma || a.urlImagenArma) ? 'DISPONIBLE' : ''
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(filas);
+    ws['!cols'] = Object.keys(filas[0]).map(k => ({ wch: Math.max(k.length + 2, 12) }));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Armamento');
+
+    const hoy = new Date();
+    const fechaHoy = `${String(hoy.getDate()).padStart(2,'0')}-${String(hoy.getMonth()+1).padStart(2,'0')}-${hoy.getFullYear()}`;
+    XLSX.writeFile(wb, `Inventario_Armamento_DEFEN_${fechaHoy}.xlsx`);
+}
+
+async function exportarPDFArmamento() {
+    const filtradas = obtenerArmasFiltradas();
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ orientation:'landscape', unit:'mm', format:'a4' });
+    const W = 297, H = 210;
+    const DARK=[15,23,42];
+    const hoy = new Date();
+    const fechaHoy = `${String(hoy.getDate()).padStart(2,'0')}/${String(hoy.getMonth()+1).padStart(2,'0')}/${hoy.getFullYear()}`;
+
+    const filtrosTexto = Object.entries(filtrosArmamento)
+        .filter(([,v]) => v.length > 0)
+        .map(([k,v]) => `${k}: ${v.join('/')}`)
+        .join('  ·  ') || 'Sin filtros (inventario completo)';
+
+    dibujarMembretePDF(doc, `Inventario de Armamento — ${filtrosTexto}`, fechaHoy);
+    let y = MARGEN_PDF + 8;
+
+    doc.setFontSize(13); doc.setFont('helvetica','bold'); doc.setTextColor(...DARK);
+    doc.text(`Inventario de Armamento (${filtradas.length} arma(s))`, 14, y); y += 8;
+
+    doc.autoTable({
+        startY: y,
+        margin: { left:10, right:10, top:MARGEN_PDF+4, bottom:MARGEN_PDF+4 },
+        didDrawPage: () => dibujarMembretePDF(doc, `Inventario de Armamento — ${filtrosTexto}`, fechaHoy),
+        head: [['N°','Código','Serie','Clase','Tipo','Marca','Calibre','Categoría','Emisión','Expiración','Estado','Proyecto','Provincia','Ubicación','Cred.','Foto']],
+        body: numerarFilas(filtradas.map(a => [
+            a.codigoArma||'—', a.serie||'—', a.clase||'—', a.tipo||'—', a.marca||'—', a.calibre||'—',
+            a.categoria||'—', a.fechaEmision?formatFecha(a.fechaEmision):'—', a.fechaExpiracion?formatFecha(a.fechaExpiracion):'—',
+            a.estado||'—', a.proyecto||'—', a.provincia||'—', a.ubicacion||'—',
+            (a.rutaCredencial||a.urlCredencial) ? 'Sí' : '—', (a.rutaImagenArma||a.urlImagenArma) ? 'Sí' : '—'
+        ])),
+        headStyles:{halign:'center',valign:'middle', fillColor:DARK, textColor:[255,255,255], fontSize:6.5, cellPadding:2 },
+        bodyStyles:{halign:'center',valign:'middle', fontSize:6.5, cellPadding:1.8 },
+        alternateRowStyles: { fillColor:[248,250,252] },
+        columnStyles: { 0:{halign:'center'}, 14:{halign:'center'}, 15:{halign:'center'} }
+    });
+
+    const totalPag = doc.getNumberOfPages();
+    for (let i=1;i<=totalPag;i++){
+        doc.setPage(i);
+        doc.setFontSize(6.5); doc.setTextColor(120,113,108);
+        doc.text(`Página ${i} de ${totalPag}`, W-14, H-MARGEN_PDF+20, {align:'right'});
+        doc.text('Documento confidencial · Uso interno', 14, H-MARGEN_PDF+20);
+    }
+    doc.save(`Inventario_Armamento_DEFEN_${fechaHoy.replace(/\//g,'-')}.pdf`);
+}
+
+// ================================================================
+// RADIOS
+// ================================================================
+function abrirModalRadios() {
+    if (typeof usuarioPuedeVerRadiosDetalle === 'function' && !usuarioPuedeVerRadiosDetalle()) {
+        alert('Tu perfil no tiene permiso para ver el detalle de radios.');
+        return;
+    }
+    filtrosRadios = { provincia: [], proyecto: [] };
+    busquedaRadios = '';
+    document.getElementById('radios-modal').style.display = 'flex';
+    const buscador = document.getElementById('radios-buscador');
+    if (buscador) buscador.value = '';
+    renderFiltrosRadios();
+    renderTablaRadios();
+}
+function cerrarModalRadios() {
+    document.getElementById('radios-modal').style.display = 'none';
+}
+
+function renderFiltrosRadios() {
+    const bar = document.getElementById('radios-filtros-bar');
+    const valoresUnicos = (campo) => [...new Set(radiosDetalle.map(r => r[campo]).filter(Boolean))].sort();
+
+    // Proyectos: solo se muestran una vez elegida al menos una provincia
+    const provinciasElegidas = filtrosRadios.provincia;
+    const proyectosDisponibles = provinciasElegidas.length === 0 ? [] : [...new Set(
+        radiosDetalle
+            .filter(r => provinciasElegidas.includes(r.provincia))
+            .map(r => r.proyecto)
+            .filter(Boolean)
+    )].sort();
+
+    // Si cambió la provincia y el proyecto elegido ya no aplica, lo quitamos
+    filtrosRadios.proyecto = filtrosRadios.proyecto.filter(p => proyectosDisponibles.includes(p));
+
+    const grupos = [
+        { key:'provincia', label:'Provincia', valores: valoresUnicos('provincia') },
+        { key:'proyecto',  label:'Proyecto' + (provinciasElegidas.length > 0 ? ' (de la provincia elegida)' : ' — elige provincia primero'), valores: proyectosDisponibles },
+    ];
+    bar.innerHTML = grupos.map(g => `
+        <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;">
+            <span style="font-size:9px;font-weight:800;color:#94a3b8;text-transform:uppercase;margin-right:2px;">${g.label}:</span>
+            ${g.valores.length > 0 ? g.valores.map(v => {
+                const activo = filtrosRadios[g.key].includes(v);
+                return `<button onclick="toggleFiltroRadios('${g.key}','${v.replace(/'/g,"\\'")}')"
+                        class="chip ${activo?'active-purple':''}" style="font-size:9px;padding:3px 9px;">${v}</button>`;
+            }).join('') : `<span style="font-size:9px;color:#cbd5e1;font-style:italic;">— elige una provincia primero —</span>`}
+        </div>
+    `).join('<div style="width:100%;height:1px;background:#f1f5f9;margin:2px 0;"></div>');
+}
+
+function toggleFiltroRadios(grupo, valor) {
+    const idx = filtrosRadios[grupo].indexOf(valor);
+    if (idx > -1) filtrosRadios[grupo].splice(idx,1); else filtrosRadios[grupo].push(valor);
+    renderFiltrosRadios();
+    renderTablaRadios();
+}
+
+function radioPasaFiltros(r) {
+    for (const grupo of Object.keys(filtrosRadios)) {
+        if (filtrosRadios[grupo].length === 0) continue;
+        if (!filtrosRadios[grupo].includes(r[grupo])) return false;
+    }
+    if (busquedaRadios) {
+        const texto = normalizarTexto(busquedaRadios);
+        const campos = [r.provincia, r.proyecto, r.puesto, r.modelo, r.serie];
+        const coincide = campos.some(c => normalizarTexto(c).includes(texto));
+        if (!coincide) return false;
+    }
+    return true;
+}
+
+function buscarRadios(valor) {
+    busquedaRadios = valor;
+    renderTablaRadios();
+}
+
+function obtenerRadiosFiltrados() { return radiosDetalle.filter(radioPasaFiltros); }
+
+function renderTablaRadios() {
+    const filtrados = obtenerRadiosFiltrados();
+    document.getElementById('radios-modal-contador').textContent = `${filtrados.length} de ${radiosDetalle.length} radio(s)`;
+    const tbody = document.getElementById('radios-tbody');
+
+    if (filtrados.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="6" style="padding:20px;text-align:center;color:#94a3b8;">
+            ${radiosDetalle.length === 0 ? 'No hay radios registrados en el sistema.' : 'No tiene radios con este filtro.'}
+        </td></tr>`;
+        return;
+    }
+    tbody.innerHTML = filtrados.map((r,i) => `
+        <tr style="border-bottom:1px solid #f1f5f9;${i%2===0?'background:#f8fafc;':''}">
+            <td style="padding:7px 8px;text-align:center;color:#94a3b8;">${i+1}</td>
+            <td style="padding:7px 8px;">${r.provincia}</td>
+            <td style="padding:7px 8px;">${r.proyecto}</td>
+            <td style="padding:7px 8px;">${r.puesto||'—'}</td>
+            <td style="padding:7px 8px;font-weight:700;">${r.modelo||'—'}</td>
+            <td style="padding:7px 8px;">${r.serie||'—'}</td>
+        </tr>
+    `).join('');
+}
+
+// ── Excel de radios filtrados ──
+function exportarExcelRadios() {
+    const filtrados = obtenerRadiosFiltrados();
+    if (filtrados.length === 0) { alert('No hay radios para exportar con este filtro.'); return; }
+
+    const filas = filtrados.map((r, i) => ({
+        'N°':        i + 1,
+        'Provincia': r.provincia,
+        'Proyecto':  r.proyecto,
+        'Puesto':    r.puesto || '',
+        'Modelo':    r.modelo || '',
+        'Serie':     r.serie || ''
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(filas);
+    ws['!cols'] = Object.keys(filas[0]).map(k => ({ wch: Math.max(k.length + 2, 14) }));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Radios');
+
+    const hoy = new Date();
+    const fechaHoy = `${String(hoy.getDate()).padStart(2,'0')}-${String(hoy.getMonth()+1).padStart(2,'0')}-${hoy.getFullYear()}`;
+    XLSX.writeFile(wb, `Inventario_Radios_DEFEN_${fechaHoy}.xlsx`);
+}
+
+async function exportarPDFRadios() {
+    const filtrados = obtenerRadiosFiltrados();
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ orientation:'portrait', unit:'mm', format:'a4' });
+    const W = 210, H = 297, DARK=[15,23,42];
+    const hoy = new Date();
+    const fechaHoy = `${String(hoy.getDate()).padStart(2,'0')}/${String(hoy.getMonth()+1).padStart(2,'0')}/${hoy.getFullYear()}`;
+    const subt = 'Inventario de Radios — Nacional';
+
+    dibujarMembretePDF(doc, subt, fechaHoy);
+    let y = MARGEN_PDF + 8;
+    doc.setFontSize(13); doc.setFont('helvetica','bold'); doc.setTextColor(...DARK);
+    doc.text(`Inventario de Radios (${filtrados.length})`, 14, y); y += 8;
+
+    if (filtrados.length === 0) {
+        doc.setFontSize(10); doc.setTextColor(148,163,184); doc.setFont('helvetica','italic');
+        doc.text('No hay radios registrados para el filtro seleccionado.', 14, y);
+    } else {
+        doc.autoTable({
+            startY: y,
+            margin: { left:14, right:14, top:MARGEN_PDF+4, bottom:MARGEN_PDF+4 },
+            didDrawPage: () => dibujarMembretePDF(doc, subt, fechaHoy),
+            head: [['N°','Provincia','Proyecto','Puesto','Modelo','Serie']],
+            body: numerarFilas(filtrados.map(r => [r.provincia, r.proyecto, r.puesto||'—', r.modelo||'—', r.serie||'—'])),
+            headStyles:{halign:'center',valign:'middle', fillColor:[124,58,237], textColor:[255,255,255], fontSize:7.5, cellPadding:2.5 },
+            bodyStyles:{halign:'center',valign:'middle', fontSize:7.5, cellPadding:2.2 },
+            alternateRowStyles: { fillColor:[248,250,252] },
+            columnStyles: { 0:{halign:'center'} }
+        });
+    }
+
+    const totalPag = doc.getNumberOfPages();
+    for (let i=1;i<=totalPag;i++){
+        doc.setPage(i);
+        doc.setFontSize(6.5); doc.setTextColor(120,113,108);
+        doc.text(`Página ${i} de ${totalPag}`, W-14, H-MARGEN_PDF+20, {align:'right'});
+        doc.text('Documento confidencial · Uso interno', 14, H-MARGEN_PDF+20);
+    }
+    doc.save(`Inventario_Radios_DEFEN_${fechaHoy.replace(/\//g,'-')}.pdf`);
+}
