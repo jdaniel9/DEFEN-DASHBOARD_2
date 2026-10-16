@@ -34,4 +34,7 @@ test('frontend exports PDF and Excel before closing and opens next month',()=>{
   assert.match(js,/OBSERVACIONES Y MOVIMIENTOS DEL MES/);
   assert.match(api,/preview_weapon_month_closure/);assert.match(api,/close_weapon_control_month/);
   assert.match(html,/weapon-control\.js\?v=20261015-migracion72/);
+  assert.match(html,/main\.css\?v=20261015-migracion72-1/);
+  const css=read('DEFEN-DASHBOARD-trabajo/css/main.css');
+  assert.match(css,/#weapon-control-modal \.as-table-wrap\{flex:0 0 clamp\(320px,45vh,470px\)/);
 });
