@@ -21,7 +21,8 @@ test('OPE uses a selectable table, detail panel and Excel history workflow',()=>
   const css=read('DEFEN-DASHBOARD-trabajo/css/main.css');
   const html=read('DEFEN-DASHBOARD-trabajo/index.html');
   assert.match(js,/class="ope-table"/);assert.match(js,/opeShowDetail/);assert.match(js,/TIPO DE ARMAMENTO/);assert.match(js,/TIPO DE RADIO/);assert.match(js,/NOMBRE DE LOS PUESTOS/);
+  assert.match(js,/function opeProjectSchedules/);assert.match(js,/class="ope-post-list"/);assert.doesNotMatch(js,/<b>MODALIDAD<\/b>/);
   assert.match(js,/Plantilla_Historico_Proyectos_DEFEN\.xlsx/);assert.match(js,/opeImportHistory/);assert.match(js,/PROYECTOS_FINALIZADOS/);
   assert.match(api,/import_archived_project_history/);assert.match(css,/\.ope-head-actions button\{[^}]*pointer-events:auto/i);assert.match(css,/\.ope-table-wrap/);
-  assert.match(html,/operations-summary\.js\?v=20261018-migracion74/);assert.match(html,/main\.css\?v=20261018-migracion74/);
+  assert.match(html,/operations-summary\.js\?v=20261019-migracion74-1/);assert.match(html,/main\.css\?v=20261019-migracion74-1/);
 });
