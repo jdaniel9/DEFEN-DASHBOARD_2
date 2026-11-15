@@ -302,9 +302,9 @@ function adaptarSnapshotSupabase(snapshot, directorio = null, coberturasMapa = n
             const correspondeAhora = a => {
                 const codigo = String(a.code || a.shift_code || '').toUpperCase().trim();
                 const etiqueta = String(a.code_label || '').toUpperCase();
-                if (codigo === '4' || etiqueta.includes('DIURNO')) return horaEcuador >= 6 && horaEcuador < 18;
-                if (codigo === '5' || etiqueta.includes('NOCTURNO')) return horaEcuador >= 18 || horaEcuador < 6;
-                if (codigo === '6' || etiqueta.includes('TURNO TARDE')) return horaEcuador >= 12 && horaEcuador < 24;
+                if (codigo === '4' || etiqueta.includes('DIURNO')) return horaEcuador >= 7 && horaEcuador < 19;
+                if (codigo === '5' || etiqueta.includes('NOCTURNO')) return horaEcuador >= 19 || horaEcuador < 7;
+                if (codigo === '6' || etiqueta.includes('TURNO TARDE')) return horaEcuador >= 14 && horaEcuador < 21;
                 return true;
             };
             const activosEnHorario = asistencia.activos.filter(correspondeAhora);
