@@ -308,10 +308,13 @@ async function guardarIngresoPersonalAsistencia() {
     if (!confirm('¿CONFIRMAS EL INGRESO PERMANENTE EN LA VACANTE SELECCIONADA?')) return;
     asistenciaModulo.guardando = true;
     try {
-        await supabaseRpc('register_attendance_personnel_entry', { p_vacancy_assignment_id: vacancyId, p_national_id: cedula, p_full_name: nombre, p_start_date: fecha, p_note: nota || null });
+        const respuesta = await supabaseRpc('register_attendance_personnel_entry', { p_vacancy_assignment_id: vacancyId, p_national_id: cedula, p_full_name: nombre, p_start_date: fecha, p_note: nota || null });
         cerrarEditorAsistencia();
         await refrescarCoberturasAsistencia();
-        alert('INGRESO REGISTRADO Y VACANTE CUBIERTA CORRECTAMENTE.');
+        const aviso = respuesta?.name_adjusted ? `
+
+LA CÉDULA YA EXISTÍA: SE USÓ EL NOMBRE REGISTRADO "${respuesta.registered_name}". SI ESTÁ MAL ESCRITO, CORRÍGELO CON ✎ EDITAR DATOS.` : '';
+        alert((respuesta?.reentry ? 'REINGRESO REGISTRADO Y VACANTE CUBIERTA CORRECTAMENTE.' : 'INGRESO REGISTRADO Y VACANTE CUBIERTA CORRECTAMENTE.') + aviso);
     } catch (error) {
         alert(`NO SE PUDO REGISTRAR EL INGRESO: ${error.message || error}`);
     } finally { asistenciaModulo.guardando = false; }
