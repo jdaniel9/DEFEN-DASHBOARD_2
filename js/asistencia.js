@@ -462,14 +462,19 @@ function asignacionesAsistenciaFiltradas() {
     const q = asistenciaModulo.busqueda;
     return (asistenciaModulo.workspace?.assignments || []).filter(a => {
         if (asistenciaModulo.proyecto && a.project !== asistenciaModulo.proyecto) return false;
-        if (asistenciaModulo.estado && a.status !== asistenciaModulo.estado) return false;
+        if (asistenciaModulo.estado) {
+            const estadoFiltro = a.moved_out ? 'CAMBIO' : a.status;
+            if (estadoFiltro !== asistenciaModulo.estado) return false;
+        }
         if (!q) return true;
         return [a.full_name, a.national_id, a.province, a.project, a.post, a.schedule]
             .some(v => String(v || '').toUpperCase().includes(q));
     });
 }
 
-function estadoAsistenciaVisible(estado) {
+// Un puesto que la persona dejó por cambio de puesto se muestra como CAMBIO (no PASIVO)
+function estadoAsistenciaVisible(estado, asignacion = null) {
+    if (asignacion?.moved_out) return 'CAMBIO';
     return estado === 'INACTIVO' ? 'PASIVO' : estado;
 }
 
@@ -531,7 +536,7 @@ function renderModuloAsistencia() {
             return `<td class="as-day ${asistenciaCodigoClase(codigo)} ${esMesActual&&dia===hoy.getDate()?'as-today':''} ${editable?'as-editable':''}" title="${asistenciaEsc(motivoBloqueo)}" ${editable?`onclick="editarMarcacionAsistencia('${asistenciaEsc(a.assignment_id)}',${dia},'${asistenciaEsc(codigo)}')"`:''}>${codigo ? asistenciaEsc(asistenciaCodigoVisible(codigo)) : '·'}</td>`;
         }).join('');
         const contactoHtml=a.status!=='VACANTE'?`<span class="as-person-chip as-person-phone">📞 ${asistenciaEsc(a.mobile_phone||'SIN TELÉFONO')}${w.permissions?.manage_contacts&&a.personnel_id?` <button onclick="editarTelefonoAsistencia('${asistenciaEsc(a.personnel_id)}','${asistenciaEsc(a.mobile_phone||'')}')" title="Editar teléfono">✎</button>`:''}</span><span class="as-person-chip">↳ INGRESO ${asistenciaEsc(asistenciaFechaLocal(a.employment_start_date))}</span>${a.employment_end_date?`<span class="as-person-chip as-person-exit-date">↪ SALIDA ${asistenciaEsc(asistenciaFechaLocal(a.employment_end_date))}</span>`:''}`:'';
-        return `<tr><td class="as-sticky as-col-person"><div class="as-person-card"><div class="as-person-head"><b title="${asistenciaEsc(nombre)}">${asistenciaEsc(nombre)}</b><span>CI ${asistenciaEsc(a.national_id || 'SIN CÉDULA')}</span></div><div class="as-person-location" title="${asistenciaEsc(ubicacion)}">📍 ${asistenciaEsc(ubicacion||'SIN UBICACIÓN')}</div><div class="as-person-meta"><span class="as-person-chip as-person-schedule">◷ ${asistenciaEsc(a.schedule || 'SIN HORARIO')}${a.mobile_coverage?' · MÓVIL':''}</span>${contactoHtml}</div>${coberturaHtml}<div class="as-person-actions">${accionHtml}</div></div></td><td class="as-sticky as-col-status"><span class="as-status as-status-${String(a.status||'').toLowerCase()}">${asistenciaEsc(estadoAsistenciaVisible(a.status))}</span></td>${dayCells}</tr>`;
+        return `<tr><td class="as-sticky as-col-person"><div class="as-person-card"><div class="as-person-head"><b title="${asistenciaEsc(nombre)}">${asistenciaEsc(nombre)}</b><span>CI ${asistenciaEsc(a.national_id || 'SIN CÉDULA')}</span></div><div class="as-person-location" title="${asistenciaEsc(ubicacion)}">📍 ${asistenciaEsc(ubicacion||'SIN UBICACIÓN')}</div><div class="as-person-meta"><span class="as-person-chip as-person-schedule">◷ ${asistenciaEsc(a.schedule || 'SIN HORARIO')}${a.mobile_coverage?' · MÓVIL':''}</span>${contactoHtml}</div>${coberturaHtml}<div class="as-person-actions">${accionHtml}</div></div></td><td class="as-sticky as-col-status"><span class="as-status as-status-${a.moved_out ? 'cambio' : String(a.status||'').toLowerCase()}">${asistenciaEsc(estadoAsistenciaVisible(a.status, a))}</span></td>${dayCells}</tr>`;
     }).join('') || `<tr><td colspan="${dias+2}" class="as-empty">NO HAY ASIGNACIONES PARA LOS FILTROS SELECCIONADOS.</td></tr>`;
     document.getElementById('as-contador').textContent = `${todas.length} ASIGNACIÓN(ES) · MOSTRANDO ${filas.length}`;
     document.getElementById('as-pagina').textContent = `PÁGINA ${asistenciaModulo.pagina} DE ${paginas}`;

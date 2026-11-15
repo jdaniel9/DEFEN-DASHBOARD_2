@@ -330,6 +330,8 @@
 .as-mass-exit { width: min(920px, 100%); max-height: 92vh; overflow: auto; }
 /* ── Toma de lista por turno ── */
 .as-header button.as-btn-destacado { background: #2563eb; }
+/* Asistencia: puesto dejado por cambio de puesto */
+.as-status.as-status-cambio { background: #fef3c7; color: #92400e; }
 /* Armamento: filtros compactos */
 #armamento-filtros-bar { position: relative; z-index: 20; display: block !important; padding: 8px 16px !important; }
 .af-fila { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
