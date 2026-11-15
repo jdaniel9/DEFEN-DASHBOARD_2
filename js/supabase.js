@@ -269,6 +269,27 @@ function adaptarSnapshotSupabase(snapshot, directorio = null, coberturasMapa = n
         listaPorPuesto.get(key).push(c);
     });
 
+    // Sacafrancos en turno: no tienen puesto fijo. Se ubican en los puestos de su
+    // proyecto que no tienen guardia en el turno actual (titular libre).
+    const horaActualEcuador = Number(new Intl.DateTimeFormat('en-GB', { timeZone:'America/Guayaquil', hour:'2-digit', hour12:false }).format(new Date()));
+    const enHorarioAhora = a => {
+        const codigo = String(a.code || a.shift_code || '').toUpperCase().trim();
+        if (codigo === '4') return horaActualEcuador >= 7 && horaActualEcuador < 19;
+        if (codigo === '5') return horaActualEcuador >= 19 || horaActualEcuador < 7;
+        if (codigo === '6') return horaActualEcuador >= 14 && horaActualEcuador < 21;
+        return true;
+    };
+    const ubicadosPorCobertura = new Set((coberturasMapa?.coverages || []).map(c => String(c.personnel_id || '')));
+    const movilesPorProyecto = new Map();
+    (snapshot.attendance_today || []).forEach(a => {
+        if (a.post_id || String(a.post_name || '').toUpperCase().trim() !== 'SACAFRANCO') return;
+        if (!a.counts_as_on_duty || !a.full_name || !enHorarioAhora(a)) return;
+        if (ubicadosPorCobertura.has(String(a.personnel_id || ''))) return;
+        const clave = String(a.project_id || '');
+        if (!movilesPorProyecto.has(clave)) movilesPorProyecto.set(clave, []);
+        movilesPorProyecto.get(clave).push(a);
+    });
+
     const proyectosPorProvincia = new Map();
     (snapshot.projects || []).forEach(p => {
         const provincia = String(p.province || '').toUpperCase().trim();
@@ -317,6 +338,10 @@ function adaptarSnapshotSupabase(snapshot, directorio = null, coberturasMapa = n
                     code_label: `${c.label} ${c.start}-${c.end}${c.double ? ' · DN' : ''}`,
                     shift_code: c.shift, coverage: c.is_cover === true, reason: c.is_cover ? 'CUBRE AUSENCIA' : ''
                 }));
+            }
+            if (!lista && !activosEnHorario.length) {
+                const movil = (movilesPorProyecto.get(String(p.id || '')) || []).shift();
+                if (movil) activosMapa = [{ ...movil, coverage: true, mobile_guard: true, reason: 'SACAFRANCO CUBRE PUESTO LIBRE' }];
             }
             const activo = activosMapa[0] || null;
             const resumenAsistencia = {
