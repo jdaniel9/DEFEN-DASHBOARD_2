@@ -368,6 +368,8 @@
 .pa-modal-acciones .pa-guardar { margin-top: 0; flex: 1; }
 @media (max-width: 760px) { .pa-fila { grid-template-columns: 1fr; } .pa-head { flex-direction: column; } }
 /* Menús desplegables del encabezado de Asistencia */
+/* El encabezado debe quedar por encima de la tabla (cuyos títulos de días son "sticky") */
+#asistencia-modal .as-header { position: relative; z-index: 30; }
 .as-header-actions { align-items: center; flex-wrap: wrap; justify-content: flex-end; }
 .as-menu { position: relative; }
 .as-menu-lista { display: none; position: absolute; right: 0; top: calc(100% + 6px); z-index: 50; min-width: 270px; background: #fff; border: 1px solid #cbd5e1; border-radius: 12px; box-shadow: 0 18px 45px rgba(15,23,42,.35); padding: 6px; }
