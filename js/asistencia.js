@@ -56,7 +56,26 @@ function crearModalAsistencia() {
       <div class="as-shell">
         <header class="as-header">
           <div><h2>CONTROL MENSUAL DE ASISTENCIA</h2><p id="as-periodo-subtitulo">CARGANDO PERIODO…</p></div>
-          <div class="as-header-actions"><button id="as-btn-toma-lista" class="as-btn-destacado" onclick="abrirTomaListaAsistencia()">📋 TOMA DE LISTA</button><button id="as-btn-importar" onclick="abrirImportadorPersonalDesdeAsistencia()">⇧ IMPORTAR PERSONAL</button><button id="as-btn-ingreso" onclick="abrirIngresoPersonalAsistencia()">➕ INGRESO</button><button id="as-btn-salida-masiva" onclick="abrirSalidaMasivaAsistencia()">↪ SALIDA MASIVA</button><button id="as-btn-cambio-puesto" onclick="abrirCambioPuestoAsistencia()">⇄ CAMBIO DE PUESTO</button><button id="as-btn-supervisor-interno" onclick="abrirIngresoSupervisorInternoAsistencia()">👔 SUPERVISOR INTERNO</button><button id="as-btn-cierre" onclick="abrirCierreMensualAsistencia()">📦 REVISAR CIERRE</button><button id="as-btn-reiniciar" onclick="reiniciarListadoAsistencia()">♻ REINICIAR PRUEBA</button><button id="as-btn-coberturas" onclick="abrirGestorCoberturasAsistencia()">👥 COBERTURAS</button><button onclick="recargarModuloAsistencia()">↻ ACTUALIZAR</button><button onclick="cerrarModuloAsistencia()">✕ CERRAR</button></div>
+          <div class="as-header-actions">
+            <div class="as-menu" id="as-menu-dia"><button class="as-menu-boton as-btn-destacado" onclick="alternarMenuAsistencia('as-menu-dia',event)">📋 DÍA A DÍA ▾</button><div class="as-menu-lista">
+              <button id="as-btn-toma-lista" onclick="usarMenuAsistencia('abrirTomaListaAsistencia')">📋 TOMA DE LISTA<small>PRESENTES, FALTAS, PERMISOS Y QUIÉN CUBRE</small></button>
+              <button id="as-btn-coberturas" onclick="usarMenuAsistencia('abrirGestorCoberturasAsistencia')">👥 COBERTURAS Y NOVEDADES<small>COBERTURAS, INCIDENCIAS Y CERTIFICADOS</small></button>
+              <button id="as-btn-turnos-extra" onclick="usarMenuAsistencia('abrirTurnosExtraTomaLista')">💵 TURNOS EXTRA<small>RESUMEN DEL MES PARA PAGO</small></button>
+              <button id="as-btn-llamados" onclick="usarMenuAsistencia('abrirGestionLlamadosAtencion')">⚠ LLAMADOS DE ATENCIÓN<small>REGISTRO E HISTORIAL</small></button>
+            </div></div>
+            <div class="as-menu" id="as-menu-personal"><button class="as-menu-boton" onclick="alternarMenuAsistencia('as-menu-personal',event)">👥 PERSONAL ▾</button><div class="as-menu-lista">
+              <button id="as-btn-ingreso" onclick="usarMenuAsistencia('abrirIngresoPersonalAsistencia')">➕ INGRESO<small>CUBRIR UNA VACANTE DE FORMA PERMANENTE</small></button>
+              <button id="as-btn-salida-masiva" onclick="usarMenuAsistencia('abrirSalidaMasivaAsistencia')">↪ SALIDA MASIVA<small>VARIAS PERSONAS DESDE EXCEL</small></button>
+              <button id="as-btn-cambio-puesto" onclick="usarMenuAsistencia('abrirCambioPuestoAsistencia')">⇄ CAMBIO DE PUESTO<small>MOVER O INTERCAMBIAR GUARDIAS</small></button>
+              <button id="as-btn-supervisor-interno" onclick="usarMenuAsistencia('abrirIngresoSupervisorInternoAsistencia')">👔 SUPERVISOR INTERNO<small>REGISTRAR SUPERVISOR DEL PROYECTO</small></button>
+              <button id="as-btn-importar" onclick="usarMenuAsistencia('abrirImportadorPersonalDesdeAsistencia')">⇧ IMPORTAR PERSONAL<small>CARGAR PERSONAL DESDE EXCEL</small></button>
+            </div></div>
+            <div class="as-menu" id="as-menu-periodo"><button class="as-menu-boton" onclick="alternarMenuAsistencia('as-menu-periodo',event)">📦 PERIODO ▾</button><div class="as-menu-lista">
+              <button id="as-btn-cierre" onclick="usarMenuAsistencia('abrirCierreMensualAsistencia')">📦 REVISAR CIERRE DEL MES<small>VALIDAR Y CERRAR EL PERIODO</small></button>
+              <button id="as-btn-reiniciar" onclick="usarMenuAsistencia('reiniciarListadoAsistencia')">♻ REINICIAR PRUEBA<small>SOLO ADMINISTRADOR</small></button>
+              <button onclick="usarMenuAsistencia('recargarModuloAsistencia')">↻ ACTUALIZAR DATOS<small>VOLVER A CARGAR DEL SERVIDOR</small></button>
+            </div></div>
+            <button onclick="cerrarModuloAsistencia()">✕ CERRAR</button></div>
         </header>
         <div class="as-body">
           <section class="as-kpis">
@@ -163,20 +182,51 @@ function prepararControlesAsistencia() {
     const proyectos = [...new Set((w.assignments || []).map(a => a.project).filter(Boolean))].sort((a,b) => a.localeCompare(b, 'es'));
     document.getElementById('as-filtro-proyecto').innerHTML = '<option value="">TODOS</option>' + proyectos.map(p => `<option value="${asistenciaEsc(p)}">${asistenciaEsc(p)}</option>`).join('');
     document.getElementById('as-leyenda').innerHTML = (w.codes || []).map(c => `<span class="${asistenciaCodigoClase(c.code)}"><b>${asistenciaEsc(asistenciaCodigoVisible(c.code))}</b> ${asistenciaEsc(c.label)}</span>`).join('');
-    const puedeAdministrarPersonal = w.permissions?.manage_personnel !== false;
-    const botonCierre = document.getElementById('as-btn-cierre');
-    if (botonCierre) botonCierre.style.display = w.permissions?.close_month ? '' : 'none';
-    const botonImportar = document.getElementById('as-btn-importar');
-    if (botonImportar) botonImportar.style.display = w.permissions?.manage && w.period.status === 'OPEN' ? '' : 'none';
-    const botonReiniciar = document.getElementById('as-btn-reiniciar');
-    if (botonReiniciar) botonReiniciar.style.display = typeof rolActual === 'function' && rolActual() === 'admin' && w.period.status === 'OPEN' ? '' : 'none';
-    ['as-btn-ingreso','as-btn-salida-masiva','as-btn-cambio-puesto','as-btn-supervisor-interno'].forEach(id => {
+    // Cada opción se muestra solo si el usuario tiene el permiso (la base de datos también lo valida).
+    const abierto = w.period.status === 'OPEN';
+    const permiso = (codigo, respaldo) => (typeof tienePermiso === 'function' ? tienePermiso(codigo, respaldo) : respaldo.includes(rolActual?.()));
+    const visibles = {
+        'as-btn-toma-lista': true,
+        'as-btn-coberturas': w.permissions?.manage_coverages !== false,
+        'as-btn-turnos-extra': true,
+        'as-btn-llamados': typeof usuarioPuedeGestionarLlamadosAtencion === 'function' && usuarioPuedeGestionarLlamadosAtencion(),
+        'as-btn-ingreso': abierto && Boolean(w.permissions?.manage_personnel),
+        'as-btn-cambio-puesto': abierto && Boolean(w.permissions?.manage_personnel),
+        'as-btn-supervisor-interno': abierto && Boolean(w.permissions?.manage_personnel),
+        'as-btn-salida-masiva': abierto && permiso('asistencia.salida_masiva', ['operaciones', 'coordinacion_general', 'central_monitoreo']),
+        'as-btn-importar': abierto && permiso('asistencia.importar', ['operaciones', 'coordinacion_general']),
+        'as-btn-cierre': Boolean(w.permissions?.close_month),
+        'as-btn-reiniciar': abierto && typeof rolActual === 'function' && rolActual() === 'admin'
+    };
+    Object.entries(visibles).forEach(([id, ver]) => {
         const boton = document.getElementById(id);
-        if (boton) boton.style.display = w.permissions?.manage && puedeAdministrarPersonal && w.period.status === 'OPEN' ? '' : 'none';
+        if (boton) boton.style.display = ver ? '' : 'none';
     });
-    const botonCoberturas = document.getElementById('as-btn-coberturas');
-    if (botonCoberturas) botonCoberturas.style.display = w.permissions?.manage_coverages !== false ? '' : 'none';
+    // Un menú sin opciones visibles se oculta completo
+    document.querySelectorAll('#asistencia-modal .as-menu').forEach(menu => {
+        const algunaVisible = [...menu.querySelectorAll('.as-menu-lista > button')].some(b => b.style.display !== 'none');
+        menu.style.display = algunaVisible ? '' : 'none';
+    });
 }
+
+// Menús desplegables del encabezado de Asistencia
+function alternarMenuAsistencia(id, evento) {
+    evento?.stopPropagation();
+    document.querySelectorAll('#asistencia-modal .as-menu').forEach(menu => {
+        menu.classList.toggle('abierto', menu.id === id && !menu.classList.contains('abierto'));
+    });
+}
+function usarMenuAsistencia(nombreFuncion) {
+    document.querySelectorAll('#asistencia-modal .as-menu').forEach(menu => menu.classList.remove('abierto'));
+    const fn = window[nombreFuncion];
+    if (typeof fn === 'function') fn();
+    else alert('ESTA OPCIÓN NO ESTÁ DISPONIBLE.');
+}
+document.addEventListener('click', evento => {
+    if (!evento.target.closest?.('#asistencia-modal .as-menu')) {
+        document.querySelectorAll('#asistencia-modal .as-menu.abierto').forEach(menu => menu.classList.remove('abierto'));
+    }
+});
 
 function asistenciaFinPeriodo() {
     const inicio = asistenciaModulo.workspace?.period?.month_start || '';
@@ -185,7 +235,7 @@ function asistenciaFinPeriodo() {
 
 function abrirSalidaPersonalAsistencia(assignmentId = '') {
     const w = asistenciaModulo.workspace;
-    if (!w?.permissions?.manage || w.period.status !== 'OPEN') return alert('SOLO ADMINISTRADOR U OPERACIONES PUEDEN REGISTRAR SALIDAS EN EL PERIODO ABIERTO.');
+    if (!w?.permissions?.manage_personnel || w.period.status !== 'OPEN') return alert('NO TIENES PERMISO PARA REGISTRAR SALIDAS O EL PERIODO ESTÁ CERRADO.');
     const asignaciones = (w.assignments || []).filter(a => ['ACTIVO', 'CAMBIO'].includes(a.status) && !asignacionEsApoyoCobertura(a.assignment_id));
     if (!asignaciones.length) return alert('NO EXISTE PERSONAL ACTIVO DISPONIBLE PARA REGISTRAR UNA SALIDA.');
     const seleccionada = assignmentId ? asignaciones.find(a => a.assignment_id === assignmentId) : asignaciones[0];
@@ -236,7 +286,7 @@ async function guardarSalidaPersonalAsistencia() {
 
 function abrirIngresoPersonalAsistencia() {
     const w = asistenciaModulo.workspace;
-    if (!w?.permissions?.manage || w.period.status !== 'OPEN') return alert('SOLO ADMINISTRADOR U OPERACIONES PUEDEN REGISTRAR INGRESOS EN EL PERIODO ABIERTO.');
+    if (!w?.permissions?.manage_personnel || w.period.status !== 'OPEN') return alert('NO TIENES PERMISO PARA REGISTRAR INGRESOS O EL PERIODO ESTÁ CERRADO.');
     const vacantes = (w.assignments || []).filter(a => a.status === 'VACANTE');
     if (!vacantes.length) return alert('NO EXISTEN VACANTES DISPONIBLES PARA REGISTRAR UN INGRESO.');
     const opciones = vacantes.map(a => `<option value="${asistenciaEsc(a.assignment_id)}">${asistenciaEsc(a.province || 'SIN PROVINCIA')} · ${asistenciaEsc(a.project || 'SIN PROYECTO')} · ${asistenciaEsc(a.post || 'SIN PUESTO')}</option>`).join('');
@@ -300,7 +350,7 @@ function filtrarAgentesCambioPuestoAsistencia() {
 
 function abrirCambioPuestoAsistencia(assignmentId = '') {
     const w = asistenciaModulo.workspace;
-    if (!w?.permissions?.manage || w.permissions?.manage_personnel === false || w.period.status !== 'OPEN') {
+    if (!w?.permissions?.manage_personnel || w.period.status !== 'OPEN') {
         return alert('SOLO ADMINISTRADOR U OPERACIONES PUEDEN REALIZAR CAMBIOS DE PUESTO EN EL MES ABIERTO.');
     }
     const {activos,vacantes} = asignacionesCambioPuestoAsistencia();
@@ -362,7 +412,7 @@ async function guardarCambioPuestoAsistencia() {
 
 function abrirIngresoSupervisorInternoAsistencia() {
     const w = asistenciaModulo.workspace;
-    if (!w?.permissions?.manage || w.permissions?.manage_personnel === false || w.period.status !== 'OPEN') {
+    if (!w?.permissions?.manage_personnel || w.period.status !== 'OPEN') {
         return alert('SOLO ADMINISTRADOR U OPERACIONES PUEDEN REGISTRAR SUPERVISORES INTERNOS.');
     }
     const proyectos = (w.projects || []).map(p => `<option value="${asistenciaEsc(p.id)}">${asistenciaEsc(p.province)} · ${asistenciaEsc(p.name)}</option>`).join('');
@@ -448,8 +498,9 @@ function renderModuloAsistencia() {
         const ubicacion = [a.province, a.project, a.post].filter(Boolean).join(' · ');
         const cobertura = coberturaActivaParaAsignacion(a.assignment_id);
         const esApoyoCobertura = asignacionEsApoyoCobertura(a.assignment_id);
-        const puedeCrearCobertura = puedeEditar && a.status !== 'INACTIVO' && !esApoyoCobertura && !cobertura;
-        const puedeRegistrarSalida = puedeEditar && ['ACTIVO', 'CAMBIO'].includes(a.status) && !esApoyoCobertura;
+        const puedeGestionarCoberturas = Boolean(w.permissions?.manage_coverages && w.period.status === 'OPEN');
+        const puedeCrearCobertura = puedeGestionarCoberturas && a.status !== 'INACTIVO' && !esApoyoCobertura && !cobertura;
+        const puedeRegistrarSalida = Boolean(w.permissions?.manage_personnel && w.period.status === 'OPEN') && ['ACTIVO', 'CAMBIO'].includes(a.status) && !esApoyoCobertura;
         const puedeCambiarPuesto = puedeRegistrarSalida && Boolean(a.post_id) && w.permissions?.manage_personnel !== false;
         const coberturaHtml = cobertura
             ? `<div class="as-person-coverage">🛡 CUBIERTO POR <b>${asistenciaEsc(cobertura.replacement_name)}</b> · ${asistenciaEsc(cobertura.status)}</div>`

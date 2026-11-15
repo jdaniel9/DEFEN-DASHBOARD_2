@@ -55,8 +55,11 @@
 
   window.abrirSalidaMasivaAsistencia = function () {
     const w = asistenciaModulo.workspace;
-    if (!w?.permissions?.manage || w.period.status !== 'OPEN') {
-      return alert('SOLO ADMINISTRADOR U OPERACIONES PUEDEN REGISTRAR SALIDAS EN EL PERIODO ABIERTO.');
+    const permitido = typeof tienePermiso === 'function'
+      ? tienePermiso('asistencia.salida_masiva', ['operaciones', 'coordinacion_general', 'central_monitoreo'])
+      : Boolean(w?.permissions?.manage);
+    if (!w || !permitido || w.period.status !== 'OPEN') {
+      return alert('NO TIENES PERMISO PARA REGISTRAR SALIDAS MASIVAS O EL PERIODO ESTÁ CERRADO.');
     }
     estado.filas = []; estado.resultado = null; estado.archivo = '';
     const conPersonal = new Set((w.assignments || []).filter((a) => ['ACTIVO', 'CAMBIO'].includes(a.status)).map((a) => a.project_id));

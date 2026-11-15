@@ -71,6 +71,7 @@ async function supabaseIniciarSesion(usuario, password, departamento) {
             usuario: perfil.username,
             rol: perfil.role_code,
             token: auth.access_token,
+            permisos: Array.isArray(perfil.permissions) ? perfil.permissions : null,
             refreshToken: auth.refresh_token,
             expiresAt: Number(auth.expires_at || 0)
         };
@@ -374,11 +375,20 @@ function adaptarSnapshotSupabase(snapshot, directorio = null, coberturasMapa = n
 
 async function supabaseCargarDashboardLegacy() {
     const rol = (sessionStorage.getItem('defen_auth_rol') || '').toLowerCase();
+    // Permisos vigentes: si el Administrador los cambió, se aplican sin volver a iniciar sesión.
+    try {
+        const permisos = await supabaseRpc('get_my_permissions', {});
+        if (typeof guardarPermisosSesion === 'function') guardarPermisosSesion(permisos);
+    } catch (error) { console.warn('Permisos:', error.message || error); }
+    const verAsistencia = typeof usuarioPuedeVerAsistencia === 'function' ? usuarioPuedeVerAsistencia()
+        : ['admin','coordinacion_general','operaciones','central_monitoreo'].includes(rol);
     const puedeVerRadios = typeof usuarioPuedeVerRadiosDetalle === 'function'
         ? usuarioPuedeVerRadiosDetalle()
         : ['admin', 'coordinacion_general', 'operaciones', 'sistemas'].includes((sessionStorage.getItem('defen_auth_rol') || '').toLowerCase());
     const puedeVerArmamento = ['admin', 'coordinacion_general', 'operaciones'].includes((sessionStorage.getItem('defen_auth_rol') || '').toLowerCase());
-    const puedeVerLlamados = ['admin', 'coordinacion_general', 'operaciones', 'gdp'].includes((sessionStorage.getItem('defen_auth_rol') || '').toLowerCase());
+    const puedeVerLlamados = typeof tienePermiso === 'function'
+        ? tienePermiso('llamados.ver', ['coordinacion_general', 'operaciones', 'gdp'])
+        : ['admin', 'coordinacion_general', 'operaciones', 'gdp'].includes(rol);
     const [snapshot, radios, workspaceArmamento, workspaceLlamados, directorio, coberturasMapa, tomaListaMapa] = await Promise.all([
         supabaseRpc('get_dashboard_snapshot_v2'),
         puedeVerRadios ? supabaseCargarRadiosDetalle() : Promise.resolve([]),
@@ -387,10 +397,10 @@ async function supabaseCargarDashboardLegacy() {
             ? supabaseCargarWorkspaceLlamadosAtencion().catch(error => { console.warn('Llamados de atención:', error.message); return null; })
             : Promise.resolve(null),
         supabaseCargarDirectorioPersonal().catch(error => { console.warn('Directorio de personal:', error.message); return null; }),
-        ['admin','coordinacion_general','operaciones','central_monitoreo'].includes(rol)
+        verAsistencia
             ? supabaseRpc('get_dashboard_post_coverage_today').catch(error => { console.warn('Coberturas del mapa:', error.message); return null; })
             : Promise.resolve(null),
-        ['admin','coordinacion_general','operaciones','central_monitoreo'].includes(rol)
+        verAsistencia
             ? supabaseRpc('get_roll_call_live').catch(error => { console.warn('Toma de lista del mapa:', error.message); return null; })
             : Promise.resolve(null)
     ]);
@@ -517,6 +527,29 @@ async function supabaseCargarWorkspaceUsuarios() {
 
 async function supabaseGuardarAccesoUsuario(payload) {
     return supabaseRpc('save_user_access_application', { p_payload: payload });
+}
+
+// Permisos configurables (solo Administrador)
+function supabaseCargarPermisosAdmin() { return supabaseRpc('get_permission_admin_workspace', {}); }
+function supabaseGuardarPermisosRol(roleCode, codigos) { return supabaseRpc('save_role_permissions', { p_role_code: roleCode, p_permissions: codigos }); }
+function supabaseGuardarPermisosUsuario(profileId, cambios) { return supabaseRpc('save_user_permission_overrides', { p_profile_id: profileId, p_overrides: cambios }); }
+
+// Cambio de contraseña de otro usuario (Edge Function con clave de servicio en el servidor)
+async function supabaseCambiarClaveUsuarioAdmin(userId, password) {
+    DefenSecurity.rateLimit('edge:admin-reset-password', 10, 600);
+    let token = await supabaseTokenVigente();
+    const invocar = () => supabasePeticion('/functions/v1/admin-reset-password', {
+        method: 'POST', headers: supabaseHeaders(token, true), body: JSON.stringify({ user_id: userId, password })
+    });
+    try { return await invocar(); }
+    catch (error) {
+        if (error instanceof TypeError || /failed to fetch|networkerror/i.test(String(error?.message || ''))) {
+            throw new Error('NO SE PUDO CONTACTAR LA FUNCIÓN DE CONTRASEÑAS. VERIFICA QUE ESTÉ DESPLEGADA.');
+        }
+        if (error.status !== 401) throw error;
+        token = await supabaseRenovarSesion();
+        return invocar();
+    }
 }
 
 async function supabaseCrearUsuarioAdmin(payload) {

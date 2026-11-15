@@ -46,6 +46,27 @@ function usuarioEsGestionOperativa() {
     return ['admin', 'coordinacion_general', 'operaciones'].includes(rolActual());
 }
 
+// Permisos configurables por el Administrador (por rol y por usuario).
+// La lista llega del servidor al iniciar sesión y se refresca al cargar datos.
+// La validación real siempre ocurre en la base de datos.
+const AUTH_PERMISOS_KEY = 'defen_auth_permisos';
+function permisosActuales() {
+    try {
+        const lista = JSON.parse(sessionStorage.getItem(AUTH_PERMISOS_KEY) || 'null');
+        return Array.isArray(lista) ? lista : null;
+    } catch (_) { return null; }
+}
+function guardarPermisosSesion(lista) {
+    if (Array.isArray(lista)) sessionStorage.setItem(AUTH_PERMISOS_KEY, JSON.stringify(lista));
+}
+// Si aún no hay lista (sesión antigua), se usa la regla por rol como respaldo.
+function tienePermiso(codigo, rolesRespaldo = []) {
+    if (rolActual() === 'admin') return true;
+    const lista = permisosActuales();
+    if (lista) return lista.includes(codigo);
+    return rolesRespaldo.includes(rolActual());
+}
+
 function usuarioPuedeGenerarActas() {
     const autorizado = usuarioEsGestionOperativa();
     if (!autorizado) return false;
@@ -120,27 +141,31 @@ function usuarioPuedeVerHistorialRadios() {
 }
 
 function usuarioPuedeVerAsistencia() {
-    return ['admin', 'coordinacion_general', 'operaciones', 'gdp', 'central_monitoreo'].includes(rolActual());
+    return tienePermiso('asistencia.ver', ['coordinacion_general', 'operaciones', 'gdp', 'central_monitoreo']);
 }
 
 function usuarioPuedeGestionarAsistencia() {
-    return ['admin', 'coordinacion_general', 'operaciones', 'central_monitoreo'].includes(rolActual());
+    return tienePermiso('asistencia.tomar_lista', ['coordinacion_general', 'operaciones', 'central_monitoreo']);
 }
 
 function usuarioPuedeGestionarLlamadosAtencion() {
-    return (usuarioEsGestionOperativa() || usuarioEsCentralMonitoreo())
+    return tienePermiso('llamados.ver', ['coordinacion_general', 'operaciones', 'central_monitoreo'])
         && (!backendUsaSupabase() || (typeof SUPABASE_PERSONNEL_WARNINGS_ENABLED !== 'undefined' && SUPABASE_PERSONNEL_WARNINGS_ENABLED));
 }
 
 function usuarioPuedeGestionarProyectos() {
-    return usuarioEsGestionOperativa()
+    return tienePermiso('proyectos.gestionar', ['coordinacion_general', 'operaciones'])
         && backendUsaSupabase()
         && typeof SUPABASE_PROJECT_MANAGEMENT_ENABLED !== 'undefined'
         && SUPABASE_PROJECT_MANAGEMENT_ENABLED;
 }
 
+function usuarioPuedeArchivarProyectos() {
+    return tienePermiso('proyectos.archivar', []);
+}
+
 function usuarioPuedeGestionarPersonalOperativo() {
-    return usuarioEsGestionOperativa() && backendUsaSupabase();
+    return tienePermiso('proyectos.gestionar', ['coordinacion_general', 'operaciones']) && backendUsaSupabase();
 }
 
 function usuarioPuedeGestionarUsuarios() {
@@ -151,14 +176,14 @@ function usuarioPuedeGestionarUsuarios() {
 }
 
 function usuarioPuedeVerAuditoriaSistema() {
-    return ['admin', 'coordinacion_general'].includes(rolActual())
+    return tienePermiso('sistema.auditoria', ['coordinacion_general'])
         && backendUsaSupabase()
         && typeof SUPABASE_SYSTEM_AUDIT_ENABLED !== 'undefined'
         && SUPABASE_SYSTEM_AUDIT_ENABLED;
 }
 
 function usuarioPuedeVerSaludSistema() {
-    return ['admin', 'coordinacion_general'].includes(rolActual())
+    return tienePermiso('sistema.salud', ['coordinacion_general'])
         && backendUsaSupabase()
         && typeof SUPABASE_SYSTEM_HEALTH_ENABLED !== 'undefined'
         && SUPABASE_SYSTEM_HEALTH_ENABLED;
@@ -257,6 +282,11 @@ function aplicarPermisosUI() {
             }
         });
     }
+    if (!usuarioPuedeArchivarProyectos()) {
+        document.querySelectorAll('[onclick^="archivarProyectoActivo"]').forEach(el => {
+            el.style.display = 'none';
+        });
+    }
     if (backendUsaSupabase() && SUPABASE_READ_ONLY_PHASE
         && !(typeof SUPABASE_PROJECT_ARCHIVE_ENABLED !== 'undefined' && SUPABASE_PROJECT_ARCHIVE_ENABLED)) {
         document.querySelectorAll('[onclick^="archivarProyectoActivo"]').forEach(el => {
@@ -327,6 +357,7 @@ async function intentarLogin(usuario, password, departamento) {
             sessionStorage.setItem('defen_auth_usuario', usuario);
             sessionStorage.setItem(AUTH_ROL_KEY, json.rol || '');
             sessionStorage.setItem(AUTH_TOKEN_KEY, json.token || '');
+            guardarPermisosSesion(json.permisos);
             if (backendUsaSupabase()) {
                 sessionStorage.setItem(SUPABASE_REFRESH_TOKEN_KEY, json.refreshToken || '');
                 sessionStorage.setItem(SUPABASE_EXPIRES_AT_KEY, String(json.expiresAt || 0));
@@ -415,6 +446,7 @@ function cerrarSesionLocal() {
     sessionStorage.removeItem('defen_auth_usuario');
     sessionStorage.removeItem(AUTH_ROL_KEY);
     sessionStorage.removeItem(AUTH_TOKEN_KEY);
+    sessionStorage.removeItem(AUTH_PERMISOS_KEY);
     sessionStorage.removeItem(SUPABASE_REFRESH_TOKEN_KEY);
     sessionStorage.removeItem(SUPABASE_EXPIRES_AT_KEY);
 }

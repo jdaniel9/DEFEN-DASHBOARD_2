@@ -30,13 +30,19 @@
       <nav id="rc-turnos" class="rc-turnos"></nav>
       <section id="rc-resumen" class="rc-resumen"></section>
       <div id="rc-cuerpo" class="rc-cuerpo"><div class="rc-vacio">CARGANDO…</div></div>
-    </div>
-    <div id="rc-picker" class="rc-picker"></div>`;
+    </div>`;
     document.body.appendChild(m);
     return m;
   }
 
   const rpc = (nombre, payload) => supabaseRpc(nombre, payload);
+
+  // El panel de selección vive en <body> para poder abrirse también fuera de la toma de lista
+  function pickerEl() {
+    let p = document.getElementById('rc-picker');
+    if (!p) { p = document.createElement('div'); p.id = 'rc-picker'; p.className = 'rc-picker'; document.body.appendChild(p); }
+    return p;
+  }
 
   window.abrirTomaListaAsistencia = async function (projectId = '') {
     if (typeof usuarioPuedeGestionarAsistencia === 'function' && !usuarioPuedeGestionarAsistencia()) {
@@ -224,7 +230,7 @@
   // Pregunta si el turno extra es pagado. Devuelve 'PAGADO', 'NO_PAGADO', '' (no es extra) o null (cancelado).
   function preguntarPago(nombre, permitirNoExtra) {
     return new Promise((resolve) => {
-      const picker = document.getElementById('rc-picker');
+      const picker = pickerEl();
       window.__rcPago = (valor) => { cerrarSelectorTomaLista(); resolve(valor); };
       picker.innerHTML = `<div class="rc-picker-card rc-menu">
         <h3>TURNO EXTRA DE ${esc(nombre)}</h3><p>¿ESTE TURNO SE LE PAGA?</p>
@@ -259,7 +265,7 @@
   // Tras un permiso médico, ofrece subir el certificado (o dejarlo pendiente)
   function finalizarMarca(resultado, estado) {
     if (!resultado || estado !== 'PERMISO' || !resultado.incident_id) return;
-    const picker = document.getElementById('rc-picker');
+    const picker = pickerEl();
     picker.innerHTML = `<div class="rc-picker-card rc-menu"><h3>CERTIFICADO MÉDICO</h3>
       <p>¿TIENES EL CERTIFICADO AHORA? SI NO, QUEDA PENDIENTE Y LO PUEDES SUBIR DESPUÉS DESDE ESTA LISTA O DESDE "COBERTURAS".</p>
       <button class="rc-b-pago" onclick="cerrarSelectorTomaLista();subirCertificadoTomaLista('${esc(resultado.incident_id)}')">📎 SUBIR CERTIFICADO AHORA</button>
@@ -323,7 +329,7 @@
     const a = asignacion(assignmentId);
     const check = a ? checkDe(a.personnel_id) : null;
     const hayAsistencia = typeof asistenciaModulo !== 'undefined' && asistenciaModulo?.workspace;
-    const picker = document.getElementById('rc-picker');
+    const picker = pickerEl();
     picker.innerHTML = `<div class="rc-picker-card rc-menu">
       <h3>${esc(a?.full_name || '')}</h3><p>${esc(a?.post_name || '')} · CI ${esc(a?.national_id || '—')}</p>
       ${check ? `<button onclick="cerrarSelectorTomaLista();deshacerTomaLista('${esc(check.id)}')">↶ QUITAR LA MARCA DE ESTE TURNO</button>` : ''}
@@ -337,7 +343,7 @@
 
   window.moverTurnoTomaLista = function (assignmentId) {
     const a = asignacion(assignmentId);
-    const picker = document.getElementById('rc-picker');
+    const picker = pickerEl();
     picker.innerHTML = `<div class="rc-picker-card rc-menu"><h3>MOVER A ${esc(a?.full_name || '')}</h3><p>SOLO PARA ESTE TURNO. QUEDA PRESENTE EN EL PUESTO ELEGIDO (NO CUENTA COMO TURNO EXTRA).</p>
       ${(st.ws?.posts || []).filter((p) => p.id !== a?.post_id).map((p) => `<button onclick="cerrarSelectorTomaLista();marcarEnPuestoTomaLista('${esc(assignmentId)}','${esc(p.id)}')">📍 ${esc(p.name)}</button>`).join('') || '<p>NO HAY OTROS PUESTOS EN ESTE PROYECTO.</p>'}
       <button class="rc-cancelar" onclick="cerrarSelectorTomaLista()">CANCELAR</button></div>`;
@@ -346,7 +352,7 @@
   window.marcarEnPuestoTomaLista = (assignmentId, postId) => guardar({ assignment_id: assignmentId, status: 'PRESENTE', post_id: postId });
 
   window.cerrarSelectorTomaLista = function () {
-    const picker = document.getElementById('rc-picker');
+    const picker = pickerEl();
     if (picker) { picker.style.display = 'none'; picker.innerHTML = ''; }
   };
 
@@ -354,7 +360,7 @@
   let selectorActual = null;
   async function abrirSelector(opciones) {
     selectorActual = opciones;
-    const picker = document.getElementById('rc-picker');
+    const picker = pickerEl();
     picker.innerHTML = `<div class="rc-picker-card"><h3>${esc(opciones.titulo)}</h3><p>${esc(opciones.subtitulo || '')}</p>
       <button class="rc-externo" onclick="formExternoTomaLista()">➕ PERSONAL EXTERNO (NO REGISTRADO) · APOYO PAGADO</button>
       <div id="rc-externo-form"></div>
@@ -433,7 +439,7 @@
 
   // Resumen de turnos extra del mes (para pago) con exportación a Excel
   window.abrirTurnosExtraTomaLista = async function () {
-    const picker = document.getElementById('rc-picker');
+    const picker = pickerEl();
     picker.innerHTML = '<div class="rc-picker-card rc-extras"><div class="rc-vacio">CARGANDO TURNOS EXTRA…</div></div>';
     picker.style.display = 'flex';
     try {
