@@ -327,6 +327,20 @@
     font-size: 7px !important; font-weight: 900;
 }
 .as-coverage-form { width: min(680px, 100%); }
+.as-mass-exit { width: min(920px, 100%); max-height: 92vh; overflow: auto; }
+.as-form-grid .as-ms-check { display: flex; align-items: center; gap: 8px; }
+.as-form-grid .as-ms-check input { width: auto; margin: 0; }
+.as-ms-vista { margin-top: 12px; }
+.as-ms-resumen { padding: 9px 11px; border-radius: 9px; background: #eff6ff; color: #1e3a8a; font-size: 10px; font-weight: 800; }
+.as-ms-resumen.as-ms-error { background: #fef2f2; color: #b91c1c; }
+.as-ms-resumen.as-ms-exito { background: #dcfce7; color: #166534; }
+.as-ms-tabla { margin-top: 8px; max-height: 42vh; overflow: auto; border: 1px solid #e2e8f0; border-radius: 9px; }
+.as-ms-tabla table { width: 100%; border-collapse: collapse; font-size: 9px; }
+.as-ms-tabla th { position: sticky; top: 0; background: #0f172a; color: #fff; padding: 6px; text-align: left; }
+.as-ms-tabla td { padding: 6px; border-bottom: 1px solid #e2e8f0; color: #0f172a; vertical-align: top; }
+.as-ms-tabla tr.as-ms-ok td:last-child { color: #166534; }
+.as-ms-tabla tr.as-ms-err td { background: #fef2f2; color: #b91c1c; }
+.as-ms-aviso { color: #b45309; font-weight: 800; }
 .as-form-grid {
     display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 11px; margin-top: 14px;

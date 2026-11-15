@@ -247,10 +247,12 @@ async function archivarProyectoActivoSupabase(provincia, nombreProyecto) {
         }
 
         const puestos = Number(preview?.counts?.posts) || 0;
+        const avisos = Object.values(preview?.warnings || {}).map(m => `• ${m}`).join('\n');
         const confirmar = confirm(
             `¿Confirmar el archivo de "${nombreProyecto}"?\n\n` +
             `Fecha de finalización: ${fecha.trim()}\n` +
             `Puestos que se cerrarán: ${puestos}\n` +
+            (avisos ? `${avisos}\n` : '') +
             `Motivo: ${motivo.trim()}\n\n` +
             `El proyecto pasará al histórico y dejará de contar como activo.`
         );
