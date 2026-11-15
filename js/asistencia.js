@@ -10,6 +10,7 @@ const asistenciaModulo = {
     busqueda: '',
     proyecto: '',
     estado: '',
+    sinTelefono: false,
     borradorCobertura: null,
     cierre: { periodId: null, preview: null, pdf: false, excel: false },
     guardando: false
@@ -69,6 +70,7 @@ function crearModalAsistencia() {
               <button id="as-btn-cambio-puesto" onclick="usarMenuAsistencia('abrirCambioPuestoAsistencia')">⇄ CAMBIO DE PUESTO<small>MOVER O INTERCAMBIAR GUARDIAS</small></button>
               <button id="as-btn-supervisor-interno" onclick="usarMenuAsistencia('abrirIngresoSupervisorInternoAsistencia')">👔 SUPERVISOR INTERNO<small>REGISTRAR SUPERVISOR DEL PROYECTO</small></button>
               <button id="as-btn-importar" onclick="usarMenuAsistencia('abrirImportadorPersonalDesdeAsistencia')">⇧ IMPORTAR PERSONAL<small>CARGAR PERSONAL DESDE EXCEL</small></button>
+              <button id="as-btn-telefonos" onclick="usarMenuAsistencia('abrirCargaTelefonosAsistencia')">📞 TELÉFONOS<small>COMPLETAR TELÉFONOS DESDE EXCEL</small></button>
             </div></div>
             <div class="as-menu" id="as-menu-periodo"><button class="as-menu-boton" onclick="alternarMenuAsistencia('as-menu-periodo',event)">📦 PERIODO ▾</button><div class="as-menu-lista">
               <button id="as-btn-cierre" onclick="usarMenuAsistencia('abrirCierreMensualAsistencia')">📦 REVISAR CIERRE DEL MES<small>VALIDAR Y CERRAR EL PERIODO</small></button>
@@ -85,6 +87,7 @@ function crearModalAsistencia() {
             <div><span>FALTAS</span><strong id="as-kpi-faltas">—</strong></div>
             <div><span>COBERTURAS</span><strong id="as-kpi-coberturas">—</strong></div>
             <div><span>PERIODO</span><strong id="as-kpi-estado">—</strong></div>
+            <div id="as-kpi-telefono-box" class="as-kpi-telefono" onclick="alternarFiltroSinTelefonoAsistencia()" title="MOSTRAR SOLO EL PERSONAL SIN TELÉFONO"><span>SIN TELÉFONO</span><strong id="as-kpi-telefono">—</strong><small id="as-kpi-telefono-accion">FILTRAR</small></div>
           </section>
           <section class="as-toolbar">
             <label>PERIODO<select id="as-filtro-periodo" onchange="cambiarPeriodoAsistencia(this.value)"></select></label>
@@ -151,7 +154,7 @@ async function cargarWorkspaceAsistencia(periodId) {
             supabaseCargarDirectorioPersonal().catch(()=>null)
         ]);
         if (!workspace || workspace.schema_version !== 1) throw new Error('CONTRATO DE ASISTENCIA INCOMPATIBLE.');
-        if(directorio){const personas=new Map((directorio.people||[]).map(p=>[String(p.id),p]));(workspace.assignments||[]).forEach(a=>{const p=personas.get(String(a.personnel_id||''));a.mobile_phone=p?.mobile_phone||'';});workspace.permissions=workspace.permissions||{};workspace.permissions.manage_contacts=Boolean(directorio.permissions?.manage_contacts);}
+        if(directorio){const personas=new Map((directorio.people||[]).map(p=>[String(p.id),p]));(workspace.assignments||[]).forEach(a=>{const p=personas.get(String(a.personnel_id||''));a.mobile_phone=p?.mobile_phone||'';});workspace.telefonosCargados=true;workspace.permissions=workspace.permissions||{};workspace.permissions.manage_contacts=Boolean(directorio.permissions?.manage_contacts);}
         asistenciaModulo.workspace = workspace;
         if (periodoAnterior !== workspace.period.id) {
             asistenciaModulo.coberturas = null;
@@ -161,6 +164,7 @@ async function cargarWorkspaceAsistencia(periodId) {
         asistenciaModulo.busqueda = '';
         asistenciaModulo.proyecto = '';
         asistenciaModulo.estado = '';
+        asistenciaModulo.sinTelefono = false;
         document.getElementById('as-filtro-busqueda').value = '';
         document.getElementById('as-filtro-estado').value = '';
         prepararControlesAsistencia();
@@ -195,6 +199,7 @@ function prepararControlesAsistencia() {
         'as-btn-supervisor-interno': abierto && Boolean(w.permissions?.manage_personnel),
         'as-btn-salida-masiva': abierto && permiso('asistencia.salida_masiva', ['operaciones', 'coordinacion_general', 'central_monitoreo']),
         'as-btn-importar': abierto && permiso('asistencia.importar', ['operaciones', 'coordinacion_general']),
+        'as-btn-telefonos': permiso('asistencia.personal', ['operaciones']),
         'as-btn-cierre': Boolean(w.permissions?.close_month),
         'as-btn-reiniciar': abierto && typeof rolActual === 'function' && rolActual() === 'admin'
     };
@@ -458,9 +463,22 @@ function filtrarModuloAsistencia() {
     renderModuloAsistencia();
 }
 
+// Persona vigente en el periodo (no vacante, no pasiva) cuyo registro no tiene teléfono
+function asignacionSinTelefonoAsistencia(a) {
+    return Boolean(a.personnel_id) && a.status !== 'VACANTE' && a.status !== 'INACTIVO' && !a.moved_out && !String(a.mobile_phone || '').trim();
+}
+
+function alternarFiltroSinTelefonoAsistencia() {
+    if (!asistenciaModulo.workspace?.telefonosCargados) return alert('NO SE PUDO CARGAR EL DIRECTORIO DE TELÉFONOS. ACTUALIZA LOS DATOS.');
+    asistenciaModulo.sinTelefono = !asistenciaModulo.sinTelefono;
+    asistenciaModulo.pagina = 1;
+    renderModuloAsistencia();
+}
+
 function asignacionesAsistenciaFiltradas() {
     const q = asistenciaModulo.busqueda;
     return (asistenciaModulo.workspace?.assignments || []).filter(a => {
+        if (asistenciaModulo.sinTelefono && !asignacionSinTelefonoAsistencia(a)) return false;
         if (asistenciaModulo.proyecto && a.project !== asistenciaModulo.proyecto) return false;
         if (asistenciaModulo.estado) {
             const estadoFiltro = a.moved_out ? 'CAMBIO' : a.status;
@@ -498,6 +516,10 @@ function renderModuloAsistencia() {
     const coberturasPeriodo = (asistenciaModulo.coberturas?.coverages || []).length;
     document.getElementById('as-kpi-coberturas').textContent = asistenciaModulo.coberturas ? coberturasPeriodo : '—';
     document.getElementById('as-kpi-estado').textContent = w.period.status;
+    const sinTelefono = new Set((w.assignments || []).filter(asignacionSinTelefonoAsistencia).map(a => a.personnel_id)).size;
+    document.getElementById('as-kpi-telefono').textContent = w.telefonosCargados ? sinTelefono.toLocaleString('es-EC') : '—';
+    document.getElementById('as-kpi-telefono-box').classList.toggle('as-kpi-activo', asistenciaModulo.sinTelefono);
+    document.getElementById('as-kpi-telefono-accion').textContent = asistenciaModulo.sinTelefono ? 'QUITAR FILTRO ✕' : 'FILTRAR';
 
     const dayHeaders = Array.from({length:dias}, (_,i) => `<th class="as-day-head ${esMesActual && i+1===hoy.getDate()?'as-today':''}">${i+1}</th>`).join('');
     document.getElementById('as-thead').innerHTML = `<tr><th class="as-sticky as-col-person">PERSONAL / UBICACIÓN</th><th class="as-sticky as-col-status">ESTADO</th>${dayHeaders}</tr>`;
@@ -943,11 +965,11 @@ function generarPDFCierreAsistencia() {
         doc.setFontSize(8); doc.setTextColor(100, 116, 139);
         doc.text(`${asistenciaMesEtiqueta(w.period.month_start)} · ${w.assignments.length} ASIGNACIONES · ${w.summary?.personnel || 0} PERSONAS`, 14, y); y += 8;
 
-        const seccion = (titulo, encabezados, filas, color) => {
+        const seccion = (titulo, encabezados, filas, color, conteo = filas.length) => {
             if (!filas.length) return;
             if (y > 170) { doc.addPage(); dibujarPagina(); y = MARGEN_PDF + 7; }
             doc.setFont('helvetica', 'bold'); doc.setFontSize(10); doc.setTextColor(15, 23, 42);
-            doc.text(`${titulo} (${filas.length})`, 14, y); y += 4;
+            doc.text(`${titulo} (${conteo})`, 14, y); y += 4;
             doc.autoTable({
                 startY: y, head: [encabezados], body: filas,
                 margin: { left: 14, right: 14, top: MARGEN_PDF + 5, bottom: MARGEN_PDF + 4 },
@@ -963,11 +985,17 @@ function generarPDFCierreAsistencia() {
         seccion('COBERTURAS TEMPORALES', ['ESTADO','MOTIVO','TITULAR / VACANTE','PERSONA QUE CUBRE','UBICACIÓN','DESDE','HASTA'], datos.coberturas.map(c => [c.status,String(c.reason || '').replaceAll('_',' '),c.target_name || 'VACANTE',c.replacement_name || '—',[c.project,c.post].filter(Boolean).join(' · '),asistenciaFechaLocal(c.start_date),asistenciaFechaLocal(c.actual_end_date || c.planned_end_date)]), [37,99,235]);
         seccion('PERMISOS Y JUSTIFICANTES POR PROYECTO', ['TIPO','PERSONAL','CÉDULA','PROYECTO','PUESTO','DESDE','HASTA','RESPALDO'], (datos.incidents || []).map(i => [String(i.incident_type || '').replaceAll('_',' '),i.full_name || '—',i.national_id || '—',i.project || '—',i.post || '—',asistenciaFechaLocal(i.start_date),asistenciaFechaLocal(i.end_date),i.document_path ? 'ADJUNTO' : 'PENDIENTE']), [124,58,237]);
         seccion('TURNOS EXTRA Y RECONOCIMIENTOS', ['PERSONAL','CÉDULA','TIPO','TURNOS','HORAS'], (datos.paymentSummary || []).map(p => [p.full_name || '—',p.national_id || '—',String(p.payment_type || '').replaceAll('_',' '),p.shifts || 0,p.hours || 0]), [8,145,178]);
+        const te = asistenciaTurnosExtraReporte();
+        if (te.personas.length) {
+            const filasTe = te.personas.map(p => [p.full_name || '—', p.national_id || '—', p.external ? 'EXTERNO' : 'INTERNO', p.paid, p.unpaid, asistenciaMoneda(te.valor), asistenciaMoneda(p.total)]);
+            filasTe.push([{ content: 'TOTAL', colSpan: 3, styles: { fontStyle: 'bold', halign: 'right' } }, { content: String(te.totalPagados), styles: { fontStyle: 'bold' } }, { content: String(te.totalNoPagados), styles: { fontStyle: 'bold' } }, '', { content: asistenciaMoneda(te.totalPagar), styles: { fontStyle: 'bold' } }]);
+            seccion(`TURNOS EXTRA PARA NÓMINA · VALOR POR TURNO ${asistenciaMoneda(te.valor)}`, ['PERSONAL','CÉDULA','TIPO','PAGADOS','NO PAGADOS','VALOR TURNO','TOTAL A PAGAR'], filasTe, [14,116,144], te.personas.length);
+        }
         seccion('VACANTES', ['PROVINCIA','PROYECTO','PUESTO','HORARIO'], datos.vacantes.map(a => [a.province || '—',a.project || '—',a.post || '—',a.schedule || '—']), [220,38,38]);
         seccion('INGRESOS', ['FECHA','PERSONAL','CÉDULA','PROVINCIA','PROYECTO','PUESTO'], datos.ingresos.map(a => [asistenciaFechaLocal(a.employment_start_date),a.full_name || '—',a.national_id || '—',a.province || '—',a.project || '—',a.post || '—']), [22,163,74]);
         seccion('SALIDAS', ['FECHA','PERSONAL','CÉDULA','PROVINCIA','PROYECTO','PUESTO'], datos.salidas.map(a => [asistenciaFechaLocal(a.employment_end_date),a.full_name || '—',a.national_id || '—',a.province || '—',a.project || '—',a.post || '—']), [71,85,105]);
 
-        if (![datos.faltas, datos.coberturas, datos.vacantes, datos.ingresos, datos.salidas].some(lista => lista.length)) {
+        if (![datos.faltas, datos.coberturas, datos.vacantes, datos.ingresos, datos.salidas, te.personas].some(lista => lista.length)) {
             doc.setFont('helvetica', 'italic'); doc.setFontSize(10); doc.setTextColor(100,116,139);
             doc.text('NO EXISTEN NOVEDADES REGISTRADAS EN ESTE PERIODO.', 14, y);
         }
@@ -1049,6 +1077,21 @@ function generarExcelCierreAsistencia() {
         agregarHoja('COBERTURAS', coberturas);
         agregarHoja('JUSTIFICANTES', justificantes);
         agregarHoja('PAGOS Y TURNOS EXTRA', pagos);
+        // Turnos extra de la toma de lista con el valor por turno (para nómina)
+        const te = asistenciaTurnosExtraReporte();
+        const turnosExtra = te.personas.map(p => ({
+            'PERSONAL': p.full_name || '', 'CÉDULA': p.national_id || '', 'TIPO': p.external ? 'EXTERNO' : 'INTERNO',
+            'TURNOS PAGADOS': p.paid, 'TURNOS NO PAGADOS': p.unpaid, 'VALOR POR TURNO (USD)': te.valor, 'TOTAL A PAGAR (USD)': Number(p.total.toFixed(2))
+        }));
+        if (turnosExtra.length) turnosExtra.push({ 'PERSONAL': 'TOTAL', 'CÉDULA': '', 'TIPO': '', 'TURNOS PAGADOS': te.totalPagados, 'TURNOS NO PAGADOS': te.totalNoPagados, 'VALOR POR TURNO (USD)': '', 'TOTAL A PAGAR (USD)': Number(te.totalPagar.toFixed(2)) });
+        if (!te.disponible) turnosExtra.push({ 'INFORMACIÓN': `NO SE PUDIERON CONSULTAR LOS TURNOS EXTRA${te.error ? ': ' + te.error : ''}` });
+        agregarHoja('TURNOS EXTRA', turnosExtra);
+        agregarHoja('TURNOS EXTRA DETALLE', te.detalle.map(d => ({
+            'FECHA': d.date || '', 'TURNO': d.label || d.shift || '', 'PERSONAL': d.full_name || '', 'CÉDULA': d.national_id || '',
+            'TIPO': d.external ? 'EXTERNO' : 'INTERNO', 'PAGO': String(d.payment || '').replaceAll('_', ' '),
+            'PROYECTO': d.project || '', 'PUESTO': d.post || '', 'CUBRE A': d.covers || '', 'MOTIVO': String(d.covers_reason || '').replaceAll('_', ' '),
+            'VALOR (USD)': d.payment === 'PAGADO' ? te.valor : 0
+        })));
         XLSX.writeFile(libro, `RESPALDO_ASISTENCIA_${asistenciaNombrePeriodoArchivo()}_DEFEN.xlsx`);
         asistenciaModulo.cierre.excel = true;
         renderAsistenteCierreAsistencia();
@@ -1069,9 +1112,59 @@ async function abrirCierreMensualAsistencia() {
         } else {
             asistenciaModulo.cierre.preview = preview;
         }
+        await cargarTurnosExtraCierreAsistencia(periodId);
         renderAsistenteCierreAsistencia();
     } catch (error) {
         alert(`NO SE PUDO PREPARAR EL CIERRE: ${error.message || error}`);
+    }
+}
+
+// Turnos extra del periodo (toma de lista) y valor por turno en USD para la nómina
+async function cargarTurnosExtraCierreAsistencia(periodId) {
+    const [turnos, tarifa] = await Promise.all([
+        supabaseRpc('get_roll_call_extra_shifts', { p_period_id: periodId }).catch(error => ({ error: error.message || String(error) })),
+        supabaseRpc('get_extra_shift_settings', {}).catch(() => null)
+    ]);
+    asistenciaModulo.cierre.turnosExtra = { turnos, tarifa };
+}
+
+function asistenciaMoneda(valor) {
+    return `$${Number(valor || 0).toLocaleString('es-EC', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+// Resumen por persona: turnos PAGADOS × valor por turno = total a pagar
+function asistenciaTurnosExtraReporte() {
+    const datos = asistenciaModulo.cierre?.turnosExtra || {};
+    const valor = Number(datos.tarifa?.amount || 0);
+    const personas = (datos.turnos?.people || []).map(p => ({
+        ...p, paid: Number(p.paid || 0), unpaid: Number(p.unpaid || 0), total: Number(p.paid || 0) * valor
+    }));
+    return {
+        disponible: Boolean(datos.turnos && !datos.turnos.error),
+        error: datos.turnos?.error || '',
+        valor, tarifaDefinida: Boolean(datos.tarifa),
+        personas, detalle: datos.turnos?.details || [],
+        totalPagados: personas.reduce((s, p) => s + p.paid, 0),
+        totalNoPagados: personas.reduce((s, p) => s + p.unpaid, 0),
+        totalPagar: personas.reduce((s, p) => s + p.total, 0)
+    };
+}
+
+async function editarValorTurnoExtraAsistencia() {
+    const actual = asistenciaModulo.cierre?.turnosExtra?.tarifa?.amount ?? 0;
+    const texto = prompt('VALOR POR TURNO EXTRA PAGADO (USD):', String(actual));
+    if (texto === null) return;
+    const valor = Number(String(texto).replace(',', '.').replace(/[^0-9.]/g, ''));
+    if (!Number.isFinite(valor) || valor < 0 || valor > 10000 || String(texto).trim() === '') return alert('ESCRIBE UN VALOR ENTRE 0 Y 10000 USD.');
+    try {
+        await supabaseRpc('set_extra_shift_rate', { p_amount: valor });
+        await cargarTurnosExtraCierreAsistencia(asistenciaModulo.cierre.periodId);
+        // Los reportes ya descargados quedan con el valor anterior: se piden de nuevo
+        asistenciaModulo.cierre.pdf = false;
+        asistenciaModulo.cierre.excel = false;
+        renderAsistenteCierreAsistencia();
+    } catch (error) {
+        alert(`NO SE PUDO GUARDAR EL VALOR: ${error.message || error}`);
     }
 }
 
@@ -1079,6 +1172,8 @@ function renderAsistenteCierreAsistencia() {
     const estado = asistenciaModulo.cierre;
     const p = estado.preview;
     if (!p) return;
+    const te = asistenciaTurnosExtraReporte();
+    const tarifaHtml = `<div class="as-tarifa-extra">💵 TURNOS EXTRA DEL MES: <b>${te.totalPagados}</b> PAGADO(S) · ${te.totalNoPagados} NO PAGADO(S) · VALOR POR TURNO <b>${te.tarifaDefinida ? asistenciaMoneda(te.valor) : '—'}</b> · TOTAL A PAGAR <b>${asistenciaMoneda(te.totalPagar)}</b>${te.error ? ` · <span style="color:#b91c1c">${asistenciaEsc(te.error)}</span>` : ''}${estado.turnosExtra?.tarifa?.can_edit ? ' <button onclick="editarValorTurnoExtraAsistencia()">✎ CAMBIAR VALOR</button>' : ''}</div>`;
     const c = p.counts || {};
     const puedeGestionar = Boolean(p.permissions?.close);
     const problemas = (p.issues || []).map(i => `<li>${asistenciaEsc(i)}</li>`).join('');
@@ -1094,6 +1189,7 @@ function renderAsistenteCierreAsistencia() {
       <div class="as-manager-head"><div><h3>CIERRE MENSUAL DE ASISTENCIA</h3><p>${asistenciaMesEtiqueta(p.month_start)} · ÚLTIMO DÍA ${asistenciaFechaLocal(p.last_day)}</p></div><button onclick="cerrarEditorAsistencia()">✕ CERRAR</button></div>
       <div class="as-close-kpis"><div><span>ASIGNACIONES</span><b>${c.assignments || 0}</b></div><div><span>PERSONAS</span><b>${c.personnel || 0}</b></div><div><span>VACANTES</span><b>${c.vacancies || 0}</b></div><div><span>MARCACIONES</span><b>${c.entries || 0}</b></div><div><span>CONTINUARÁN</span><b>${c.continuing_assignments || 0}</b></div><div><span>COBERTURAS</span><b>${c.continuing_coverages || 0}</b></div></div>
       <div class="as-close-reports"><button onclick="generarPDFCierreAsistencia()"><b>${estado.pdf ? '✓' : '1'}</b><span>REPORTE PDF</span><small>NOVEDADES, VACANTES Y COBERTURAS</small></button><button onclick="generarExcelCierreAsistencia()"><b>${estado.excel ? '✓' : '2'}</b><span>RESPALDO EXCEL</span><small>MATRIZ COMPLETA DEL PERIODO</small></button></div>
+      ${tarifaHtml}
       ${cierreHtml}
       <p class="as-close-note">EL SIGUIENTE MES CONSERVARÁ LAS ASIGNACIONES Y COBERTURAS VIGENTES, PERO COMENZARÁ SIN MARCACIONES.</p>
     </div>`;

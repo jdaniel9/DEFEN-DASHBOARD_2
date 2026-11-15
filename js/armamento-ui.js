@@ -4,6 +4,8 @@
 //      búsqueda interna y "pastillas" de filtros activos para quitarlos.
 //   2) Edición de datos del arma (Administrador y Operaciones), incluida
 //      la ubicación física / bloque del rastrillo, con historial.
+//   3) Mover varias armas de bloque a la vez (casillas + barra flotante),
+//      cada cambio queda en el historial de ediciones del arma.
 // ================================================================
 (function () {
   const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -112,22 +114,97 @@
   // ── Edición de datos del arma ─────────────────────────────────────
   const puedeEditar = () => typeof usuarioEsGestionOperativa === 'function' && usuarioEsGestionOperativa();
 
-  // Agrega el botón ✎ en la columna N° de cada fila
+  // Armas marcadas para mover de bloque en lote (se conservan al cambiar filtros)
+  const seleccionLote = new Set();
+
+  // Agrega la casilla de selección y el botón ✎ en la columna N° de cada fila
   const renderTablaOriginal = window.renderTablaArmamento;
   if (typeof renderTablaOriginal === 'function') {
     window.renderTablaArmamento = function () {
       renderTablaOriginal.apply(this, arguments);
-      if (!puedeEditar()) return;
+      if (!puedeEditar()) { seleccionLote.clear(); renderBarraLote(); return; }
       const filas = document.querySelectorAll('#armamento-tbody > tr');
       const armas = obtenerArmasFiltradas();
       filas.forEach((tr, i) => {
         const arma = armas[i];
         const celda = tr.firstElementChild;
         if (!arma || !celda || celda.querySelector('.ae-editar')) return;
+        if (seleccionLote.has(arma.idArma)) tr.classList.add('al-fila-marcada');
+        celda.insertAdjacentHTML('afterbegin', `<input type="checkbox" class="al-check" title="Seleccionar para mover de bloque" ${seleccionLote.has(arma.idArma) ? 'checked' : ''} onchange="marcarArmaLote('${esc(arma.idArma)}', this.checked, this)">`);
         celda.insertAdjacentHTML('beforeend', `<button class="ae-editar" title="Editar datos del arma" onclick="abrirEdicionArma('${esc(arma.idArma)}')">✎</button>`);
       });
+      // Casilla "seleccionar todas las visibles" en el encabezado N°
+      const th = document.querySelector('#armamento-thead-row > th');
+      if (th && !th.querySelector('.al-check')) {
+        const todas = armas.length > 0 && armas.every((a) => seleccionLote.has(a.idArma));
+        th.insertAdjacentHTML('afterbegin', `<input type="checkbox" class="al-check" title="Seleccionar todas las armas visibles" ${todas ? 'checked' : ''} onchange="marcarTodasArmasLote(this.checked)"><br>`);
+      }
+      renderBarraLote();
     };
   }
+
+  window.marcarArmaLote = function (idArma, marcada, casilla) {
+    if (marcada) seleccionLote.add(idArma); else seleccionLote.delete(idArma);
+    casilla?.closest('tr')?.classList.toggle('al-fila-marcada', marcada);
+    const th = document.querySelector('#armamento-thead-row > th .al-check');
+    if (th) { const armas = obtenerArmasFiltradas(); th.checked = armas.length > 0 && armas.every((a) => seleccionLote.has(a.idArma)); }
+    renderBarraLote();
+  };
+  window.marcarTodasArmasLote = function (marcar) {
+    obtenerArmasFiltradas().forEach((a) => { if (marcar) seleccionLote.add(a.idArma); else seleccionLote.delete(a.idArma); });
+    renderTablaArmamento();
+  };
+  window.limpiarSeleccionLote = function () { seleccionLote.clear(); renderTablaArmamento(); };
+
+  const bloquesConocidos = () => [...new Set(armamentoDetalle.map((x) => x.ubicacion).filter((u) => /^(RASTRILLO|CAJA FUERTE)/i.test(u || '')))]
+    .sort((x, y) => x.localeCompare(y, 'es', { numeric: true }));
+
+  function renderBarraLote() {
+    // Quita del lote las armas que ya no existen en el inventario cargado
+    const existentes = new Set(armamentoDetalle.map((a) => a.idArma));
+    [...seleccionLote].forEach((id) => { if (!existentes.has(id)) seleccionLote.delete(id); });
+    let barra = document.getElementById('al-barra');
+    if (!seleccionLote.size) { barra?.remove(); return; }
+    if (!barra) {
+      barra = document.createElement('div');
+      barra.id = 'al-barra';
+      barra.className = 'al-barra';
+      barra.innerHTML = `<b id="al-contador"></b><span>→ MOVER A</span>
+        <input id="al-destino" list="al-bloques" maxlength="120" placeholder="RASTRILLO · BLOQUE N">
+        <datalist id="al-bloques"></datalist>
+        <input id="al-motivo" maxlength="200" placeholder="MOTIVO (OPCIONAL)">
+        <button class="al-mover" onclick="moverArmasLote()">MOVER</button>
+        <button class="al-quitar" onclick="limpiarSeleccionLote()" title="Quitar selección">✕</button>`;
+      // Dentro del modal de armamento: se oculta junto con él
+      (document.getElementById('armamento-modal') || document.body).appendChild(barra);
+    }
+    const visibles = new Set(obtenerArmasFiltradas().map((a) => a.idArma));
+    const ocultas = [...seleccionLote].filter((id) => !visibles.has(id)).length;
+    document.getElementById('al-contador').textContent = `${seleccionLote.size} SELECCIONADA${seleccionLote.size === 1 ? '' : 'S'}${ocultas ? ` (${ocultas} FUERA DEL FILTRO)` : ''}`;
+    document.getElementById('al-bloques').innerHTML = bloquesConocidos().map((b) => `<option value="${esc(b)}">`).join('');
+  }
+
+  window.moverArmasLote = async function () {
+    const destino = (document.getElementById('al-destino')?.value || '').trim().replace(/\s+/g, ' ');
+    const motivo = (document.getElementById('al-motivo')?.value || '').trim();
+    if (!destino) { alert('ESCRIBE O ELIGE EL BLOQUE DE DESTINO.'); return; }
+    const ids = [...seleccionLote];
+    if (!confirm(`SE MOVERÁN ${ids.length} ARMA(S) A "${destino.toUpperCase()}". CADA CAMBIO QUEDA EN EL HISTORIAL DEL ARMA. ¿CONFIRMAS?`)) return;
+    const boton = document.querySelector('#al-barra .al-mover');
+    boton.disabled = true; boton.textContent = 'MOVIENDO…';
+    try {
+      const r = await supabaseRpc('move_weapons_location', { p_payload: { weapon_ids: ids, location: destino, reason: motivo } });
+      seleccionLote.clear();
+      document.getElementById('al-barra')?.remove();
+      await cargarWorkspaceArmamentoSupabase(true);
+      renderFiltrosArmamento();
+      renderTablaArmamento();
+      alert(`ARMAS MOVIDAS A ${r.location}: ${r.moved}${r.unchanged ? ` · ${r.unchanged} YA ESTABAN EN ESE BLOQUE` : ''}.`);
+    } catch (e) {
+      alert(`NO SE PUDO MOVER: ${e.message || e}`);
+      boton.disabled = false; boton.textContent = 'MOVER';
+    }
+  };
 
   const fechaInput = (v) => (v ? String(v).slice(0, 10) : '');
   const lista = (id, valores) => `<datalist id="${id}">${[...new Set(valores.filter(Boolean))].sort().map((v) => `<option value="${esc(v)}">`).join('')}</datalist>`;

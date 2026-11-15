@@ -189,16 +189,16 @@ async function abrirDocumentoProyecto(valorCodificado) {
 function descargarPlantillaPersonalProyecto() {
     const p=gpProyectoActual(); if(!p)return;
     if(typeof XLSX==='undefined')return alert('NO SE PUDO CARGAR EL GENERADOR DE EXCEL. RECARGA LA PÁGINA.');
-    const filas=[['PUESTO','HORARIO','FECHA INGRESO','CEDULA','NOMBRE']];
+    const filas=[['PUESTO','HORARIO','FECHA INGRESO','CEDULA','NOMBRE','TELEFONO']];
     (p.posts||[]).filter(x=>x.active).forEach(po=>{
         const cantidad=gpNumero(po.required_agent_count);
-        for(let i=0;i<cantidad;i++)filas.push([String(po.name||'').toUpperCase(),po.service_type||'12 HORAS',p.start_date||gpHoy(),'','']);
+        for(let i=0;i<cantidad;i++)filas.push([String(po.name||'').toUpperCase(),po.service_type||'12 HORAS',p.start_date||gpHoy(),'','','']);
     });
-    for(let i=0;i<gpNumero(p.required_mobile_guard_count);i++)filas.push(['SACAFRANCO','12 HORAS',p.start_date||gpHoy(),'','']);
+    for(let i=0;i<gpNumero(p.required_mobile_guard_count);i++)filas.push(['SACAFRANCO','12 HORAS',p.start_date||gpHoy(),'','','']);
     const libro=XLSX.utils.book_new(),hoja=XLSX.utils.aoa_to_sheet(filas),ayuda=XLSX.utils.aoa_to_sheet([
-        ['INSTRUCCIONES'],['No cambie los cinco encabezados de la hoja PERSONAL.'],['PUESTO debe coincidir exactamente con un puesto del proyecto.'],['Para personal móvil escriba SACAFRANCO en PUESTO.'],['HORARIO permitido: 24 HORAS, 12 HORAS, 10 HORAS u 8 HORAS.'],['CEDULA debe contener 10 dígitos.'],['NOMBRE debe coincidir con el registrado para esa cédula.']
+        ['INSTRUCCIONES'],['No cambie los encabezados de la hoja PERSONAL.'],['PUESTO debe coincidir exactamente con un puesto del proyecto.'],['Para personal móvil escriba SACAFRANCO en PUESTO.'],['HORARIO permitido: 24 HORAS, 12 HORAS, 10 HORAS u 8 HORAS.'],['CEDULA debe contener 10 dígitos.'],['NOMBRE debe coincidir con el registrado para esa cédula.'],['TELEFONO es opcional: solo números, 7 a 15 dígitos (puede empezar con +).']
     ]);
-    hoja['!cols']=[{wch:30},{wch:16},{wch:16},{wch:16},{wch:42}];
+    hoja['!cols']=[{wch:30},{wch:16},{wch:16},{wch:16},{wch:42},{wch:16}];
     XLSX.utils.book_append_sheet(libro,hoja,'PERSONAL');XLSX.utils.book_append_sheet(libro,ayuda,'INSTRUCCIONES');
     XLSX.writeFile(libro,`PLANTILLA_PERSONAL_${String(p.name||'PROYECTO').replace(/[^A-Z0-9]+/gi,'_')}.xlsx`);
 }
@@ -226,20 +226,33 @@ async function validarArchivoPersonalProyecto() {
         const libro=XLSX.read(await archivo.arrayBuffer(),{type:'array',cellDates:true}),hoja=libro.Sheets.PERSONAL||libro.Sheets[libro.SheetNames[0]];
         const crudas=XLSX.utils.sheet_to_json(hoja,{defval:'',raw:true});
         const normalizarClave=k=>String(k).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toUpperCase().replace(/[^A-Z0-9]+/g,' ').trim();
-        const filas=crudas.filter(r=>Object.values(r).some(v=>String(v).trim())).map(r=>{const n={};Object.entries(r).forEach(([k,v])=>n[normalizarClave(k)]=v);return {post:String(n.PUESTO||'').trim(),schedule:String(n.HORARIO||'').trim(),start_date:gpFechaExcel(n['FECHA INGRESO']),national_id:String(n.CEDULA||'').replace(/\D/g,''),full_name:String(n.NOMBRE||'').trim()};});
+        const filas=crudas.filter(r=>Object.values(r).some(v=>String(v).trim())).map(r=>{const n={};Object.entries(r).forEach(([k,v])=>n[normalizarClave(k)]=v);return {post:String(n.PUESTO||'').trim(),schedule:String(n.HORARIO||'').trim(),start_date:gpFechaExcel(n['FECHA INGRESO']),national_id:String(n.CEDULA||'').replace(/\D/g,''),full_name:String(n.NOMBRE||'').trim(),mobile_phone:gpTelefono(n.TELEFONO||n.CELULAR||'')};});
         if(!filas.length)throw new Error('LA HOJA PERSONAL NO CONTIENE FILAS.');
+        // TELEFONO es opcional; si viene, se valida antes de consultar la base
+        const telefonosMalos=filas.map((f,i)=>f.mobile_phone&&!/^\+?[0-9]{7,15}$/.test(f.mobile_phone)?`FILA ${i+2}: TELEFONO debe tener entre 7 y 15 digitos`:'').filter(Boolean);
+        if(telefonosMalos.length){salida.innerHTML=`<div style="padding:10px;border-radius:8px;background:#fef2f2;color:#991b1b;font-size:10px"><b>ARCHIVO RECHAZADO</b><ul>${telefonosMalos.map(e=>`<li>${gpEsc(e)}</li>`).join('')}</ul></div>`;return;}
         const payload={request_id:gpRequestId(),project_id:gestionProyectos.proyectoId,source_file_name:archivo.name,rows:filas};
         salida.innerHTML='<p style="font-size:10px;color:#475569">Validando con la base de datos…</p>';
         const r=await supabaseImportarNominaProyecto(payload,true);gestionProyectos.importacion={payload,resultado:r};
         if(!r.ok){salida.innerHTML=`<div style="padding:10px;border-radius:8px;background:#fef2f2;color:#991b1b;font-size:10px"><b>ARCHIVO RECHAZADO</b><ul>${(r.errors||[]).map(e=>`<li>${gpEsc(e)}</li>`).join('')}</ul></div>`;return;}
-        salida.innerHTML=`<div style="padding:10px;border-radius:8px;background:#ecfdf5;color:#166534;font-size:10px"><b>VALIDACIÓN CORRECTA</b><p>${r.counts.total} persona(s): ${r.counts.fixed} fija(s) y ${r.counts.mobile} sacafranco(s). Periodo ${gpEsc(r.month_start)}.</p><button onclick="confirmarImportacionPersonalProyecto()" style="border:0;border-radius:8px;background:#15803d;color:white;padding:9px 14px;font-weight:900">CONFIRMAR Y ASIGNAR PERSONAL</button></div>`;
+        salida.innerHTML=`<div style="padding:10px;border-radius:8px;background:#ecfdf5;color:#166534;font-size:10px"><b>VALIDACIÓN CORRECTA</b><p>${r.counts.total} persona(s): ${r.counts.fixed} fija(s) y ${r.counts.mobile} sacafranco(s). Periodo ${gpEsc(r.month_start)}.${filas.some(f=>f.mobile_phone)?` Se guardarán ${filas.filter(f=>f.mobile_phone).length} teléfono(s).`:''}</p><button onclick="confirmarImportacionPersonalProyecto()" style="border:0;border-radius:8px;background:#15803d;color:white;padding:9px 14px;font-weight:900">CONFIRMAR Y ASIGNAR PERSONAL</button></div>`;
     }catch(error){salida.innerHTML=`<div style="padding:10px;border-radius:8px;background:#fef2f2;color:#991b1b;font-size:10px">${gpEsc(error.message||error)}</div>`;}
 }
 
 async function confirmarImportacionPersonalProyecto() {
     const imp=gestionProyectos.importacion;if(!imp?.payload||!imp?.resultado?.ok)return;
     if(!confirm(`SE ASIGNARÁN ${imp.resultado.counts.total} PERSONAS AL PERIODO ABIERTO. ¿CONFIRMAS?`))return;
-    await gpEjecutar(async()=>{const r=await supabaseImportarNominaProyecto(imp.payload,false);gestionProyectos.importacion=null;await Promise.all([cargarGestionProyectos(gestionProyectos.proyectoId),cargarDatos()]);if(typeof cargarWorkspaceAsistencia==='function'&&document.getElementById('asistencia-modal')?.style.display==='flex')await cargarWorkspaceAsistencia(null);alert(`PERSONAL ASIGNADO: ${r.counts.total} REGISTRO(S).`);});
+    await gpEjecutar(async()=>{const r=await supabaseImportarNominaProyecto(imp.payload,false);gestionProyectos.importacion=null;
+        // Teléfonos del archivo (opcional): se guardan después de crear al personal
+        let avisoTelefonos='';const conTelefono=imp.payload.rows.filter(f=>f.mobile_phone).map(f=>({national_id:f.national_id,full_name:f.full_name,mobile_phone:f.mobile_phone}));
+        if(conTelefono.length&&!r.idempotent){try{const t=await supabaseRpc('import_personnel_phones',{p_payload:{rows:conTelefono,source_file_name:imp.payload.source_file_name},p_dry_run:false});avisoTelefonos=t.ok?`\nTELÉFONOS GUARDADOS: ${(t.counts.new||0)+(t.counts.replaced||0)}.`:`\nTELÉFONOS NO GUARDADOS: ${(t.errors||[]).join(' · ')}`;}catch(error){avisoTelefonos=`\nTELÉFONOS NO GUARDADOS: ${error.message||error}`;}}
+        await Promise.all([cargarGestionProyectos(gestionProyectos.proyectoId),cargarDatos()]);if(typeof cargarWorkspaceAsistencia==='function'&&document.getElementById('asistencia-modal')?.style.display==='flex')await cargarWorkspaceAsistencia(null);alert(`PERSONAL ASIGNADO: ${r.counts?.total??0} REGISTRO(S).${avisoTelefonos}`);});
+}
+
+function gpTelefono(valor) {
+    let t=String(valor??'').trim().replace(/[^+0-9]/g,'');
+    if(/^9\d{8}$/.test(t))t='0'+t; // Excel quita el cero inicial de los celulares
+    return t;
 }
 
 async function confirmarAltaProyecto() {

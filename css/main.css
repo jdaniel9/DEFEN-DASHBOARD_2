@@ -309,7 +309,7 @@
 #asistencia-modal .as-header { background: #0f172a !important; color: #fff; }
 #asistencia-modal .as-header h2 { color: #fff; }
 #asistencia-modal .as-header p { color: #93c5fd; }
-.as-kpis { grid-template-columns: repeat(6, minmax(100px, 1fr)); }
+.as-kpis { grid-template-columns: repeat(7, minmax(100px, 1fr)); }
 .as-table td.as-col-person { height: auto; min-height: 48px; }
 .as-cover-row {
     display: inline-block; margin-top: 4px; padding: 4px 7px;
@@ -385,6 +385,30 @@
 .ae-guardar { background: #4338ca; color: #fff; }
 .ae-guardar:disabled { opacity: .6; }
 @media (max-width: 760px) { .ae-grid { grid-template-columns: 1fr 1fr; } .ae-grid .ae-ancho { grid-column: 1 / -1; } .ae-modal { padding: 0; } .ae-card { max-height: 100dvh; height: 100dvh; border-radius: 0; } .ae-grid input, .ae-grid select { font-size: 16px; } }
+/* Mover varias armas de bloque (barra flotante) */
+.al-check { width: 15px; height: 15px; margin: 0 auto 2px; display: block; cursor: pointer; accent-color: #4338ca; }
+#armamento-tbody > tr.al-fila-marcada { background: #e0e7ff !important; }
+.al-barra { position: fixed; left: 50%; bottom: calc(5vh + 64px); transform: translateX(-50%); z-index: 11400; display: flex; align-items: center; flex-wrap: wrap; gap: 8px; max-width: calc(100vw - 32px); background: #0f172a; color: #fff; border-radius: 14px; padding: 10px 12px; box-shadow: 0 18px 50px rgba(0,0,0,.45); font-size: 10px; font-weight: 900; }
+.al-barra > span { color: #93c5fd; }
+.al-barra input { height: 34px; border: 0; border-radius: 8px; padding: 5px 9px; font-size: 11px; font-weight: 800; color: #0f172a; text-transform: uppercase; }
+.al-barra #al-destino { width: 220px; }
+.al-barra #al-motivo { width: 190px; }
+.al-barra button { border: 0; border-radius: 8px; height: 34px; padding: 0 14px; font-size: 11px; font-weight: 900; cursor: pointer; }
+.al-barra .al-mover { background: #4338ca; color: #fff; }
+.al-barra .al-mover:disabled { opacity: .6; }
+.al-barra .al-quitar { background: #334155; color: #fff; padding: 0 10px; }
+@media (max-width: 760px) { .al-barra { left: 8px; right: 8px; bottom: 8px; transform: none; max-width: none; } .al-barra #al-destino, .al-barra #al-motivo { width: 100%; font-size: 16px; } .al-barra .al-mover { flex: 1; } }
+/* Asistencia: teléfonos faltantes y valor del turno extra */
+.as-kpis > div.as-kpi-telefono { cursor: pointer; border-color: #fdba74 !important; background: #fff7ed !important; }
+.as-kpis > div.as-kpi-telefono strong { color: #c2410c !important; }
+.as-kpis > div.as-kpi-telefono.as-kpi-activo { outline: 2px solid #ea580c; }
+.as-kpis > div.as-kpi-telefono small { display: block; font-size: 8px; font-weight: 900; color: #9a3412; margin-top: 2px; }
+.as-tel-resumen { padding: 10px; border-radius: 8px; font-size: 10px; margin-top: 8px; }
+.as-tel-resumen.ok { background: #ecfdf5; color: #166534; }
+.as-tel-resumen.error { background: #fef2f2; color: #991b1b; }
+.as-tarifa-extra { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 8px 0; padding: 9px 11px; border: 1px solid #a5f3fc; background: #ecfeff; border-radius: 10px; font-size: 10px; font-weight: 800; color: #155e75; }
+.as-tarifa-extra b { font-size: 13px; color: #0e7490; }
+.as-tarifa-extra button { border: 0; border-radius: 7px; background: #0e7490; color: #fff; padding: 6px 10px; font-size: 9px; font-weight: 900; cursor: pointer; }
 /* Permisos y contraseñas (panel de usuarios) */
 #gestion-usuarios-modal > div > header { background: #0f172a !important; backdrop-filter: none !important; }
 .pa-card { background: #fff; border: 1px solid #cbd5e1; border-radius: 14px; padding: 14px; margin-top: 12px; }
