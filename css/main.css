@@ -330,6 +330,59 @@
 .as-mass-exit { width: min(920px, 100%); max-height: 92vh; overflow: auto; }
 /* ── Toma de lista por turno ── */
 .as-header button.as-btn-destacado { background: #2563eb; }
+/* Armamento: filtros compactos */
+#armamento-filtros-bar { position: relative; z-index: 20; display: block !important; padding: 8px 16px !important; }
+.af-fila { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.af-grupo { position: relative; }
+.af-boton { border: 1px solid #cbd5e1; background: #fff; color: #334155; border-radius: 999px; padding: 6px 12px; font-size: 10px; font-weight: 800; cursor: pointer; white-space: nowrap; }
+.af-boton:hover { border-color: #2563eb; color: #1d4ed8; }
+.af-boton b { display: inline-block; min-width: 16px; padding: 0 5px; margin-left: 3px; border-radius: 999px; background: #2563eb; color: #fff; font-size: 9px; }
+.af-activo .af-boton { border-color: #2563eb; background: #eff6ff; color: #1d4ed8; }
+.af-abierto .af-boton { box-shadow: 0 0 0 3px #bfdbfe; }
+.af-panel { position: absolute; top: calc(100% + 6px); left: 0; z-index: 40; width: 270px; max-height: 340px; display: flex; flex-direction: column; gap: 6px; background: #fff; border: 1px solid #cbd5e1; border-radius: 12px; padding: 8px; box-shadow: 0 18px 45px rgba(15,23,42,.3); }
+.af-buscar { height: 32px; border: 1px solid #cbd5e1; border-radius: 8px; padding: 4px 9px; font-size: 11px; }
+.af-opciones { overflow: auto; display: flex; flex-direction: column; gap: 1px; }
+.af-opciones label { display: grid; grid-template-columns: auto 1fr auto; gap: 7px; align-items: center; padding: 6px 7px; border-radius: 7px; font-size: 10px; font-weight: 700; color: #0f172a; cursor: pointer; text-align: left; }
+.af-opciones label:hover { background: #f1f5f9; }
+.af-opciones small { font-size: 9px; color: #64748b; font-weight: 800; }
+.af-opciones .af-cero { opacity: .45; }
+.af-vacio { font-size: 10px; color: #94a3b8; padding: 6px; }
+.af-limpiar-grupo, .af-limpiar { border: 0; background: none; color: #b91c1c; font-size: 10px; font-weight: 800; cursor: pointer; padding: 4px 6px; }
+.af-pills { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 7px; }
+.af-pill { display: inline-flex; align-items: center; gap: 4px; background: #dbeafe; color: #1e3a8a; border-radius: 999px; padding: 3px 4px 3px 9px; font-size: 9px; font-weight: 700; }
+.af-pill button { border: 0; background: #93c5fd; color: #1e3a8a; width: 16px; height: 16px; border-radius: 999px; font-size: 8px; cursor: pointer; line-height: 16px; padding: 0; }
+@media (max-width: 760px) { .af-panel { position: fixed; left: 10px; right: 10px; top: auto; width: auto; } }
+/* Armamento: edición del arma */
+.ae-editar { display: block; margin: 3px auto 0; border: 0; border-radius: 6px; background: #e0e7ff; color: #3730a3; font-size: 11px; font-weight: 900; width: 24px; height: 22px; cursor: pointer; }
+.ae-editar:hover { background: #4338ca; color: #fff; }
+.ae-modal { position: fixed; inset: 0; z-index: 11500; background: rgba(15,23,42,.7); display: flex; align-items: center; justify-content: center; padding: 14px; }
+.ae-card { width: min(760px, 100%); max-height: 94vh; background: #f8fafc; border-radius: 16px; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 30px 80px rgba(0,0,0,.5); }
+.ae-card > header { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 16px; background: #0f172a !important; color: #fff; backdrop-filter: none !important; }
+.ae-card > header h3 { margin: 0; font-size: 14px; font-weight: 900; }
+.ae-card > header p { margin: 2px 0 0; font-size: 10px; color: #93c5fd; font-weight: 800; }
+.ae-card > header button { border: 0; border-radius: 8px; background: #334155; color: #fff; padding: 7px 10px; cursor: pointer; }
+.ae-cuerpo { overflow: auto; padding: 12px 16px; display: flex; flex-direction: column; gap: 10px; }
+.ae-cuerpo section { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 10px; }
+.ae-cuerpo h4 { margin: 0 0 8px; font-size: 10px; font-weight: 900; color: #475569; }
+.ae-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.ae-grid label, .ae-motivo { font-size: 8.5px; font-weight: 900; color: #64748b; }
+.ae-grid .ae-ancho { grid-column: span 2; }
+.ae-grid input, .ae-grid select, .ae-motivo input { display: block; width: 100%; height: 36px; margin-top: 3px; border: 1px solid #cbd5e1; border-radius: 8px; padding: 5px 8px; font-size: 11px; font-weight: 700; color: #0f172a; background: #fff; }
+.ae-bloques { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 8px; }
+.ae-bloques button { border: 1px solid #cbd5e1; background: #fff; border-radius: 8px; padding: 6px 9px; font-size: 9.5px; font-weight: 800; cursor: pointer; color: #334155; }
+.ae-bloques button.activo { background: #0f172a; border-color: #0f172a; color: #fff; }
+.ae-solo-lectura p { margin: 3px 0; font-size: 10px; color: #334155; }
+.ae-solo-lectura small { display: block; margin-top: 6px; font-size: 9px; color: #92400e; background: #fef3c7; border-radius: 7px; padding: 6px 8px; }
+.ae-historial summary { cursor: pointer; font-size: 10px; font-weight: 900; color: #334155; }
+.ae-historial #ae-historial-lista { margin-top: 6px; font-size: 10px; color: #334155; }
+.ae-h-item { border-top: 1px solid #e2e8f0; padding: 6px 0; }
+.ae-h-item ul { margin: 4px 0 0 14px; padding: 0; }
+.ae-card > footer { display: flex; justify-content: flex-end; gap: 8px; padding: 10px 16px; background: #fff; border-top: 1px solid #e2e8f0; }
+.ae-cancelar, .ae-guardar { border: 0; border-radius: 9px; padding: 10px 16px; font-size: 11px; font-weight: 900; cursor: pointer; }
+.ae-cancelar { background: #e2e8f0; color: #334155; }
+.ae-guardar { background: #4338ca; color: #fff; }
+.ae-guardar:disabled { opacity: .6; }
+@media (max-width: 760px) { .ae-grid { grid-template-columns: 1fr 1fr; } .ae-grid .ae-ancho { grid-column: 1 / -1; } .ae-modal { padding: 0; } .ae-card { max-height: 100dvh; height: 100dvh; border-radius: 0; } .ae-grid input, .ae-grid select { font-size: 16px; } }
 /* Permisos y contraseñas (panel de usuarios) */
 #gestion-usuarios-modal > div > header { background: #0f172a !important; backdrop-filter: none !important; }
 .pa-card { background: #fff; border: 1px solid #cbd5e1; border-radius: 14px; padding: 14px; margin-top: 12px; }

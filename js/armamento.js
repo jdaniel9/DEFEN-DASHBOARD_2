@@ -4,7 +4,7 @@
 // ================================================================
 
 // ── Estado de filtros del modal de armamento (multi-select) ──
-let filtrosArmamento = { estado: [], condicionTecnica: [], tipo: [], clase: [], categoria: [], provincia: [], proyecto: [] };
+let filtrosArmamento = { estado: [], condicionTecnica: [], tipo: [], clase: [], categoria: [], provincia: [], proyecto: [], ubicacion: [] };
 let filtrosRadios    = { provincia: [], proyecto: [] };
 let busquedaArmamento = '';
 let busquedaRadios    = '';
@@ -41,7 +41,7 @@ async function abrirModalArmamento(preset) {
         alert('Tu perfil no tiene permiso para ver el detalle de armamento.');
         return;
     }
-    filtrosArmamento = { estado: [], condicionTecnica: [], tipo: [], clase: [], categoria: [], provincia: [], proyecto: [] };
+    filtrosArmamento = { estado: [], condicionTecnica: [], tipo: [], clase: [], categoria: [], provincia: [], proyecto: [], ubicacion: [] };
     busquedaArmamento = '';
 
     const modal = document.getElementById('armamento-modal');
