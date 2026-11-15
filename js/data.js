@@ -342,7 +342,8 @@ function procesarDatosAPI(json) {
                 tipoTurnoHoy: asistInfo ? asistInfo.turnoTipo : null,
                 rotacionCompleta: asistInfo ? asistInfo.rotacion : null,
                 personalEnTurnoHoy: asistInfo && Array.isArray(asistInfo.activos) ? asistInfo.activos : [],
-                coberturasHoy: asistInfo && Array.isArray(asistInfo.coberturas) ? asistInfo.coberturas : []
+                coberturasHoy: asistInfo && Array.isArray(asistInfo.coberturas) ? asistInfo.coberturas : [],
+                sinGuardiaAhora: Boolean(asistInfo && asistInfo.sinGuardia)
             });
         });
         delete json.__puestos__;

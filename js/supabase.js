@@ -184,7 +184,7 @@ function agruparNovedadesSupabase(novedades) {
     return { ingresos, salidas, faltas: [...faltasMap.values()] };
 }
 
-function adaptarSnapshotSupabase(snapshot, directorio = null, coberturasMapa = null) {
+function adaptarSnapshotSupabase(snapshot, directorio = null, coberturasMapa = null, tomaListaMapa = null) {
     if (!snapshot || snapshot.schema_version !== 2) throw new Error('Supabase devolvió un contrato de dashboard incompatible.');
     const salida = {
         __meta__: {
@@ -258,6 +258,16 @@ function adaptarSnapshotSupabase(snapshot, directorio = null, coberturasMapa = n
         if (c.counts_as_on_duty !== false && !grupo.activos.some(a => String(a.personnel_id) === String(c.personnel_id))) grupo.activos.push(dato);
     });
 
+    // Toma de lista del turno en curso: si un puesto ya tiene lista tomada,
+    // manda sobre la estimación por código diario (es el dato real del turno).
+    const listaPorPuesto = new Map();
+    (tomaListaMapa?.checks || []).forEach(c => {
+        const key = String(c.post_id || '').toUpperCase();
+        if (!key) return;
+        if (!listaPorPuesto.has(key)) listaPorPuesto.set(key, []);
+        listaPorPuesto.get(key).push(c);
+    });
+
     const proyectosPorProvincia = new Map();
     (snapshot.projects || []).forEach(p => {
         const provincia = String(p.province || '').toUpperCase().trim();
@@ -297,7 +307,16 @@ function adaptarSnapshotSupabase(snapshot, directorio = null, coberturasMapa = n
                 return true;
             };
             const activosEnHorario = asistencia.activos.filter(correspondeAhora);
-            const activosMapa = activosEnHorario.length ? activosEnHorario : asistencia.activos;
+            let activosMapa = activosEnHorario.length ? activosEnHorario : asistencia.activos;
+            const lista = listaPorPuesto.get(keyId) || null;
+            const presentesLista = (lista || []).filter(c => c.status === 'PRESENTE');
+            if (lista) {
+                activosMapa = presentesLista.map(c => ({
+                    full_name: c.full_name, personnel_id: c.personnel_id,
+                    code_label: `${c.label} ${c.start}-${c.end}${c.double ? ' · DN' : ''}`,
+                    shift_code: c.shift, coverage: c.is_cover === true, reason: c.is_cover ? 'CUBRE AUSENCIA' : ''
+                }));
+            }
             const activo = activosMapa[0] || null;
             const resumenAsistencia = {
                 enTurno: activo?.full_name || null,
@@ -308,7 +327,9 @@ function adaptarSnapshotSupabase(snapshot, directorio = null, coberturasMapa = n
                     turno:a.code_label || a.shift_code || '', codigo:a.code || a.shift_code || '', cobertura:a.coverage === true,
                     sacafranco:a.mobile_guard === true, motivo:a.reason || ''
                 })),
-                coberturas: asistencia.coberturas || []
+                coberturas: asistencia.coberturas || [],
+                listaTomada: Boolean(lista),
+                sinGuardia: Boolean(lista) && presentesLista.length === 0
             };
             salida.__asistencia__[keyId] = resumenAsistencia;
             salida.__asistencia__[`${String(p.id || '').toUpperCase()}|${keyNombre}`] = resumenAsistencia;
@@ -358,7 +379,7 @@ async function supabaseCargarDashboardLegacy() {
         : ['admin', 'coordinacion_general', 'operaciones', 'sistemas'].includes((sessionStorage.getItem('defen_auth_rol') || '').toLowerCase());
     const puedeVerArmamento = ['admin', 'coordinacion_general', 'operaciones'].includes((sessionStorage.getItem('defen_auth_rol') || '').toLowerCase());
     const puedeVerLlamados = ['admin', 'coordinacion_general', 'operaciones', 'gdp'].includes((sessionStorage.getItem('defen_auth_rol') || '').toLowerCase());
-    const [snapshot, radios, workspaceArmamento, workspaceLlamados, directorio, coberturasMapa] = await Promise.all([
+    const [snapshot, radios, workspaceArmamento, workspaceLlamados, directorio, coberturasMapa, tomaListaMapa] = await Promise.all([
         supabaseRpc('get_dashboard_snapshot_v2'),
         puedeVerRadios ? supabaseCargarRadiosDetalle() : Promise.resolve([]),
         puedeVerArmamento ? cargarWorkspaceArmamentoSupabase() : Promise.resolve(null),
@@ -368,9 +389,12 @@ async function supabaseCargarDashboardLegacy() {
         supabaseCargarDirectorioPersonal().catch(error => { console.warn('Directorio de personal:', error.message); return null; }),
         ['admin','coordinacion_general','operaciones','central_monitoreo'].includes(rol)
             ? supabaseRpc('get_dashboard_post_coverage_today').catch(error => { console.warn('Coberturas del mapa:', error.message); return null; })
+            : Promise.resolve(null),
+        ['admin','coordinacion_general','operaciones','central_monitoreo'].includes(rol)
+            ? supabaseRpc('get_roll_call_live').catch(error => { console.warn('Toma de lista del mapa:', error.message); return null; })
             : Promise.resolve(null)
     ]);
-    const salida = adaptarSnapshotSupabase(snapshot, directorio, coberturasMapa);
+    const salida = adaptarSnapshotSupabase(snapshot, directorio, coberturasMapa, tomaListaMapa);
     if (puedeVerRadios) salida.__radios_detalle__ = radios;
     if (workspaceLlamados) salida.__llamados__ = adaptarLlamadosAtencionSupabase(workspaceLlamados.warnings);
     if (workspaceArmamento) {

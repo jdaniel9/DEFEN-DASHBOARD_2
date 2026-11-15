@@ -128,7 +128,7 @@ function usuarioPuedeGestionarAsistencia() {
 }
 
 function usuarioPuedeGestionarLlamadosAtencion() {
-    return usuarioEsGestionOperativa()
+    return (usuarioEsGestionOperativa() || usuarioEsCentralMonitoreo())
         && (!backendUsaSupabase() || (typeof SUPABASE_PERSONNEL_WARNINGS_ENABLED !== 'undefined' && SUPABASE_PERSONNEL_WARNINGS_ENABLED));
 }
 

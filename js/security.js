@@ -36,7 +36,7 @@ globalThis.DefenSecurity=(()=>{
   function rpc(name,payload){
     if(!/^[a-z][a-z0-9_]{1,62}$/.test(String(name||'')))throw new Error('Endpoint inválido.');
     const write=/^(create|save|set|update|delete|archive|register|change|start|complete|confirm|receive|attach|cancel|close|upsert|declare|report)_/.test(name);
-    const attendanceEntry=name==='upsert_attendance_entry'||name==='delete_attendance_entry';
+    const attendanceEntry=['upsert_attendance_entry','delete_attendance_entry','save_roll_call_check','delete_roll_call_check'].includes(name);
     rateLimit(`rpc:${name}`,attendanceEntry?300:(write?30:120),60);
     validatePayload(payload,`rpc.${name}`);
   }

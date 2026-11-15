@@ -381,7 +381,9 @@ function crearTarjetaPuesto(puesto, idx) {
                </div>
                ${turnosHoy.map(t => `<p class="text-[8px] font-bold text-green-700 mt-0.5 ml-2.5">${t.cobertura && t.sacafranco ? 'SACAFRANCO CUBRIENDO' : (t.cobertura ? 'COBERTURA ACTIVA' : 'EN TURNO')}: ${t.nombre}${t.turno ? ' · '+t.turno : ''}</p>`).join('')}
            </div>`
-        : '';
+        : (puesto.sinGuardiaAhora
+            ? `<div style="margin-top:6px;background:#fef2f2;border:1px solid #fecaca;border-radius:8px;padding:4px 8px;font-size:9px;font-weight:900;color:#b91c1c;">🔴 SIN GUARDIA EN EL TURNO ACTUAL (SEGÚN TOMA DE LISTA)</div>`
+            : '');
 
     card.innerHTML = `
         <div class="flex items-start gap-2">

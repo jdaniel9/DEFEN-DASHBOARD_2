@@ -56,7 +56,7 @@ function crearModalAsistencia() {
       <div class="as-shell">
         <header class="as-header">
           <div><h2>CONTROL MENSUAL DE ASISTENCIA</h2><p id="as-periodo-subtitulo">CARGANDO PERIODO…</p></div>
-          <div class="as-header-actions"><button id="as-btn-importar" onclick="abrirImportadorPersonalDesdeAsistencia()">⇧ IMPORTAR PERSONAL</button><button id="as-btn-ingreso" onclick="abrirIngresoPersonalAsistencia()">➕ INGRESO</button><button id="as-btn-salida-masiva" onclick="abrirSalidaMasivaAsistencia()">↪ SALIDA MASIVA</button><button id="as-btn-cambio-puesto" onclick="abrirCambioPuestoAsistencia()">⇄ CAMBIO DE PUESTO</button><button id="as-btn-supervisor-interno" onclick="abrirIngresoSupervisorInternoAsistencia()">👔 SUPERVISOR INTERNO</button><button id="as-btn-cierre" onclick="abrirCierreMensualAsistencia()">📦 REVISAR CIERRE</button><button id="as-btn-reiniciar" onclick="reiniciarListadoAsistencia()">♻ REINICIAR PRUEBA</button><button id="as-btn-coberturas" onclick="abrirGestorCoberturasAsistencia()">👥 COBERTURAS</button><button onclick="recargarModuloAsistencia()">↻ ACTUALIZAR</button><button onclick="cerrarModuloAsistencia()">✕ CERRAR</button></div>
+          <div class="as-header-actions"><button id="as-btn-toma-lista" class="as-btn-destacado" onclick="abrirTomaListaAsistencia()">📋 TOMA DE LISTA</button><button id="as-btn-importar" onclick="abrirImportadorPersonalDesdeAsistencia()">⇧ IMPORTAR PERSONAL</button><button id="as-btn-ingreso" onclick="abrirIngresoPersonalAsistencia()">➕ INGRESO</button><button id="as-btn-salida-masiva" onclick="abrirSalidaMasivaAsistencia()">↪ SALIDA MASIVA</button><button id="as-btn-cambio-puesto" onclick="abrirCambioPuestoAsistencia()">⇄ CAMBIO DE PUESTO</button><button id="as-btn-supervisor-interno" onclick="abrirIngresoSupervisorInternoAsistencia()">👔 SUPERVISOR INTERNO</button><button id="as-btn-cierre" onclick="abrirCierreMensualAsistencia()">📦 REVISAR CIERRE</button><button id="as-btn-reiniciar" onclick="reiniciarListadoAsistencia()">♻ REINICIAR PRUEBA</button><button id="as-btn-coberturas" onclick="abrirGestorCoberturasAsistencia()">👥 COBERTURAS</button><button onclick="recargarModuloAsistencia()">↻ ACTUALIZAR</button><button onclick="cerrarModuloAsistencia()">✕ CERRAR</button></div>
         </header>
         <div class="as-body">
           <section class="as-kpis">
@@ -93,7 +93,7 @@ async function abrirModuloAsistencia() {
     document.getElementById('asistencia-modal').style.display = 'flex';
     // Las coberturas cuya fecha ya pasó se finalizan solas para que no
     // bloqueen el cierre de proyectos ni queden como "activas" para siempre.
-    if (typeof rolActual === 'function' && ['admin', 'operaciones'].includes(rolActual())) {
+    if (typeof rolActual === 'function' && ['admin', 'operaciones', 'central_monitoreo'].includes(rolActual())) {
         try { await supabaseRpc('close_expired_attendance_coverages', {}); }
         catch (error) { console.warn('Coberturas vencidas:', error.message || error); }
     }
