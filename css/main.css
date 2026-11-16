@@ -1260,3 +1260,6 @@
 @media (max-width: 380px) {
   .app-header-actions .session-close-btn span:first-child { display: none !important; }
 }
+/* Control mensual de armamento: aviso de mes pendiente de cierre */
+.wc-aviso-periodo { margin: 8px 0; padding: 10px 12px; border-radius: 10px; background: #fff7ed; border: 1px solid #fdba74; color: #9a3412; font-size: 10px; font-weight: 800; line-height: 1.45; }
+.wc-aviso-periodo b { color: #c2410c; }

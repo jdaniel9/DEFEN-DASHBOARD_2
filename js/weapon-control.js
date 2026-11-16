@@ -15,8 +15,8 @@ function wcCreateModal(){
 async function abrirControlDiarioArmamento(){if(typeof usuarioPuedeVerControlDiarioArmamento!=='function'||!usuarioPuedeVerControlDiarioArmamento())return alert('NO TIENES PERMISO PARA CONSULTAR EL CONTROL DE ARMAMENTO.');wcCreateModal();document.getElementById('weapon-control-modal').style.display='flex';if(!controlArmas.month)controlArmas.month=wcCurrentMonth();document.getElementById('wc-month').value=controlArmas.month;await wcLoad();}
 function wcClose(){const m=document.getElementById('weapon-control-modal');if(m)m.style.display='none';wcCloseEditor();}
 function wcCloseEditor(){const e=document.getElementById('wc-editor');if(e)e.style.display='none';}
-async function wcChangeMonth(value){controlArmas.month=value||wcCurrentMonth();controlArmas.page=1;await wcLoad();}
-async function wcLoad(){const msg=document.getElementById('wc-message'),wrap=document.getElementById('wc-table-wrap');msg.style.display='block';msg.className='as-message';msg.textContent='CARGANDO MATRIZ DE ARMAMENTO…';wrap.style.display='none';try{const w=await supabaseCargarControlDiarioArmamento(`${controlArmas.month||wcCurrentMonth()}-01`);if(!w||w.schema_version!==3)throw new Error('CONTRATO DE CONTROL INCOMPATIBLE. EJECUTA LA MIGRACIÓN 73.');controlArmas.workspace=w;controlArmas.month=String(w.month_start).slice(0,7);document.getElementById('wc-month').value=controlArmas.month;controlArmas.closure={preview:null,pdf:false,excel:false};wcPrepareFilters();wcRender();msg.style.display='none';wrap.style.display='block';}catch(e){msg.className='as-message as-error';msg.textContent='NO SE PUDO CARGAR EL CONTROL: '+(e.message||e);}}
+async function wcChangeMonth(value){controlArmas.avisoPeriodo=null;controlArmas.month=value||wcCurrentMonth();controlArmas.page=1;await wcLoad();}
+async function wcLoad(){const msg=document.getElementById('wc-message'),wrap=document.getElementById('wc-table-wrap');msg.style.display='block';msg.className='as-message';msg.textContent='CARGANDO MATRIZ DE ARMAMENTO…';wrap.style.display='none';try{const w=await supabaseCargarControlDiarioArmamento(`${controlArmas.month||wcCurrentMonth()}-01`);if(!w||w.schema_version!==3)throw new Error('CONTRATO DE CONTROL INCOMPATIBLE. EJECUTA LA MIGRACIÓN 73.');controlArmas.workspace=w;controlArmas.month=String(w.month_start).slice(0,7);document.getElementById('wc-month').value=controlArmas.month;controlArmas.closure={preview:null,pdf:false,excel:false};wcPrepareFilters();wcRender();msg.style.display='none';wrap.style.display='block';wcMostrarAvisoPeriodo();}catch(e){if(await wcAbrirPeriodoPendiente(e))return;wcMostrarAvisoPeriodo();msg.className='as-message as-error';msg.textContent='NO SE PUDO CARGAR EL CONTROL: '+(e.message||e);}}
 function wcPrepareFilters(){const rows=controlArmas.workspace?.weapons||[],provs=[...new Set(rows.map(x=>x.province).filter(Boolean))].sort(),projects=[...new Set(rows.filter(x=>!controlArmas.province||x.province===controlArmas.province).map(x=>x.project).filter(Boolean))].sort();const p=document.getElementById('wc-province'),r=document.getElementById('wc-project');p.innerHTML='<option value="">TODAS</option>'+provs.map(x=>`<option ${x===controlArmas.province?'selected':''}>${wcEsc(x)}</option>`).join('');if(controlArmas.project&&!projects.includes(controlArmas.project))controlArmas.project='';r.innerHTML='<option value="">TODOS</option>'+projects.map(x=>`<option ${x===controlArmas.project?'selected':''}>${wcEsc(x)}</option>`).join('');}
 function wcFilter(){controlArmas.province=document.getElementById('wc-province').value;controlArmas.project=document.getElementById('wc-project').value;controlArmas.search=document.getElementById('wc-search').value.trim().toUpperCase();controlArmas.page=1;wcPrepareFilters();wcRender();}
 function wcRows(){const q=controlArmas.search;return(controlArmas.workspace?.weapons||[]).filter(x=>(!controlArmas.province||x.province===controlArmas.province)&&(!controlArmas.project||x.project===controlArmas.project)&&(!q||[x.code,x.serial,x.province,x.project,x.post,x.type].some(v=>String(v||'').toUpperCase().includes(q))));}
@@ -94,4 +94,31 @@ async function wcExecuteClosure(){
     if(controlArmas.saving)return;const p=controlArmas.closure.preview,confirmation=document.getElementById('wc-close-confirm')?.value.trim().toUpperCase();
     if(!controlArmas.closure.pdf||!controlArmas.closure.excel)return alert('GENERA Y CONSERVA EL PDF Y EL EXCEL ANTES DE CERRAR.');if(confirmation!==p.required_confirmation)return alert(`ESCRIBE EXACTAMENTE: ${p.required_confirmation}`);if(!confirm(`SE CERRARÁ DEFINITIVAMENTE ${controlArmas.month} Y SE ABRIRÁ ${String(p.next_month).slice(0,7)}. ¿CONFIRMAS?`))return;
     controlArmas.saving=true;try{const r=await supabaseCerrarMesArmamento(p.period_id,confirmation,true);if(!r?.ok)throw new Error('SUPABASE NO CONFIRMÓ EL CIERRE.');wcCloseEditor();controlArmas.month=String(r.new_month).slice(0,7);await wcLoad();alert(`CIERRE COMPLETADO. NUEVO MES ABIERTO: ${controlArmas.month}.`);}catch(e){alert('NO SE PUDO CERRAR EL MES: '+(e.message||e));}finally{controlArmas.saving=false;}
+}
+
+// Si el mes pedido todavía no tiene periodo (porque el anterior sigue abierto),
+// se abre automáticamente el mes pendiente y se avisa que debe cerrarse.
+const WC_MESES=['ENERO','FEBRERO','MARZO','ABRIL','MAYO','JUNIO','JULIO','AGOSTO','SEPTIEMBRE','OCTUBRE','NOVIEMBRE','DICIEMBRE'];
+const wcMesTexto=(m)=>{const [a,b]=String(m||'').slice(0,7).split('-');return b?`${WC_MESES[Number(b)-1]} ${a}`:String(m||'');};
+async function wcAbrirPeriodoPendiente(error){
+  if(!/no existe un periodo/i.test(String(error?.message||error)))return false;
+  const pedido=controlArmas.month||wcCurrentMonth();
+  try{
+    const prev=await supabaseRpc('preview_weapon_month_closure',{p_period_id:null});
+    const abierto=String(prev?.month_start||'').slice(0,7);
+    if(!abierto||abierto===pedido)return false;
+    controlArmas.avisoPeriodo={pedido,abierto,puedeCerrar:Boolean(prev.can_close),cierreHabilitado:prev.last_day,permisoCierre:Boolean(prev.permissions?.close)};
+    controlArmas.month=abierto;controlArmas.page=1;
+    await wcLoad();
+    return true;
+  }catch(_){return false;}
+}
+function wcMostrarAvisoPeriodo(){
+  let caja=document.getElementById('wc-aviso-periodo');
+  const a=controlArmas.avisoPeriodo;
+  const visible=a&&String(controlArmas.month)===a.abierto;
+  if(!visible){caja?.remove();if(a&&String(controlArmas.month)!==a.abierto)controlArmas.avisoPeriodo=null;return;}
+  if(!caja){const msg=document.getElementById('wc-message');if(!msg)return;caja=document.createElement('div');caja.id='wc-aviso-periodo';caja.className='wc-aviso-periodo';msg.insertAdjacentElement('beforebegin',caja);}
+  const accion=a.puedeCerrar?(a.permisoCierre?'DESCARGA EL PDF Y EL EXCEL Y USA <b>CIERRE DE MES</b> PARA ABRIR '+wcEsc(wcMesTexto(a.pedido))+'.':'PIDE A QUIEN TENGA PERMISO DE CIERRE QUE LO CIERRE PARA ABRIR '+wcEsc(wcMesTexto(a.pedido))+'.'):'EL CIERRE SE HABILITARÁ EL '+wcEsc(String(a.cierreHabilitado||'').split('-').reverse().join('/'))+'.';
+  caja.innerHTML=`<b>⚠ ${wcEsc(wcMesTexto(a.abierto))} SIGUE ABIERTO.</b> ${wcEsc(wcMesTexto(a.pedido))} SE CREARÁ AUTOMÁTICAMENTE AL CERRARLO. SE MUESTRA ${wcEsc(wcMesTexto(a.abierto))}. ${accion}`;
 }
