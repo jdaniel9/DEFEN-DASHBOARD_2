@@ -15,7 +15,18 @@
 
   const ETIQUETAS_ESTADO = { activo: 'ACTIVO', transito: 'EN TRÁNSITO', rastrillo: 'RASTRILLO', perdida: 'PÉRDIDA', confiscada: 'CONFISCADA' };
 
+  // Estado de las evidencias de cada arma (para el filtro "Fotos")
+  const FOTOS = ['SIN FOTO NI CREDENCIAL', 'SIN FOTO (CON CREDENCIAL)', 'SIN CREDENCIAL (CON FOTO)', 'FOTO Y CREDENCIAL'];
+  function marcarFotosArmamento() {
+    (armamentoDetalle || []).forEach((a) => {
+      const foto = Boolean(a.rutaImagenArma || a.urlImagenArma), cred = Boolean(a.rutaCredencial || a.urlCredencial);
+      a.fotos = foto ? (cred ? FOTOS[3] : FOTOS[2]) : (cred ? FOTOS[1] : FOTOS[0]);
+    });
+  }
+  window.marcarFotosArmamento = marcarFotosArmamento;
+
   function gruposFiltro() {
+    marcarFotosArmamento();
     const unicos = (campo, base = armamentoDetalle) => [...new Set(base.map((a) => a[campo]).filter(Boolean))].sort((x, y) => String(x).localeCompare(String(y), 'es', { numeric: true }));
     const provincias = filtrosArmamento.provincia || [];
     const baseProyectos = provincias.length ? armamentoDetalle.filter((a) => provincias.includes(norm(a.provincia))) : armamentoDetalle;
@@ -27,7 +38,8 @@
       { key: 'ubicacion', label: 'Ubicación / bloque', valores: unicos('ubicacion') },
       { key: 'tipo', label: 'Tipo', valores: unicos('tipo') },
       { key: 'clase', label: 'Clase', valores: unicos('clase') },
-      { key: 'categoria', label: 'Categoría', valores: unicos('categoria') }
+      { key: 'categoria', label: 'Categoría', valores: unicos('categoria') },
+      { key: 'fotos', label: 'Fotos', valores: FOTOS }
     ];
   }
 
@@ -46,6 +58,7 @@
     if (!bar) return;
     Object.keys(filtrosArmamento).forEach((k) => { if (!Array.isArray(filtrosArmamento[k])) filtrosArmamento[k] = []; });
     if (!filtrosArmamento.ubicacion) filtrosArmamento.ubicacion = [];
+    if (!filtrosArmamento.fotos) filtrosArmamento.fotos = [];
     const grupos = gruposFiltro();
     // Proyectos que ya no aplican a las provincias elegidas se quitan
     const proyectosValidos = new Set(grupos.find((g) => g.key === 'proyecto').valores.map(norm));
@@ -121,7 +134,11 @@
   const renderTablaOriginal = window.renderTablaArmamento;
   if (typeof renderTablaOriginal === 'function') {
     window.renderTablaArmamento = function () {
+      marcarFotosArmamento();
       renderTablaOriginal.apply(this, arguments);
+      // Botón de carga masiva de fotos (solo con permiso de editar armas)
+      const botonFotos = document.getElementById('btn-carga-fotos-armamento');
+      if (botonFotos) botonFotos.style.display = typeof usuarioPuedeGestionarEvidenciasArmamento === 'function' && usuarioPuedeGestionarEvidenciasArmamento() ? '' : 'none';
       if (!puedeEditar()) { seleccionLote.clear(); renderBarraLote(); return; }
       const filas = document.querySelectorAll('#armamento-tbody > tr');
       const armas = obtenerArmasFiltradas();

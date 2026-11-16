@@ -20,7 +20,7 @@
 
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
     <link rel="stylesheet" href="css/tailwind.generated.css?v=20261029-produccion-v1">
-    <link rel="stylesheet" href="css/main.css?v=20261116-armas-periodo">
+    <link rel="stylesheet" href="css/main.css?v=20261116-fotos-armas">
     <link rel="stylesheet" href="css/map.css">
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -572,6 +572,7 @@
                     <button data-permiso-despacho onclick="abrirGeneradorActa()" class="armamento-menu-btn">📄 Generar acta</button>
                     <button data-permiso-regularizacion onclick="abrirRegularizacionArmamento()" class="armamento-menu-btn">🛠 Regularizar armamento</button>
                     <button data-permiso-despacho onclick="abrirIntercambioInternoArmamento()" class="armamento-menu-btn">⇄ Intercambio interno</button>
+                    <button id="btn-carga-fotos-armamento" onclick="abrirCargaFotosArmamento()" class="armamento-menu-btn">📷 Carga masiva de fotos</button>
                 </div></details>
                 <details class="armamento-accion-grupo" style="position:relative"><summary style="list-style:none;padding:12px;background:linear-gradient(135deg,#0369a1,#075985);color:white;font-weight:900;font-size:12px;border-radius:10px;cursor:pointer;text-align:center">🔎 Consulta e historial ▾</summary><div style="position:absolute;bottom:48px;left:0;right:0;background:white;border:1px solid #cbd5e1;border-radius:12px;padding:7px;box-shadow:0 18px 45px rgba(15,23,42,.25);display:grid;gap:6px">
                     <button data-permiso-historial-armamento onclick="abrirHistorialMovimientosArmamento()" class="armamento-menu-btn">🧭 Historial y mantenimientos</button>
@@ -703,7 +704,8 @@
     <script src="js/filters.js"></script>
     <script src="js/province.js?v=20261115-toma-lista"></script>
     <script src="js/armamento.js?v=20261115-permisos-armas"></script>
-    <script src="js/armamento-ui.js?v=20261115-permisos-armas"></script>
+    <script src="js/armamento-ui.js?v=20261116-fotos-armas"></script>
+    <script src="js/armamento-fotos.js?v=20261116-fotos-armas"></script>
     <script src="js/radios.js?v=20261115-permisos-armas"></script>
     <script src="js/actas.js?v=20261115-permisos-armas"></script>
     <script src="js/historico.js?v=20261114-avisos-archivo-v17"></script>

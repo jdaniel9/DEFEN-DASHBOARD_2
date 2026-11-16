@@ -1263,3 +1263,31 @@
 /* Control mensual de armamento: aviso de mes pendiente de cierre */
 .wc-aviso-periodo { margin: 8px 0; padding: 10px 12px; border-radius: 10px; background: #fff7ed; border: 1px solid #fdba74; color: #9a3412; font-size: 10px; font-weight: 800; line-height: 1.45; }
 .wc-aviso-periodo b { color: #c2410c; }
+/* Carga masiva de fotos de armas */
+.cf-card { width: min(860px, 100%); }
+.cf-opciones { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; font-size: 10px; font-weight: 900; color: #334155; }
+.cf-opciones label { display: flex; align-items: center; gap: 5px; cursor: pointer; }
+.cf-check { flex-basis: 100%; color: #92400e !important; }
+.cf-ayuda { margin: 8px 0 0; font-size: 9.5px; color: #475569; font-weight: 700; line-height: 1.5; }
+.cf-ayuda code { background: #f1f5f9; border-radius: 4px; padding: 1px 4px; font-size: 9px; }
+.cf-botones { display: flex; flex-wrap: wrap; gap: 8px; }
+.cf-archivo { position: relative; overflow: hidden; display: inline-flex; align-items: center; border-radius: 9px; background: #0f172a; color: #fff; padding: 10px 14px; font-size: 10px; font-weight: 900; cursor: pointer; }
+.cf-archivo input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.cf-limpiar { border: 1px solid #cbd5e1; background: #fff; border-radius: 9px; padding: 9px 12px; font-size: 10px; font-weight: 900; color: #475569; cursor: pointer; }
+.cf-resumen { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 8px; }
+.cf-resumen span { font-size: 9px; font-weight: 900; border-radius: 999px; padding: 3px 9px; }
+.cf-resumen b { font-size: 12px; }
+.cf-resumen .ok, .cf-tabla tr.ok td:last-child { background: #dcfce7; color: #166534; }
+.cf-resumen .aviso, .cf-tabla tr.aviso td:last-child { background: #fef3c7; color: #92400e; }
+.cf-resumen .gris, .cf-tabla tr.gris td:last-child { background: #f1f5f9; color: #64748b; }
+.cf-resumen .error, .cf-tabla tr.error td:last-child { background: #fee2e2; color: #b91c1c; }
+.cf-progreso { position: relative; height: 26px; background: #e2e8f0; border-radius: 8px; overflow: hidden; margin-bottom: 8px; }
+.cf-progreso > div { position: absolute; inset: 0 auto 0 0; width: 0; background: linear-gradient(90deg, #4338ca, #6366f1); transition: width .2s; }
+.cf-progreso small { position: relative; display: block; padding: 6px 10px; font-size: 9px; font-weight: 900; color: #0f172a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cf-tabla-wrap { max-height: 46vh; overflow: auto; border: 1px solid #e2e8f0; border-radius: 10px; }
+.cf-tabla { width: 100%; border-collapse: collapse; font-size: 9.5px; }
+.cf-tabla th { position: sticky; top: 0; background: #0f172a; color: #fff; text-align: left; padding: 7px 8px; font-size: 8.5px; }
+.cf-tabla td { padding: 6px 8px; border-bottom: 1px solid #f1f5f9; vertical-align: top; color: #0f172a; word-break: break-word; font-weight: 700; }
+.cf-tabla td small { display: block; font-size: 8.5px; color: #64748b; font-weight: 700; }
+.cf-tabla td:last-child { font-weight: 900; font-size: 8.5px; }
+@media (max-width: 760px) { .cf-tabla th:nth-child(2), .cf-tabla td:nth-child(2) { max-width: 120px; } }
