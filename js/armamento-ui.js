@@ -112,7 +112,7 @@
   });
 
   // ── Edición de datos del arma ─────────────────────────────────────
-  const puedeEditar = () => typeof usuarioEsGestionOperativa === 'function' && usuarioEsGestionOperativa();
+  const puedeEditar = () => typeof usuarioPuedeEditarDatosArmamento === 'function' && usuarioPuedeEditarDatosArmamento();
 
   // Armas marcadas para mover de bloque en lote (se conservan al cambiar filtros)
   const seleccionLote = new Set();

@@ -150,13 +150,13 @@ function radioOpciones(lista, valor, etiqueta) {
 }
 
 function abrirFormularioRadioNuevo() {
-    if (!usuarioPuedeGestionarRadios() || radioWorkspace?.permissions?.manage !== true) return alert('SOLO ADMINISTRADOR O SISTEMAS PUEDE GESTIONAR RADIOS.');
+    if (!usuarioPuedeGestionarRadios() || radioWorkspace?.permissions?.manage !== true) return alert('NO TIENES PERMISO PARA GESTIONAR RADIOS.');
     radioEditorActual = { modo:'NUEVO', estado:'BODEGA', provinciaId:'', proyectoId:'', puestoId:'' };
     renderFormularioRadio();
 }
 
 function abrirFormularioCambioRadio(id) {
-    if (!usuarioPuedeGestionarRadios() || radioWorkspace?.permissions?.manage !== true) return alert('SOLO ADMINISTRADOR O SISTEMAS PUEDE GESTIONAR RADIOS.');
+    if (!usuarioPuedeGestionarRadios() || radioWorkspace?.permissions?.manage !== true) return alert('NO TIENES PERMISO PARA GESTIONAR RADIOS.');
     const radio = radiosDetalle.find(r => r.id === id);
     if (!radio) return alert('NO SE ENCONTRÓ EL RADIO. ACTUALIZA LA TABLA.');
     radioEditorActual = { ...radio, modo:'CAMBIO' };
@@ -213,7 +213,7 @@ function cerrarEditorRadio() {
 
 async function guardarFormularioRadio() {
     if (radioGuardando) return;
-    if (!usuarioPuedeGestionarRadios() || radioWorkspace?.permissions?.manage !== true) return alert('SOLO ADMINISTRADOR O SISTEMAS PUEDE GESTIONAR RADIOS.');
+    if (!usuarioPuedeGestionarRadios() || radioWorkspace?.permissions?.manage !== true) return alert('NO TIENES PERMISO PARA GESTIONAR RADIOS.');
     const d = radioEditorActual;
     const estado = document.getElementById('radio-form-estado').value;
     const provincia = document.getElementById('radio-form-provincia').value;
@@ -280,7 +280,7 @@ function radioExcelNormalizarCabecera(valor) {
 }
 
 function descargarPlantillaRadiosExcel() {
-    if (!usuarioPuedeGestionarRadios() || radioWorkspace?.permissions?.manage !== true) return alert('SOLO ADMINISTRADOR O SISTEMAS PUEDE GESTIONAR RADIOS.');
+    if (!usuarioPuedeGestionarRadios() || radioWorkspace?.permissions?.manage !== true) return alert('NO TIENES PERMISO PARA GESTIONAR RADIOS.');
     if (typeof XLSX === 'undefined') return alert('NO SE PUDO CARGAR EL GENERADOR DE EXCEL.');
     const headers=['SERIE','MODELO','NUMERO_CHIP','CUENTA','PROVINCIA','PROYECTO','TIPO_ASIGNACION','PUESTO','OBSERVACION'];
     const ejemplo=[
@@ -305,7 +305,7 @@ function descargarPlantillaRadiosExcel() {
 
 async function importarRadiosExcel(input) {
     const archivo=input.files?.[0];input.value='';if(!archivo)return;
-    if (!usuarioPuedeGestionarRadios() || radioWorkspace?.permissions?.manage !== true) return alert('SOLO ADMINISTRADOR O SISTEMAS PUEDE IMPORTAR RADIOS.');
+    if (!usuarioPuedeGestionarRadios() || radioWorkspace?.permissions?.manage !== true) return alert('NO TIENES PERMISO PARA IMPORTAR RADIOS.');
     if(typeof XLSX==='undefined')return alert('NO SE PUDO CARGAR EL LECTOR DE EXCEL.');
     try {
         const data=await archivo.arrayBuffer(),wb=XLSX.read(data,{type:'array'}),ws=wb.Sheets.RADIOS||wb.Sheets[wb.SheetNames[0]],matrix=XLSX.utils.sheet_to_json(ws,{header:1,defval:'',raw:false});

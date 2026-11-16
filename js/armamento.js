@@ -961,7 +961,7 @@ async function prepararEvidenciaArmamento(archivo){
 }
 
 async function gestionarEvidenciaArmamento(weaponId,tipo){
-    if(!backendUsaSupabase()||typeof usuarioPuedeGestionarEvidenciasArmamento!=='function'||!usuarioPuedeGestionarEvidenciasArmamento())return alert('Solo Administrador y Operaciones pueden gestionar evidencias.');
+    if(!backendUsaSupabase()||typeof usuarioPuedeGestionarEvidenciasArmamento!=='function'||!usuarioPuedeGestionarEvidenciasArmamento())return alert('No tienes permiso para gestionar fotos y credenciales del arma.');
     const arma=armamentoDetalle.find(a=>String(a.idArma)===String(weaponId));if(!arma)return alert('No se encontró el arma seleccionada.');
     const esCredencial=tipo==='credential',rutaAnterior=esCredencial?arma.rutaCredencial:arma.rutaImagenArma,tieneAnterior=Boolean(rutaAnterior||(esCredencial?arma.urlCredencial:arma.urlImagenArma)),nombre=esCredencial?'credencial':'fotografía del arma';
     const input=document.createElement('input');input.type='file';input.accept='image/jpeg,image/png,image/webp';

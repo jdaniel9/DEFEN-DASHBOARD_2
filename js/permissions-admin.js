@@ -9,7 +9,7 @@
 (function () {
   const pa = { datos: null, guardando: false };
   const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-  const MODULOS = { ASISTENCIA: '📋 ASISTENCIA', LLAMADOS: '⚠ LLAMADOS DE ATENCIÓN', PROYECTOS: '🏢 PROYECTOS', SISTEMA: '🛡 SISTEMA' };
+  const MODULOS = { ASISTENCIA: '📋 ASISTENCIA', LLAMADOS: '⚠ LLAMADOS DE ATENCIÓN', PROYECTOS: '🏢 PROYECTOS', ARMAMENTO: '🔫 ARMAMENTO', RADIOS: '📻 RADIOS', SISTEMA: '🛡 SISTEMA' };
 
   async function cargar(forzar = false) {
     if (!pa.datos || forzar) pa.datos = await supabaseCargarPermisosAdmin();
@@ -110,7 +110,7 @@
           lista.map((p) => `<tr><td><b>${esc(p.label)}</b><small>${esc(p.description)}</small></td><td class="pa-c"><input type="checkbox" checked disabled></td>
             ${roles.map((r) => `<td class="pa-c"><input type="checkbox" data-role="${esc(r.code)}" data-code="${esc(p.code)}" ${tieneRol(r, p.code) ? 'checked' : ''}></td>`).join('')}</tr>`).join('')).join('')}
         </tbody></table></div>
-        <p class="pa-nota">Armamento y Radios mantienen por ahora sus reglas actuales; se agregarán a este panel en la siguiente entrega.</p>
+        <p class="pa-nota">Las funciones exclusivas del Administrador (eliminar actas, subsanar destino, importar inventario) no se delegan.</p>
         <button class="pa-guardar" onclick="guardarPermisosPorPerfil()">GUARDAR CAMBIOS DE PERFILES</button></section>`;
     } catch (e) {
       contenedor.innerHTML = `<div class="pa-vacio pa-error">${esc(e.message || e)}</div>`;

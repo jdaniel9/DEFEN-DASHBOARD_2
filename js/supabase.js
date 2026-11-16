@@ -410,7 +410,9 @@ async function supabaseCargarDashboardLegacy() {
     const puedeVerRadios = typeof usuarioPuedeVerRadiosDetalle === 'function'
         ? usuarioPuedeVerRadiosDetalle()
         : ['admin', 'coordinacion_general', 'operaciones', 'sistemas'].includes((sessionStorage.getItem('defen_auth_rol') || '').toLowerCase());
-    const puedeVerArmamento = ['admin', 'coordinacion_general', 'operaciones'].includes((sessionStorage.getItem('defen_auth_rol') || '').toLowerCase());
+    const puedeVerArmamento = typeof usuarioPuedeVerArmamentoDetalle === 'function'
+        ? usuarioPuedeVerArmamentoDetalle()
+        : ['admin', 'operaciones'].includes(rol);
     const puedeVerLlamados = typeof tienePermiso === 'function'
         ? tienePermiso('llamados.ver', ['coordinacion_general', 'operaciones', 'gdp'])
         : ['admin', 'coordinacion_general', 'operaciones', 'gdp'].includes(rol);

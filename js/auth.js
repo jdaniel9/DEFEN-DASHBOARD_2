@@ -67,9 +67,13 @@ function tienePermiso(codigo, rolesRespaldo = []) {
     return rolesRespaldo.includes(rolActual());
 }
 
+// Armamento y Radios usan la tabla de permisos (punto 2 del plan de mejoras).
+// El segundo argumento de tienePermiso es solo el respaldo para sesiones antiguas.
+const ARM_RESPALDO = ['operaciones'];
+function permisoArmamento(codigo) { return tienePermiso(codigo, ARM_RESPALDO); }
+
 function usuarioPuedeGenerarActas() {
-    const autorizado = usuarioEsGestionOperativa();
-    if (!autorizado) return false;
+    if (!permisoArmamento('armamento.actas')) return false;
     if (backendUsaSupabase() && SUPABASE_READ_ONLY_PHASE) {
         return typeof SUPABASE_WEAPON_DISPATCH_ENABLED !== 'undefined'
             && SUPABASE_WEAPON_DISPATCH_ENABLED;
@@ -78,22 +82,26 @@ function usuarioPuedeGenerarActas() {
 }
 
 function usuarioPuedeRegularizarArmamento() {
-    return usuarioEsGestionOperativa()
+    return permisoArmamento('armamento.actas')
         && (!backendUsaSupabase() || SUPABASE_WEAPON_REGULARIZATION_ENABLED);
 }
 
 function usuarioPuedeGestionarEvidenciasArmamento() {
-    return usuarioEsGestionOperativa()
+    return permisoArmamento('armamento.editar')
         && (!backendUsaSupabase() || SUPABASE_WEAPON_EVIDENCE_ENABLED);
 }
 
+function usuarioPuedeEditarDatosArmamento() {
+    return permisoArmamento('armamento.editar');
+}
+
 function usuarioPuedeGestionarNovedadArmamento() {
-    return usuarioEsGestionOperativa()
+    return permisoArmamento('armamento.novedades')
         && (!backendUsaSupabase() || SUPABASE_WEAPON_INCIDENT_ENABLED);
 }
 
 function usuarioPuedeGestionarMantenimientoArmamento() {
-    return usuarioEsGestionOperativa()
+    return permisoArmamento('armamento.novedades')
         && (!backendUsaSupabase() || SUPABASE_WEAPON_MAINTENANCE_ENABLED);
 }
 
@@ -102,15 +110,15 @@ function usuarioPuedeSubsanarDestinoArmamento() {
 }
 
 function usuarioPuedeConfirmarLlegadaArmamento() {
-    return usuarioEsGestionOperativa();
+    return permisoArmamento('armamento.actas');
 }
 
 function usuarioPuedeGestionarTrasladoInternoArmamento() {
-    return usuarioEsGestionOperativa();
+    return permisoArmamento('armamento.actas');
 }
 
 function usuarioPuedeVerControlDiarioArmamento() {
-    return usuarioEsGestionOperativa();
+    return permisoArmamento('armamento.control') || permisoArmamento('armamento.cierre_mes');
 }
 
 function usuarioPuedeVerResumenOpe() {
@@ -118,26 +126,27 @@ function usuarioPuedeVerResumenOpe() {
 }
 
 function usuarioPuedeVerHistorialMovimientosArmamento() {
-    return usuarioEsGestionOperativa()
+    return permisoArmamento('armamento.ver')
         && (!backendUsaSupabase() || SUPABASE_WEAPON_HISTORY_ENABLED);
 }
 
-
 function usuarioPuedeVerArmamentoDetalle() {
-    return !ROLES_SIN_ARMAMENTO.includes(rolActual());
+    if (!backendUsaSupabase()) return !ROLES_SIN_ARMAMENTO.includes(rolActual());
+    return permisoArmamento('armamento.ver');
 }
 
 function usuarioPuedeVerRadiosDetalle() {
-    return !ROLES_SIN_RADIOS.includes(rolActual());
+    if (!backendUsaSupabase()) return !ROLES_SIN_RADIOS.includes(rolActual());
+    return tienePermiso('radios.ver', ['operaciones', 'sistemas']) || tienePermiso('radios.gestionar', ['sistemas']);
 }
 
 function usuarioPuedeGestionarRadios() {
-    return ['admin', 'sistemas'].includes(rolActual())
+    return tienePermiso('radios.gestionar', ['sistemas'])
         && (!backendUsaSupabase() || (typeof SUPABASE_RADIO_MANAGEMENT_ENABLED !== 'undefined' && SUPABASE_RADIO_MANAGEMENT_ENABLED));
 }
 
 function usuarioPuedeVerHistorialRadios() {
-    return ['admin', 'coordinacion_general', 'operaciones', 'sistemas'].includes(rolActual());
+    return usuarioPuedeVerRadiosDetalle();
 }
 
 function usuarioPuedeVerAsistencia() {

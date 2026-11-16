@@ -178,7 +178,7 @@ function asegurarModalActasLegacyV2() {
 
 function abrirGeneradorActaLegacyV2(serie) {
     if (typeof usuarioPuedeGenerarActas === 'function' && !usuarioPuedeGenerarActas()) {
-        alert('Solo Operaciones y Administrador pueden generar actas de armamento.'); return;
+        alert('No tienes permiso para generar actas de armamento.'); return;
     }
     if (!tokenSesionActual()) {
         alert('Tu sesión actual no tiene token de seguridad. Cierra sesión e ingresa nuevamente para generar actas.'); return;
@@ -996,7 +996,7 @@ async function actasV3LeerGuiaPdf(){const archivo=document.getElementById('acta-
 function actasV3ValidarGuiaCliente(){const archivo=document.getElementById('acta-guia-pdf')?.files?.[0];if(!archivo&&(actasV3EsGuayas()||rolActual()==='admin'))return '';if(!archivo)return 'La guía PDF es obligatoria cuando el movimiento lo realiza un usuario distinto del Administrador.';if(!archivo.name.toLowerCase().endsWith('.pdf'))return 'La guía debe tener extensión .pdf.';if(archivo.size>10*1024*1024)return 'La guía PDF no puede superar 10 MB.';return '';}
 function actasV3ActualizarMuniciones(ajustar=false){const alimentadoras=document.getElementById('acta-alimentadoras'),municiones=document.getElementById('acta-municiones');if(!alimentadoras||!municiones)return;const cantidad=Math.max(1,Math.min(100,Math.trunc(Number(alimentadoras.value)||1))),porAlimentadora=document.getElementById('acta-tipo')?.value==='custodio'?10:5,maximo=cantidad*porAlimentadora;alimentadoras.value=String(cantidad);municiones.max=String(maximo);if(ajustar||Number(municiones.value)>maximo||Number(municiones.value)<0)municiones.value=String(maximo);const ayuda=document.getElementById('acta-municiones-ayuda');if(ayuda)ayuda.textContent=`Máximo ${maximo} municiones por arma (${porAlimentadora} por alimentadora).`;}
 async function abrirGeneradorActa(serie){
-    if(typeof usuarioPuedeGenerarActas==='function'&&!usuarioPuedeGenerarActas())return alert('Solo Operaciones y Administrador pueden generar actas de armamento.');
+    if(typeof usuarioPuedeGenerarActas==='function'&&!usuarioPuedeGenerarActas())return alert('No tienes permiso para generar actas de armamento.');
     if(!tokenSesionActual())return alert('Tu sesión venció. Ingresa nuevamente.');
     try{
         progresoActa('Cargando armamento y personal disponible…',25);
@@ -1008,7 +1008,7 @@ async function abrirGeneradorActa(serie){
     finally{cerrarProgresoActa();}
 }
 async function abrirRegularizacionArmamento(){
-    if(typeof usuarioPuedeRegularizarArmamento==='function'&&!usuarioPuedeRegularizarArmamento())return alert('Solo Operaciones y Administrador pueden regularizar armamento.');
+    if(typeof usuarioPuedeRegularizarArmamento==='function'&&!usuarioPuedeRegularizarArmamento())return alert('No tienes permiso para regularizar armamento.');
     if(!tokenSesionActual())return alert('Tu sesión venció. Ingresa nuevamente.');
     try{
         progresoActa('Cargando armamento pendiente de regularizar…',30);
