@@ -73,8 +73,9 @@
         /* El contenido principal debe estar sobre la capa */
         .max-w-\[1560px\] { position: relative; z-index: 1; }
 
-        /* Cards con efecto cristal sobre el fondo oscuro */
-        header,
+        /* Cards con efecto cristal sobre el fondo oscuro.
+           Solo el encabezado principal: los <header> de las ventanas tienen su propio fondo. */
+        header.app-header,
         .bg-white {
             background: rgba(255, 255, 255, 0.96) !important;
             backdrop-filter: blur(12px);
@@ -1189,5 +1190,73 @@
 .av-item.proximo .av-dias { color: #854d0e; }
 .av-mas { width: 100%; margin-top: 7px; border: 0; background: #f1f5f9; border-radius: 8px; padding: 7px; font-size: 9px; font-weight: 900; color: #334155; cursor: pointer; }
 .av-vacio { margin: 0; font-size: 10px; font-weight: 800; color: #15803d; }
-@media (max-width: 700px) { .app-header-actions { flex-wrap: wrap; } .av-launch { flex: 1; } }
-@media (max-width: 430px) { .av-launch > span:nth-child(2) { display: none; } }
+
+/* ================================================================
+   Revisión visual y de celular (noviembre 2026)
+================================================================ */
+@media (max-width: 760px) {
+  /* Red de seguridad: cuadrículas con mínimos anchos pasan a una columna */
+  [style*="grid-template-columns"][style*="minmax(220px"],
+  [style*="grid-template-columns"][style*="minmax(240px"],
+  [style*="grid-template-columns"][style*="minmax(250px"],
+  [style*="grid-template-columns"][style*="minmax(260px"],
+  [style*="grid-template-columns"][style*="minmax(320px"],
+  [style*="grid-template-columns"][style*="minmax(360px"],
+  [style*="grid-template-columns"][style*="minmax(390px"],
+  [style*="grid-template-columns"][style*="minmax(470px"],
+  [style*="grid-template-columns"][style*="minmax(480px"],
+  [style*="grid-template-columns"][style*="minmax(520px"],
+  [style*="grid-template-columns"][style*="minmax(650px"] { grid-template-columns: 1fr !important; }
+  /* Barra superior: botones en cuadrícula 2 × 2 */
+  .app-header-actions { display: grid !important; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; width: 100%; }
+  .app-header-actions > * { width: 100%; min-width: 0; }
+  .app-header-actions .module-menu-toggle, .av-launch, .ope-launch, .session-close-btn { width: 100%; justify-content: center; }
+  .app-header-actions .ope-launch span, .app-header-actions .session-close-btn span { display: inline !important; }
+  /* El botón flotante de filtros no debe tapar el último panel */
+  body { padding-bottom: 76px; }
+
+  /* Editar arma: columnas que no se desbordan */
+  .ae-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+  .ae-grid label { min-width: 0; }
+
+  /* Indicadores compactos */
+  #weapon-control-modal .as-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; gap: 5px; }
+  #weapon-control-modal .as-kpis > div { padding: 7px !important; }
+  #weapon-control-modal .as-kpis strong { font-size: 16px !important; }
+  #asistencia-modal .as-kpis { grid-template-columns: repeat(4, minmax(0, 1fr)) !important; }
+  #asistencia-modal .as-kpis span { font-size: 7px; }
+
+  /* Historial del armamento: filtros e indicadores sin anchos fijos */
+  #historial-movimientos-modal [style*="grid-template-columns"] { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+  #historial-movimientos-modal input, #historial-movimientos-modal select { min-width: 0; max-width: 100%; }
+  #historial-movimientos-modal div[style*="minmax(240px"], #historial-movimientos-modal div[style*="minmax(360px"] { grid-template-columns: 1fr !important; }
+
+  /* Estado del sistema */
+  #salud-sistema-modal header { flex-wrap: wrap; padding: 10px !important; }
+  #salud-sistema-modal header > div:first-child { flex: 1 1 100% !important; }
+  #salud-sistema-modal header > button { flex: 1 1 0 !important; }
+  #salud-sistema-modal [style*="grid-template-columns"] { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+  #ss-contenido > div[style*="grid-template-columns"] { grid-template-columns: 1fr !important; }
+  #salud-sistema-modal section { min-width: 0; }
+
+  /* Auditoría */
+  #auditoria-sistema-modal header { padding: 10px !important; }
+  #auditoria-sistema-modal [style*="grid-template-columns"] { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+
+  /* Llamados de atención: formulario arriba, historial debajo */
+  #llamados-atencion-modal > div > div[style*="grid-template-columns"] { grid-template-columns: 1fr !important; overflow: auto !important; }
+
+  /* Toma de lista: las pestañas de turno caben en la pantalla */
+  .rc-turnos button { min-width: 0; padding: 7px 8px; }
+
+  /* Personal operativo y proyectos: indicadores en dos columnas */
+  #po-contenido > div[style*="grid-template-columns:repeat(4,1fr)"] { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+  #gestion-proyectos-modal section [style*="grid-template-columns"] { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+  #gestion-proyectos-modal section [style*="grid-template-columns"] > * { min-width: 0; overflow-wrap: anywhere; }
+
+  /* Usuarios: el aviso no aprieta los botones */
+  #gestion-usuarios-modal > div > div:nth-child(2) { flex-wrap: wrap; }
+}
+@media (max-width: 380px) {
+  .app-header-actions .session-close-btn span:first-child { display: none !important; }
+}
