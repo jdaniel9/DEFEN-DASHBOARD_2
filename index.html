@@ -20,14 +20,16 @@
 
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
     <link rel="stylesheet" href="css/tailwind.generated.css?v=20261029-produccion-v1">
-    <link rel="stylesheet" href="css/main.css?v=20261116-fotos-armas">
+    <link rel="stylesheet" href="css/main.css?v=20261116-reporte-gerencia">
     <link rel="stylesheet" href="css/map.css">
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <!-- xlsx-js-style: misma API que SheetJS 0.18.5, pero guarda estilos en los Excel -->
+    <script src="https://unpkg.com/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
+    <script src="js/excel-estilos.js?v=20261116-reporte-gerencia"></script>
 </head>
 <body class="min-h-screen text-slate-900">
 
@@ -723,7 +725,8 @@
     <script src="js/permissions-admin.js?v=20261115-permisos-armas"></script>
     <script src="js/audit.js?v=20260912-migracion44"></script>
     <script src="js/system-health.js?v=20260912-migracion45"></script>
-    <script src="js/expiry-alerts.js?v=20261116-vencimientos-boton"></script>
+    <script src="js/expiry-alerts.js?v=20261116-reporte-gerencia"></script>
+    <script src="js/reporte-gerencia.js?v=20261116-reporte-gerencia"></script>
     <script src="js/pdf.js"></script>
     <script src="js/ui-shell.js?v=20260923-parche63"></script>
 

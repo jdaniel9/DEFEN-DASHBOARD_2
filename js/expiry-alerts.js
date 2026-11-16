@@ -74,7 +74,8 @@
     const b = boton();
     if (!d || !Object.values(secciones).some(Boolean)) { if (b) b.style.display = 'none'; cerrarPanelVencimientos(); return; }
     const orden = (i) => (i.days === null || i.days === undefined ? 99999 : Number(i.days));
-    const items = [...(d.items || [])].sort((a, b) => orden(a) - orden(b) || String(a.title).localeCompare(String(b.title), 'es'));
+    // Los proyectos ya concluidos solo van en el reporte para gerencia, no como alerta
+    const items = [...(d.items || [])].filter((i) => TIPOS[i.kind]).sort((a, b) => orden(a) - orden(b) || String(a.title).localeCompare(String(b.title), 'es'));
     const cuenta = (n) => items.filter((i) => nivel(i) === n).length;
     const grupos = [...new Set(items.map((i) => TIPOS[i.kind]?.grupo).filter(Boolean))];
     if (estado.filtro && !grupos.includes(estado.filtro)) estado.filtro = '';
@@ -93,6 +94,7 @@
     caja.innerHTML = `
       <div class="av-head"><h3>⏰ VENCIMIENTOS <small>VENCIDOS Y PRÓXIMOS ${esc(d.days || DIAS)} DÍAS</small></h3>
         <div><button class="av-recargar" onclick="cargarAlertasVencimiento(true)" title="Actualizar">↻</button><button class="av-recargar" onclick="cerrarPanelVencimientos()" title="Cerrar">✕</button></div></div>
+      ${typeof generarReporteGerenciaVencimientos === 'function' ? `<div class="av-reporte"><span>📤 REPORTE PARA GERENCIA</span><button onclick="generarReporteGerenciaVencimientos('imagen')" title="Imagen para enviar por WhatsApp o correo">🖼 IMAGEN</button><button onclick="generarReporteGerenciaVencimientos('pdf')">📄 PDF</button><button onclick="generarReporteGerenciaVencimientos('excel')">📊 EXCEL</button></div>` : ''}
       ${items.length ? `<div class="av-resumen">
         <span class="av-chip vencido"><b>${cuenta('vencido')}</b> VENCIDO(S)</span>
         <span class="av-chip urgente"><b>${cuenta('urgente')}</b> ≤ 15 DÍAS</span>
@@ -126,6 +128,7 @@
       estado.cargando = false;
     }
   };
+  window.obtenerDatosVencimientos = () => estado.datos;
   window.filtrarAlertasVencimiento = function (grupo) { estado.filtro = grupo; estado.expandido = false; render(); };
   window.expandirAlertasVencimiento = function () { estado.expandido = !estado.expandido; render(); };
 

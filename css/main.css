@@ -1291,3 +1291,26 @@
 .cf-tabla td small { display: block; font-size: 8.5px; color: #64748b; font-weight: 700; }
 .cf-tabla td:last-child { font-weight: 900; font-size: 8.5px; }
 @media (max-width: 760px) { .cf-tabla th:nth-child(2), .cf-tabla td:nth-child(2) { max-width: 120px; } }
+/* Reporte de vencimientos para gerencia */
+.av-reporte { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; margin: 0 0 10px; padding: 8px; border-radius: 10px; background: #0f172a; }
+.av-reporte span { flex: 1 1 100%; font-size: 8.5px; font-weight: 900; color: #cbd5e1; letter-spacing: .04em; }
+.av-reporte button { flex: 1; border: 0; border-radius: 7px; padding: 7px 6px; font-size: 9px; font-weight: 900; cursor: pointer; background: #334155; color: #fff; }
+.av-reporte button:hover { background: #475569; }
+.rg-hoja { position: fixed; left: -12000px; top: 0; width: 1180px; padding: 26px 30px 20px; background: #fff; font-family: Arial, 'DM Sans', sans-serif; color: #1f2937; }
+.rg-cabecera { display: flex; align-items: center; gap: 16px; padding-bottom: 14px; margin-bottom: 16px; border-bottom: 4px solid #f59e0b; }
+.rg-cabecera img { width: 86px; height: auto; }
+.rg-cabecera b { font-size: 13px; color: #475569; letter-spacing: .08em; }
+.rg-cabecera h1 { margin: 2px 0; font-size: 24px; font-weight: 900; color: #0f172a; }
+.rg-cabecera p { margin: 0; font-size: 12px; font-weight: 700; color: #64748b; }
+.rg-tabla { width: 100%; border-collapse: collapse; margin-bottom: 18px; font-size: 13px; }
+.rg-tabla caption { caption-side: top; text-align: center; font-size: 15px; font-weight: 700; padding: 8px; color: #0f172a; border: 1px solid #b0bec5; border-bottom: 0; background: #f8fafc; }
+.rg-tabla th { background: #37474f; color: #fff; font-weight: 700; padding: 9px 8px; border: 1px solid #b0bec5; font-size: 12px; }
+.rg-tabla td { padding: 8px; border: 1px solid #b0bec5; text-align: center; }
+.rg-tabla tbody tr:nth-child(odd) td:not(.rg-dias) { background: #eceff1; }
+.rg-tabla .rg-izq { text-align: left; }
+.rg-tabla .rg-dias { font-weight: 700; }
+.rg-tabla .rg-vacio { font-style: italic; color: #64748b; }
+.rg-nota { margin: -12px 0 16px; font-size: 11px; font-style: italic; color: #475569; }
+.rg-leyenda { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 10px; font-weight: 700; }
+.rg-leyenda span { padding: 3px 8px; border-radius: 4px; }
+.rg-leyenda small { margin-left: auto; color: #94a3b8; font-size: 10px; }
