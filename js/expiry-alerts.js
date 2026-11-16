@@ -1,14 +1,15 @@
 // ================================================================
-// expiry-alerts.js — Panel "Vencimientos" en el inicio
-//   Contratos de proyectos, permisos de oficinas provinciales y
-//   credenciales de armas que vencen pronto o ya vencieron.
+// expiry-alerts.js — "Vencimientos" en el inicio
+//   Botón en la barra superior (con contador de lo vencido/urgente) que
+//   abre un panel lateral con contratos de proyectos, permisos de
+//   oficinas provinciales y credenciales de armas que vencen pronto.
 //   Cada sección depende del permiso del usuario (lo decide la base).
 // ================================================================
 (function () {
   const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const estado = { datos: null, filtro: '', expandido: false, cargando: false };
   const DIAS = 60;
-  const VISIBLES = 6;
+  const VISIBLES = 40;
   const TIPOS = {
     PROYECTO: { grupo: 'PROYECTOS', icono: '🏢', texto: 'Contrato' },
     PROYECTO_SIN_FECHA: { grupo: 'PROYECTOS', icono: '🏢', texto: 'Sin fecha de fin' },
@@ -33,26 +34,45 @@
   }
   const fecha = (iso) => (iso ? String(iso).slice(0, 10).split('-').reverse().join('/') : '');
 
-  function contenedor() {
-    let caja = document.getElementById('alertas-vencimiento');
-    if (caja) return caja;
-    // Se ubica debajo del Resumen Ejecutivo del panel derecho
-    const resumen = document.getElementById('total-guardias')?.closest('.bg-slate-900');
-    if (!resumen) return null;
-    caja = document.createElement('div');
-    caja.id = 'alertas-vencimiento';
-    caja.className = 'av-panel';
-    caja.style.display = 'none';
-    resumen.insertAdjacentElement('afterend', caja);
-    return caja;
+  // Botón en la barra superior, junto a "Resumen OPE"
+  function boton() {
+    let b = document.getElementById('av-boton');
+    if (b) return b;
+    const acciones = document.querySelector('.app-header-actions');
+    if (!acciones) return null;
+    b = document.createElement('button');
+    b.type = 'button';
+    b.id = 'av-boton';
+    b.className = 'av-launch';
+    b.style.display = 'none';
+    b.setAttribute('onclick', 'abrirPanelVencimientos()');
+    const ope = acciones.querySelector('.ope-launch');
+    acciones.insertBefore(b, ope || acciones.lastElementChild);
+    return b;
   }
 
+  // Panel lateral (se abre sobre el tablero, no lo desplaza)
+  function contenedor() {
+    let capa = document.getElementById('av-capa');
+    if (!capa) {
+      capa = document.createElement('div');
+      capa.id = 'av-capa';
+      capa.className = 'av-capa';
+      capa.innerHTML = '<aside class="av-panel" id="alertas-vencimiento" role="dialog" aria-label="Vencimientos"></aside>';
+      capa.addEventListener('click', (e) => { if (e.target === capa) cerrarPanelVencimientos(); });
+      document.body.appendChild(capa);
+    }
+    return document.getElementById('alertas-vencimiento');
+  }
+  window.abrirPanelVencimientos = function () { contenedor(); render(); document.getElementById('av-capa').classList.add('abierta'); };
+  window.cerrarPanelVencimientos = function () { document.getElementById('av-capa')?.classList.remove('abierta'); };
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') cerrarPanelVencimientos(); });
+
   function render() {
-    const caja = contenedor();
     const d = estado.datos;
-    if (!caja) return;
     const secciones = d?.sections || {};
-    if (!d || !Object.values(secciones).some(Boolean)) { caja.style.display = 'none'; return; }
+    const b = boton();
+    if (!d || !Object.values(secciones).some(Boolean)) { if (b) b.style.display = 'none'; cerrarPanelVencimientos(); return; }
     const orden = (i) => (i.days === null || i.days === undefined ? 99999 : Number(i.days));
     const items = [...(d.items || [])].sort((a, b) => orden(a) - orden(b) || String(a.title).localeCompare(String(b.title), 'es'));
     const cuenta = (n) => items.filter((i) => nivel(i) === n).length;
@@ -60,10 +80,19 @@
     if (estado.filtro && !grupos.includes(estado.filtro)) estado.filtro = '';
     const lista = items.filter((i) => !estado.filtro || TIPOS[i.kind]?.grupo === estado.filtro);
     const mostrar = estado.expandido ? lista : lista.slice(0, VISIBLES);
-    caja.style.display = '';
+    // Contador del botón: lo vencido y lo que vence en 15 días o menos
+    if (b) {
+      const criticos = cuenta('vencido') + cuenta('urgente');
+      b.style.display = '';
+      b.className = 'av-launch' + (criticos ? ' av-alerta' : '');
+      b.title = items.length ? `${cuenta('vencido')} vencido(s) · ${cuenta('urgente')} en 15 días o menos · ${items.length} en total` : 'Sin vencimientos próximos';
+      b.innerHTML = `<span aria-hidden="true">⏰</span><span>Vencimientos</span>${items.length ? `<b class="av-badge">${criticos || items.length}</b>` : ''}`;
+    }
+    const caja = document.getElementById('alertas-vencimiento');
+    if (!caja) return;
     caja.innerHTML = `
-      <div class="av-head"><h3>⏰ VENCIMIENTOS <small>PRÓXIMOS ${esc(d.days || DIAS)} DÍAS</small></h3>
-        <button class="av-recargar" onclick="cargarAlertasVencimiento(true)" title="Actualizar">↻</button></div>
+      <div class="av-head"><h3>⏰ VENCIMIENTOS <small>VENCIDOS Y PRÓXIMOS ${esc(d.days || DIAS)} DÍAS</small></h3>
+        <div><button class="av-recargar" onclick="cargarAlertasVencimiento(true)" title="Actualizar">↻</button><button class="av-recargar" onclick="cerrarPanelVencimientos()" title="Cerrar">✕</button></div></div>
       ${items.length ? `<div class="av-resumen">
         <span class="av-chip vencido"><b>${cuenta('vencido')}</b> VENCIDO(S)</span>
         <span class="av-chip urgente"><b>${cuenta('urgente')}</b> ≤ 15 DÍAS</span>
@@ -103,6 +132,7 @@
   // Lleva al módulo donde se renueva o corrige el dato
   window.abrirAlertaVencimiento = async function (tipo, id) {
     const item = (estado.datos?.items || []).find((i) => i.kind === tipo && String(i.id) === String(id));
+    cerrarPanelVencimientos();
     try {
       if (tipo.startsWith('PROYECTO') && typeof abrirGestionProyectos === 'function') {
         await abrirGestionProyectos();
