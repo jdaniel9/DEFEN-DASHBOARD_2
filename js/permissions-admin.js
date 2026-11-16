@@ -9,7 +9,7 @@
 (function () {
   const pa = { datos: null, guardando: false };
   const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-  const MODULOS = { ASISTENCIA: '📋 ASISTENCIA', LLAMADOS: '⚠ LLAMADOS DE ATENCIÓN', PROYECTOS: '🏢 PROYECTOS', ARMAMENTO: '🔫 ARMAMENTO', RADIOS: '📻 RADIOS', SISTEMA: '🛡 SISTEMA' };
+  const MODULOS = { ASISTENCIA: '📋 ASISTENCIA', LLAMADOS: '⚠ LLAMADOS DE ATENCIÓN', PROYECTOS: '🏢 PROYECTOS', ARMAMENTO: '🔫 ARMAMENTO', RADIOS: '📻 RADIOS', LIMPIEZA: '🧹 LIMPIEZA', SISTEMA: '🛡 SISTEMA' };
 
   async function cargar(forzar = false) {
     if (!pa.datos || forzar) pa.datos = await supabaseCargarPermisosAdmin();
