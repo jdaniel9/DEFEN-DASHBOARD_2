@@ -205,6 +205,7 @@
     lp.cargando = true;
     try {
       lp.w = await supabaseRpc('get_cleaning_workspace', {});
+      lp.bases = await supabaseRpc('get_cleaning_reference_points', {}).catch(() => []);
       await firmarLogos();
       render();
     } catch (e) {
@@ -350,25 +351,30 @@
   const textoKm = (km) => (km < 1 ? `${Math.round(km * 1000)} m` : `${km.toLocaleString('es-EC', { maximumFractionDigits: 1 })} km`);
 
   // ── Mapa detallado con barra lateral: puesto, rutas y grupos de trabajo ──
-  //   · PUESTO: al tocar un pin, la barra muestra sus datos y los demás
-  //     puestos ordenados por cercanía; cada uno con "Ruta" (por calles,
-  //     servicio OSRM de OpenStreetMap) y "Google Maps".
-  //   · RUTA: asistente "Desde → Hasta" (ej. Universidad → CDJ); si el
-  //     destino coincide con varios puestos arma el recorrido más corto.
-  //   · GRUPOS: reparte los puestos en N grupos por cercanía (o sugiere
-  //     cuántos grupos para no superar una distancia) y ordena su recorrido.
-  const OSRM = 'https://router.project-osrm.org/route/v1/driving/';
+  //   · PUESTO: al tocar un pin, sus datos y la distancia a los demás.
+  //   · RUTA: salida desde un punto de partida (oficina DEFEN, bodega…),
+  //     "mi ubicación" o un puesto, y varios destinos marcados. Calcula el
+  //     recorrido recomendado por calles (OSRM) y lo compara con el orden
+  //     marcado.
+  //   · GRUPOS: sugiere grupos por cercanía (con comparativa de cuántos
+  //     grupos conviene), permite mover puestos entre grupos a mano,
+  //     equilibrar y calcular la ruta de cada grupo con recomendaciones.
+  const OSRM = 'https://router.project-osrm.org/';
   const COLORES_GRUPO = ['#2563eb', '#dc2626', '#16a34a', '#d97706', '#7c3aed', '#db2777', '#0891b2', '#65a30d', '#b45309', '#475569'];
-  const rm = { mapa: null, puntos: [], capaRuta: null, capaPines: null, seleccionado: null, pestana: 'puesto', grupos: null, provinciaId: null, titulo: '' };
+  const rm = { mapa: null, puntos: [], capaRuta: null, capaPines: null, seleccionado: null, pestana: 'puesto', titulo: '',
+    origen: '', destinos: [], filtroDestino: '', volver: false, resultadoRuta: null,
+    origenGrupos: '', grupos: null, sinGrupo: [], rutasGrupo: {}, nuevoPunto: false };
   const textoMin = (s) => { const m = Math.round(s / 60); return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${m % 60} min`; };
-  const etiquetaPunto = (pt) => `${pt.s.name} · ${pt.p.name}`;
+  const nombrePunto = (pt) => (pt.tipo === 'puesto' ? pt.s.name : pt.nombre);
+  const detallePunto = (pt) => (pt.tipo === 'puesto' ? pt.p.name : pt.tipo === 'base' ? 'PUNTO DE PARTIDA' : 'TU UBICACIÓN');
   const enlaceGoogle = (paradas) => {
     if (paradas.length < 2) return `https://www.google.com/maps?q=${paradas[0].lat},${paradas[0].lng}`;
     const o = paradas[0], d = paradas[paradas.length - 1], medio = paradas.slice(1, -1).slice(0, 9);
     return `https://www.google.com/maps/dir/?api=1&travelmode=driving&origin=${o.lat},${o.lng}&destination=${d.lat},${d.lng}${medio.length ? '&waypoints=' + medio.map((x) => `${x.lat},${x.lng}`).join('%7C') : ''}`;
   };
+  const bases = () => (lp.bases || []).map((b) => ({ tipo: 'base', id: b.id, b, nombre: b.name, lat: Number(b.latitude), lng: Number(b.longitude) }));
 
-  // Ordena paradas por "vecino más cercano" partiendo de la primera
+  // Ordena paradas por "vecino más cercano" y mejora con 2-opt (la salida queda fija)
   function ordenarRecorrido(inicio, resto) {
     const orden = [inicio], pendientes = [...resto];
     while (pendientes.length) {
@@ -377,7 +383,6 @@
       pendientes.forEach((x, i) => { if (distanciaKm(ultimo, x) < distanciaKm(ultimo, pendientes[mejor])) mejor = i; });
       orden.push(pendientes.splice(mejor, 1)[0]);
     }
-    // Mejora 2-opt: invierte tramos mientras el recorrido total se acorte (la salida queda fija)
     let mejoro = true, vueltas = 0;
     while (mejoro && vueltas++ < 50) {
       mejoro = false;
@@ -392,58 +397,64 @@
     return orden;
   }
   const kmRecorrido = (lista) => lista.slice(1).reduce((n, x, i) => n + distanciaKm(lista[i], x), 0);
+  // Largo estimado (línea recta) del recorrido de un grupo desde la salida
+  const kmGrupo = (puntos, inicio) => (puntos.length ? kmRecorrido(inicio ? ordenarRecorrido(inicio, puntos) : ordenarRecorrido(puntos[0], puntos.slice(1))) : 0);
 
-  // Ruta por calles (OSRM). Devuelve geometría, km, tiempo y tramos.
-  async function rutaCalles(paradas) {
+  async function osrm(servicio, paradas, extra = '') {
     const coords = paradas.map((x) => `${x.lng.toFixed(6)},${x.lat.toFixed(6)}`).join(';');
-    const r = await fetch(`${OSRM}${coords}?overview=full&geometries=geojson&steps=false`);
-    if (!r.ok) throw new Error('EL SERVICIO DE RUTAS NO RESPONDIÓ. INTENTA DE NUEVO.');
+    const r = await fetch(`${OSRM}${servicio}/v1/driving/${coords}?overview=full&geometries=geojson${extra}`);
+    if (!r.ok) throw new Error('EL SERVICIO DE RUTAS NO RESPONDIÓ. INTENTA DE NUEVO EN UNOS SEGUNDOS.');
     const j = await r.json();
-    if (j.code !== 'Ok' || !j.routes?.length) throw new Error('NO SE ENCONTRÓ UNA RUTA POR CALLES ENTRE ESOS PUNTOS.');
-    const ruta = j.routes[0];
-    return { linea: ruta.geometry.coordinates.map(([lng, lat]) => [lat, lng]), km: ruta.distance / 1000, seg: ruta.duration, tramos: (ruta.legs || []).map((l) => ({ km: l.distance / 1000, seg: l.duration })) };
+    if (j.code !== 'Ok') throw new Error('NO SE ENCONTRÓ UNA RUTA POR CALLES ENTRE ESOS PUNTOS.');
+    return j;
   }
-  // Recorrido óptimo por calles (servicio "trip" de OSRM): ordena las paradas
-  // por distancia real de manejo saliendo del origen. Si falla, usa el orden por cercanía.
+  const leerViaje = (v) => ({ linea: v.geometry.coordinates.map(([lng, lat]) => [lat, lng]), km: v.distance / 1000, seg: v.duration, tramos: (v.legs || []).map((l) => ({ km: l.distance / 1000, seg: l.duration })) });
+  async function rutaCalles(paradas) { return leerViaje((await osrm('route', paradas)).routes[0]); }
+  // Recorrido óptimo por calles (OSRM "trip"); si falla, orden por cercanía
   async function recorridoOptimo(origen, destinos, volver) {
     const pts = [origen, ...destinos];
     if (pts.length > 2) {
       try {
-        const coords = pts.map((x) => `${x.lng.toFixed(6)},${x.lat.toFixed(6)}`).join(';');
-        const r = await fetch(`https://router.project-osrm.org/trip/v1/driving/${coords}?source=first&roundtrip=${volver ? 'true' : 'false'}${volver ? '' : '&destination=any'}&overview=full&geometries=geojson`);
-        const j = r.ok ? await r.json() : null;
-        if (j?.code === 'Ok' && j.trips?.length) {
-          const orden = pts.map((p, i) => ({ p, k: j.waypoints[i].waypoint_index })).sort((a, b) => a.k - b.k).map((x) => x.p);
-          const viaje = j.trips[0];
-          const paradas = volver ? [...orden, origen] : orden;
-          return { paradas, ruta: { linea: viaje.geometry.coordinates.map(([lng, lat]) => [lat, lng]), km: viaje.distance / 1000, seg: viaje.duration, tramos: (viaje.legs || []).map((l) => ({ km: l.distance / 1000, seg: l.duration })) } };
-        }
-      } catch (_) { /* se usa el orden por cercanía */ }
+        const j = await osrm('trip', pts, `&source=first&roundtrip=${volver ? 'true' : 'false'}${volver ? '' : '&destination=any'}`);
+        const orden = pts.map((p, i) => ({ p, k: j.waypoints[i].waypoint_index })).sort((a, b) => a.k - b.k).map((x) => x.p);
+        return { paradas: volver ? [...orden, origen] : orden, ruta: leerViaje(j.trips[0]) };
+      } catch (_) { /* respaldo */ }
     }
     const paradas = ordenarRecorrido(origen, destinos);
     if (volver) paradas.push(origen);
     return { paradas, ruta: await rutaCalles(paradas) };
   }
-  function dibujarRuta(ruta, paradas, color = '#0f766e') {
-    rm.capaRuta.clearLayers();
+  function dibujarRuta(ruta, paradas, color = '#0f766e', limpiar = true) {
+    if (limpiar) rm.capaRuta.clearLayers();
     L.polyline(ruta.linea, { color: '#ffffff', weight: 8, opacity: 0.9 }).addTo(rm.capaRuta);
     L.polyline(ruta.linea, { color, weight: 5, opacity: 0.95 }).addTo(rm.capaRuta);
-    paradas.forEach((x, i) => L.marker([x.lat, x.lng], { interactive: false, icon: L.divIcon({ className: 'lp-orden-caja', iconSize: [22, 22], iconAnchor: [11, 30], html: `<b class="lp-orden" style="background:${color}">${i + 1}</b>` }) }).addTo(rm.capaRuta));
-    rm.mapa.fitBounds(L.latLngBounds(ruta.linea).pad(0.15), { maxZoom: 16 });
+    paradas.forEach((x, i) => L.marker([x.lat, x.lng], { interactive: false, icon: L.divIcon({ className: 'lp-orden-caja', iconSize: [22, 22], iconAnchor: [11, 30], html: `<b class="lp-orden" style="background:${color}">${i === 0 && x.tipo !== 'puesto' ? '▶' : i + 1}</b>` }) }).addTo(rm.capaRuta));
+    if (limpiar) rm.mapa.fitBounds(L.latLngBounds(ruta.linea).pad(0.15), { maxZoom: 16 });
   }
 
-  function pintarPines(colorPorPunto) {
+  function grupoDe(pt) { return rm.grupos ? rm.grupos.findIndex((g) => g.puntos.includes(pt)) : -1; }
+  function pintarPines() {
     rm.capaPines.clearLayers();
-    rm.puntos.forEach((pt) => {
+    bases().forEach((b) => L.marker([b.lat, b.lng], { title: b.nombre, icon: L.divIcon({ className: 'lp-pin-caja', iconSize: [34, 34], iconAnchor: [17, 17], html: '<div class="lp-pin lp-pin-base">🏢</div>' }) }).addTo(rm.capaPines).bindTooltip(b.nombre, { direction: 'top' }));
+    rm.puntos.forEach((pt, i) => {
       const a = asociacion(pt.p.association_id), logo = logoAsoc(a);
-      const color = colorPorPunto ? colorPorPunto(pt) : colorAsoc(pt.p.association_id);
-      const activo = rm.seleccionado === pt;
-      const icono = L.divIcon({ className: 'lp-pin-caja', iconSize: [38, 38], iconAnchor: [19, 19],
-        html: logo && !colorPorPunto ? `<div class="lp-pin ${activo ? 'lp-pin-activo' : ''}" style="border-color:${color}"><img src="${esc(logo)}" alt=""></div>`
-          : `<div class="lp-pin lp-pin-color ${activo ? 'lp-pin-activo' : ''}" style="background:${color}">${colorPorPunto ? (rm.grupos?.find((g) => g.puntos.includes(pt))?.n ?? '') : esc(String(pt.p.association).slice(0, 2))}</div>` });
-      L.marker([pt.lat, pt.lng], { icon: icono, title: etiquetaPunto(pt) }).addTo(rm.capaPines).on('click', () => seleccionarPuntoMapa(rm.puntos.indexOf(pt)));
+      const enGrupos = rm.pestana === 'grupos' && rm.grupos;
+      const g = enGrupos ? grupoDe(pt) : -1;
+      const color = enGrupos ? (g >= 0 ? rm.grupos[g].color : '#94a3b8') : colorAsoc(pt.p.association_id);
+      const activo = rm.pestana === 'ruta' ? rm.destinos.includes(i) : rm.seleccionado === pt;
+      const html = enGrupos ? `<div class="lp-pin lp-pin-color" style="background:${color}">${g >= 0 ? g + 1 : '?'}</div>`
+        : logo ? `<div class="lp-pin ${activo ? 'lp-pin-activo' : ''}" style="border-color:${color}"><img src="${esc(logo)}" alt=""></div>`
+          : `<div class="lp-pin lp-pin-color ${activo ? 'lp-pin-activo' : ''}" style="background:${color}">${esc(String(pt.p.association).slice(0, 2))}</div>`;
+      L.marker([pt.lat, pt.lng], { title: `${pt.s.name} · ${pt.p.name}`, icon: L.divIcon({ className: 'lp-pin-caja', iconSize: [38, 38], iconAnchor: [19, 19], html }) })
+        .addTo(rm.capaPines).on('click', () => tocarPinMapa(i));
     });
   }
+  // Tocar un pin: en RUTA lo marca/desmarca como destino; en los demás muestra el puesto
+  window.tocarPinMapa = function (i) {
+    if (rm.pestana === 'ruta') { alternarDestinoMapa(i); return; }
+    if (rm.pestana === 'grupos') { document.getElementById(`lpg-p-${i}`)?.scrollIntoView({ block: 'center', behavior: 'smooth' }); document.getElementById(`lpg-p-${i}`)?.classList.add('lp-resaltar'); setTimeout(() => document.getElementById(`lpg-p-${i}`)?.classList.remove('lp-resaltar'), 1500); return; }
+    seleccionarPuntoMapa(i);
+  };
 
   window.abrirMapaPuestosLimpieza = function (provinciaId) {
     if (typeof L === 'undefined') return alert('NO SE PUDO CARGAR EL MAPA DETALLADO.');
@@ -451,11 +462,13 @@
     filtrar(activos()).forEach((p) => puestosDe(p).forEach((s) => {
       if (s.latitude == null || s.longitude == null) return;
       if (provinciaId && s.province_id !== provinciaId) return;
-      puntos.push({ p, s, lat: Number(s.latitude), lng: Number(s.longitude) });
+      puntos.push({ tipo: 'puesto', p, s, lat: Number(s.latitude), lng: Number(s.longitude) });
     }));
     if (!puntos.length) return alert('NINGÚN PUESTO TIENE COORDENADAS TODAVÍA.');
     const prov = provinciaId ? (lp.w.provinces || []).find((x) => x.id === provinciaId) : null;
-    Object.assign(rm, { puntos, seleccionado: null, grupos: null, pestana: 'puesto', provinciaId: provinciaId || null, titulo: `📍 PUESTOS DE LIMPIEZA${prov ? ' · ' + prov.name : ''} (${puntos.length})` });
+    const baseDefecto = bases()[0] ? `b:${bases()[0].id}` : '';
+    Object.assign(rm, { puntos, seleccionado: null, pestana: 'puesto', titulo: `📍 PUESTOS DE LIMPIEZA${prov ? ' · ' + prov.name : ''} (${puntos.length})`,
+      origen: baseDefecto, destinos: [], filtroDestino: '', resultadoRuta: null, origenGrupos: baseDefecto, grupos: null, sinGrupo: [], rutasGrupo: {}, nuevoPunto: false });
     document.getElementById('lp-mapa-modal')?.remove();
     const capa = document.createElement('div');
     capa.id = 'lp-mapa-modal'; capa.className = 'lp-modal';
@@ -467,35 +480,27 @@
     rm.capaRuta = L.layerGroup().addTo(rm.mapa);
     rm.capaPines = L.featureGroup().addTo(rm.mapa);
     pintarPines();
-    rm.mapa.fitBounds(rm.capaPines.getBounds().pad(0.2), { maxZoom: 15 });
+    rm.mapa.fitBounds(L.latLngBounds(puntos.map((x) => [x.lat, x.lng])).pad(0.2), { maxZoom: 15 });
     renderLateral();
     setTimeout(() => rm.mapa.invalidateSize(), 150);
   };
   window.cerrarMapaPuestosLimpieza = function () { try { rm.mapa?.remove(); } catch (_) {} rm.mapa = null; document.getElementById('lp-mapa-modal')?.remove(); };
-  window.pestanaMapaLimpieza = function (p) {
-    rm.pestana = p;
-    if (p !== 'grupos') { rm.grupos = null; pintarPines(); }
-    rm.capaRuta.clearLayers();
-    renderLateral();
-  };
-  window.seleccionarPuntoMapa = function (i) {
-    rm.seleccionado = rm.puntos[i] || null;
-    rm.pestana = 'puesto'; rm.grupos = null;
-    rm.capaRuta.clearLayers();
-    pintarPines();
-    renderLateral();
-  };
+  window.pestanaMapaLimpieza = function (p) { rm.pestana = p; rm.capaRuta.clearLayers(); pintarPines(); renderLateral(); };
+  window.seleccionarPuntoMapa = function (i) { rm.seleccionado = rm.puntos[i] || null; rm.pestana = 'puesto'; rm.capaRuta.clearLayers(); pintarPines(); renderLateral(); };
 
   function renderLateral() {
     const caja = document.getElementById('lp-rutas-lateral'); if (!caja) return;
-    const pest = [['puesto', '📍 PUESTO'], ['ruta', '🧭 ¿QUÉ RUTA TOMO?'], ['grupos', '👥 GRUPOS']];
+    const pest = [['puesto', '📍 PUESTO'], ['ruta', '🧭 RUTA'], ['grupos', '👥 GRUPOS']];
+    const scroll = caja.querySelector('.lp-lateral-cuerpo')?.scrollTop || 0;
     caja.innerHTML = `<nav class="lp-pestanas">${pest.map(([k, t]) => `<button class="${rm.pestana === k ? 'activo' : ''}" onclick="pestanaMapaLimpieza('${k}')">${t}</button>`).join('')}</nav>
       <div class="lp-lateral-cuerpo">${rm.pestana === 'ruta' ? lateralRuta() : rm.pestana === 'grupos' ? lateralGrupos() : lateralPuesto()}</div>`;
+    const cuerpo = caja.querySelector('.lp-lateral-cuerpo'); if (cuerpo) cuerpo.scrollTop = scroll;
   }
 
+  // ── Pestaña PUESTO ─────────────────────────────────────────────
   function lateralPuesto() {
     const pt = rm.seleccionado;
-    if (!pt) return `<div class="lp-ayuda-lateral"><b>TOCA UN PUESTO EN EL MAPA</b><p>Verás sus datos y la distancia a los demás puestos, con la ruta por calles para llegar.</p>
+    if (!pt) return `<div class="lp-ayuda-lateral"><b>TOCA UN PUESTO EN EL MAPA</b><p>Verás sus datos y la distancia a los demás. Para ir a varios puestos usa la pestaña <b>🧭 RUTA</b>; para repartir el trabajo, <b>👥 GRUPOS</b>.</p>
       <ul class="lp-lista-puestos">${rm.puntos.map((x, i) => `<li><button onclick="seleccionarPuntoMapa(${i})"><b>${esc(x.s.name)}</b><small>${esc(x.p.name)}</small></button></li>`).join('')}</ul></div>`;
     const cercanos = rm.puntos.filter((o) => o !== pt).map((o) => ({ o, i: rm.puntos.indexOf(o), km: distanciaKm(pt, o) })).sort((x, y) => x.km - y.km);
     return `<div class="lp-puesto-ficha">${vinetaAsoc(pt.p.association_id, pt.p.association)}<h4>${esc(pt.s.name)}</h4><p>${esc(pt.p.name)}</p>
@@ -503,7 +508,7 @@
         <a href="https://www.google.com/maps?q=${pt.lat},${pt.lng}" target="_blank" rel="noopener">↗ VER EN GOOGLE MAPS</a></div>
       <h5>DISTANCIA A LOS DEMÁS PUESTOS <small>(en línea recta; toca 🚗 para la ruta por calles)</small></h5>
       <ol class="lp-cercanos">${cercanos.map(({ o, i, km }) => `<li id="lp-cerca-${i}"><div><b>${esc(o.s.name)}</b><small>${esc(o.p.name)}</small><span class="lp-ruta-dato"></span></div>
-        <em>${textoKm(km)}</em><div class="lp-cerca-botones"><button onclick="rutaEntrePuestosLimpieza(${rm.puntos.indexOf(pt)}, ${i})" title="Trazar ruta por calles">🚗 RUTA</button><a href="${enlaceGoogle([pt, o])}" target="_blank" rel="noopener" title="Abrir en Google Maps">↗</a></div></li>`).join('') || '<li class="lp-vacio">NO HAY OTROS PUESTOS EN ESTE MAPA.</li>'}</ol>`;
+        <em>${textoKm(km)}</em><div class="lp-cerca-botones"><button onclick="rutaEntrePuestosLimpieza(${rm.puntos.indexOf(pt)}, ${i})">🚗 RUTA</button><a href="${enlaceGoogle([pt, o])}" target="_blank" rel="noopener" title="Abrir en Google Maps">↗</a></div></li>`).join('') || '<li class="lp-vacio">NO HAY OTROS PUESTOS EN ESTE MAPA.</li>'}</ol>`;
   }
   window.rutaEntrePuestosLimpieza = async function (a, b) {
     const o = rm.puntos[a], d = rm.puntos[b];
@@ -518,48 +523,137 @@
     } catch (e) { if (fila) fila.textContent = e.message || String(e); }
   };
 
-  // Busca puestos por texto (puesto, proyecto, ciudad, dirección)
-  function buscarPuntos(texto) {
-    const q = norm(texto).split(/\s+/).filter(Boolean);
-    if (!q.length) return [];
-    return rm.puntos.filter((x) => { const t = norm([x.s.name, x.p.name, x.p.association, x.s.city, x.s.address].join(' ')); return q.every((w) => t.includes(w)); });
+  // ── Selector de salida (puntos de partida, mi ubicación o un puesto) ──
+  function opcionesSalida(actual, conNinguno) {
+    const bs = bases();
+    return `${conNinguno ? `<option value="" ${!actual ? 'selected' : ''}>— SIN PUNTO DE PARTIDA —</option>` : ''}
+      ${bs.length ? `<optgroup label="PUNTOS DE PARTIDA">${bs.map((b) => `<option value="b:${b.id}" ${actual === `b:${b.id}` ? 'selected' : ''}>🏢 ${esc(b.nombre)}</option>`).join('')}</optgroup>` : ''}
+      <option value="gps" ${actual === 'gps' ? 'selected' : ''}>📍 MI UBICACIÓN ACTUAL</option>
+      <optgroup label="PUESTOS">${rm.puntos.map((x, i) => `<option value="p:${i}" ${actual === `p:${i}` ? 'selected' : ''}>${esc(x.s.name)} · ${esc(x.p.name)}</option>`).join('')}</optgroup>`;
   }
-  function lateralRuta() {
-    const opciones = rm.puntos.map((x) => `<option value="${esc(etiquetaPunto(x))}">`).join('');
-    return `<div class="lp-asistente">
-      <p class="lp-ayuda-lateral">Escribe desde dónde sales y a dónde vas. Si el destino coincide con varios puestos (por ejemplo <b>"CDJ"</b>), arma el recorrido por todos en el orden más corto.</p>
-      <label>DESDE<input id="lpr-desde" list="lpr-lista" placeholder="EJ. UNIVERSIDAD DE GUAYAQUIL" value="${esc(rm.seleccionado ? etiquetaPunto(rm.seleccionado) : '')}"></label>
-      <label>HASTA<input id="lpr-hasta" list="lpr-lista" placeholder="EJ. CDJ, CORTE PROVINCIAL…"></label>
-      <datalist id="lpr-lista">${opciones}</datalist>
-      <label class="lp-check"><input type="checkbox" id="lpr-volver"> REGRESAR AL PUNTO DE PARTIDA</label>
-      <button class="lp-primario" onclick="calcularRutaAsistenteLimpieza()">🧭 BUSCAR RUTA</button>
-      <div id="lpr-resultado"></div></div>`;
+  async function resolverSalida(valorSalida) {
+    if (!valorSalida) return null;
+    if (valorSalida === 'gps') {
+      if (!navigator.geolocation) throw new Error('ESTE DISPOSITIVO NO PERMITE OBTENER LA UBICACIÓN.');
+      const pos = await new Promise((ok, mal) => navigator.geolocation.getCurrentPosition(ok, () => mal(new Error('NO SE PUDO OBTENER TU UBICACIÓN. REVISA EL PERMISO DE UBICACIÓN DEL NAVEGADOR.')), { enableHighAccuracy: true, timeout: 15000 }));
+      return { tipo: 'gps', nombre: 'MI UBICACIÓN', lat: pos.coords.latitude, lng: pos.coords.longitude };
+    }
+    if (valorSalida.startsWith('b:')) return bases().find((b) => b.id === valorSalida.slice(2)) || null;
+    if (valorSalida.startsWith('p:')) return rm.puntos[Number(valorSalida.slice(2))] || null;
+    return null;
   }
-  window.calcularRutaAsistenteLimpieza = async function () {
-    const salida = document.getElementById('lpr-resultado');
-    const desdeTxt = valor('lpr-desde'), hastaTxt = valor('lpr-hasta');
-    const exacto = (t) => rm.puntos.find((x) => norm(etiquetaPunto(x)) === norm(t));
-    const origen = exacto(desdeTxt) || buscarPuntos(desdeTxt)[0];
-    if (!origen) { salida.innerHTML = '<div class="lp-mal">NO ENCONTRÉ EL PUNTO DE PARTIDA. ELIGE UN PUESTO DE LA LISTA.</div>'; return; }
-    let destinos = exacto(hastaTxt) ? [exacto(hastaTxt)] : buscarPuntos(hastaTxt);
-    destinos = destinos.filter((x) => x !== origen);
-    if (!destinos.length) { salida.innerHTML = '<div class="lp-mal">NO ENCONTRÉ PUESTOS QUE COINCIDAN CON EL DESTINO.</div>'; return; }
-    if (destinos.length > 24) { salida.innerHTML = '<div class="lp-mal">EL DESTINO COINCIDE CON DEMASIADOS PUESTOS. SÉ MÁS ESPECÍFICO.</div>'; return; }
-    salida.innerHTML = '<p class="lp-nota">CALCULANDO EL MEJOR RECORRIDO POR CALLES…</p>';
+  // Alta de un punto de partida (oficina, bodega…)
+  function formularioPunto() {
+    if (!puedeGestionar()) return '';
+    if (!rm.nuevoPunto) return '<button class="lp-enlace" onclick="rm_nuevoPuntoLimpieza(true)">＋ AGREGAR PUNTO DE PARTIDA (OFICINA, BODEGA…)</button>';
+    return `<div class="lp-nuevo-punto"><b>NUEVO PUNTO DE PARTIDA</b>
+      <label>NOMBRE<input id="lpb-nombre" maxlength="80" placeholder="EJ. DEFEN CIA. LTDA. (MATRIZ)"></label>
+      <label>UBICACIÓN: PEGA UN ENLACE DE GOOGLE MAPS O "LATITUD, LONGITUD"<input id="lpb-enlace" placeholder="https://maps.google.com/…/@-2.15,-79.90,17z" oninput="leerCoordenadasPuntoLimpieza(this.value)"></label>
+      <div class="lp-dos"><label>LATITUD<input id="lpb-lat" inputmode="decimal"></label><label>LONGITUD<input id="lpb-lng" inputmode="decimal"></label></div>
+      <div class="lp-dos"><button onclick="usarMiUbicacionPuntoLimpieza()">📍 USAR MI UBICACIÓN</button><button class="lp-primario" onclick="guardarPuntoPartidaLimpieza()">GUARDAR</button></div>
+      <button class="lp-enlace" onclick="rm_nuevoPuntoLimpieza(false)">CANCELAR</button></div>`;
+  }
+  window.rm_nuevoPuntoLimpieza = function (v) { rm.nuevoPunto = v; renderLateral(); };
+  window.leerCoordenadasPuntoLimpieza = function (t) { const m = String(t).match(/(-?\d{1,2}\.\d+)\s*,\s*(-?\d{2,3}\.\d+)/); if (m) { document.getElementById('lpb-lat').value = m[1]; document.getElementById('lpb-lng').value = m[2]; } };
+  window.usarMiUbicacionPuntoLimpieza = async function () {
+    try { const p = await resolverSalida('gps'); document.getElementById('lpb-lat').value = p.lat.toFixed(6); document.getElementById('lpb-lng').value = p.lng.toFixed(6); }
+    catch (e) { alert(e.message || e); }
+  };
+  window.guardarPuntoPartidaLimpieza = async function () {
+    const nombre = valor('lpb-nombre').trim(), lat = valor('lpb-lat').trim(), lng = valor('lpb-lng').trim();
+    if (!nombre || !lat || !lng) return alert('COMPLETA EL NOMBRE Y LA UBICACIÓN.');
     try {
-      const { paradas, ruta } = await recorridoOptimo(origen, destinos, Boolean(document.getElementById('lpr-volver')?.checked));
-      dibujarRuta(ruta, paradas);
-      salida.innerHTML = `<div class="lp-ruta-total"><b>${textoKm(ruta.km)}</b> · ≈ ${textoMin(ruta.seg)} EN VEHÍCULO · ${destinos.length} PARADA(S)</div>
-        <ol class="lp-paradas">${paradas.map((x, i) => `<li><b>${i + 1}. ${esc(x.s.name)}</b><small>${esc(x.p.name)}</small>${i ? `<em>+ ${textoKm(ruta.tramos[i - 1].km)} · ${textoMin(ruta.tramos[i - 1].seg)}</em>` : '<em>SALIDA</em>'}</li>`).join('')}</ol>
-        <a class="lp-boton-google" href="${enlaceGoogle(paradas)}" target="_blank" rel="noopener">↗ ABRIR RECORRIDO EN GOOGLE MAPS</a>
-        ${paradas.length > 11 ? '<p class="lp-nota">GOOGLE MAPS ADMITE HASTA 10 PARADAS POR ENLACE; EL RECORRIDO COMPLETO SE VE EN ESTE MAPA.</p>' : ''}`;
-    } catch (e) { salida.innerHTML = `<div class="lp-mal">${esc(e.message || e)}</div>`; }
+      const r = await supabaseRpc('save_cleaning_reference_point', { p_payload: { name: nombre, latitude: lat, longitude: lng } });
+      lp.bases = await supabaseRpc('get_cleaning_reference_points', {});
+      rm.nuevoPunto = false; rm.origen = `b:${r.id}`; rm.origenGrupos = rm.origenGrupos || `b:${r.id}`;
+      pintarPines(); renderLateral();
+    } catch (e) { alert(`NO SE PUDO GUARDAR: ${e.message || e}`); }
   };
 
-  // ── Grupos de trabajo (k-medias sobre las coordenadas) ─────────
+  // ── Pestaña RUTA: varios destinos ──────────────────────────────
+  function lateralRuta() {
+    const q = norm(rm.filtroDestino);
+    const visibles = rm.puntos.map((x, i) => ({ x, i })).filter(({ x }) => !q || norm([x.s.name, x.p.name, x.p.association, x.s.address].join(' ')).includes(q));
+    const r = rm.resultadoRuta;
+    return `<div class="lp-asistente">
+      <label>1. ¿DESDE DÓNDE SALES?<select id="lpr-salida" onchange="rm_salidaLimpieza(this.value)">${opcionesSalida(rm.origen, false)}</select></label>
+      ${formularioPunto()}
+      <div class="lp-paso"><b>2. ¿A QUÉ PUESTOS VAS?</b> <small>(márcalos aquí o tocando los pines del mapa)</small></div>
+      <div class="lp-dos"><input id="lpr-buscar" placeholder="FILTRAR: EJ. CDJ" value="${esc(rm.filtroDestino)}" oninput="rm_filtroDestinoLimpieza(this.value)"><button onclick="rm_marcarVisiblesLimpieza(true)">MARCAR ${visibles.length}</button></div>
+      <ul class="lp-check-lista">${visibles.map(({ x, i }) => `<li><label><input type="checkbox" ${rm.destinos.includes(i) ? 'checked' : ''} onchange="alternarDestinoMapa(${i})"><span><b>${esc(x.s.name)}</b><small>${esc(x.p.name)}</small></span>${rm.destinos.includes(i) ? `<em>${rm.destinos.indexOf(i) + 1}</em>` : ''}</label></li>`).join('') || '<li class="lp-vacio">NINGÚN PUESTO COINCIDE.</li>'}</ul>
+      <div class="lp-dos"><span class="lp-nota">${rm.destinos.length} DESTINO(S) MARCADO(S)</span>${rm.destinos.length ? '<button onclick="rm_marcarVisiblesLimpieza(false)">QUITAR TODOS</button>' : ''}</div>
+      <label class="lp-check"><input type="checkbox" ${rm.volver ? 'checked' : ''} onchange="rm.volver=this.checked"> REGRESAR AL PUNTO DE SALIDA AL TERMINAR</label>
+      <button class="lp-primario" onclick="calcularRutaMultipleLimpieza()" ${rm.destinos.length ? '' : 'disabled'}>🧭 CALCULAR LA MEJOR RUTA</button>
+      <div id="lpr-resultado">${r ? resultadoRutaHtml(r) : ''}</div></div>`;
+  }
+  window.rm = rm;
+  window.rm_salidaLimpieza = function (v) { rm.origen = v; rm.resultadoRuta = null; rm.capaRuta.clearLayers(); };
+  window.rm_filtroDestinoLimpieza = function (v) { rm.filtroDestino = v; clearTimeout(rm._t); rm._t = setTimeout(() => { renderLateral(); const i = document.getElementById('lpr-buscar'); if (i) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); } }, 250); };
+  window.alternarDestinoMapa = function (i) {
+    rm.destinos = rm.destinos.includes(i) ? rm.destinos.filter((x) => x !== i) : [...rm.destinos, i];
+    rm.resultadoRuta = null; rm.capaRuta.clearLayers();
+    pintarPines(); renderLateral();
+  };
+  window.rm_marcarVisiblesLimpieza = function (marcar) {
+    const q = norm(rm.filtroDestino);
+    const vis = rm.puntos.map((x, i) => ({ x, i })).filter(({ x }) => !q || norm([x.s.name, x.p.name, x.p.association, x.s.address].join(' ')).includes(q)).map(({ i }) => i);
+    rm.destinos = marcar ? [...rm.destinos, ...vis.filter((i) => !rm.destinos.includes(i))] : [];
+    rm.resultadoRuta = null; rm.capaRuta.clearLayers(); pintarPines(); renderLateral();
+  };
+  window.calcularRutaMultipleLimpieza = async function () {
+    const salidaHtml = document.getElementById('lpr-resultado');
+    try {
+      const origen = await resolverSalida(rm.origen);
+      if (!origen) throw new Error('ELIGE DESDE DÓNDE SALES.');
+      const destinos = rm.destinos.map((i) => rm.puntos[i]).filter((x) => x !== origen);
+      if (!destinos.length) throw new Error('MARCA AL MENOS UN PUESTO DE DESTINO.');
+      if (destinos.length > 24) throw new Error('MÁXIMO 24 DESTINOS POR RUTA. USA LA PESTAÑA GRUPOS PARA REPARTIRLOS.');
+      salidaHtml.innerHTML = '<p class="lp-nota">CALCULANDO EL MEJOR RECORRIDO POR CALLES…</p>';
+      const optimo = await recorridoOptimo(origen, destinos, rm.volver);
+      // Comparación con el orden en que se marcaron los puestos
+      let marcado = null;
+      if (destinos.length > 1) {
+        const paradasM = [origen, ...destinos, ...(rm.volver ? [origen] : [])];
+        const mismo = paradasM.every((x, k) => x === optimo.paradas[k]);
+        if (!mismo) { try { marcado = { paradas: paradasM, ruta: await rutaCalles(paradasM) }; } catch (_) {} }
+      }
+      rm.resultadoRuta = { origen, optimo, marcado, viendo: 'optimo' };
+      dibujarRuta(optimo.ruta, optimo.paradas);
+      renderLateral();
+    } catch (e) { if (salidaHtml) salidaHtml.innerHTML = `<div class="lp-mal">${esc(e.message || e)}</div>`; }
+  };
+  function resultadoRutaHtml(r) {
+    const o = r.optimo, m = r.marcado, ver = r.viendo === 'marcado' && m ? m : o;
+    const ahorroKm = m ? m.ruta.km - o.ruta.km : 0, ahorroMin = m ? (m.ruta.seg - o.ruta.seg) / 60 : 0;
+    const recomendaciones = [];
+    if (m && (ahorroKm > 0.3 || ahorroMin > 2)) recomendaciones.push(`✅ La <b>ruta recomendada</b> te ahorra <b>${textoKm(Math.max(0, ahorroKm))}</b> y <b>${Math.max(0, Math.round(ahorroMin))} min</b> frente al orden en que marcaste los puestos.`);
+    else if (r.optimo.paradas.length > 2) recomendaciones.push('✅ El orden en que marcaste los puestos ya es el más conveniente.');
+
+    const tramoMax = o.ruta.tramos.reduce((mx, t, k) => (t.seg > (mx?.t.seg || 0) ? { t, k } : mx), null);
+    if (tramoMax && o.ruta.tramos.length > 2 && tramoMax.t.seg > o.ruta.seg * 0.45) recomendaciones.push(`⚠ El tramo hacia <b>${esc(nombrePunto(o.paradas[tramoMax.k + 1]))}</b> ocupa casi la mitad del tiempo (${textoMin(tramoMax.t.seg)}); considera atenderlo en otro grupo o en otro día.`);
+    if (o.ruta.seg > 3 * 3600) recomendaciones.push(`⚠ El recorrido dura más de 3 horas en vehículo. Usa <b>👥 GRUPOS</b> para dividirlo.`);
+    return `${recomendaciones.length ? `<div class="lp-recomendacion">${recomendaciones.join('<br>')}</div>` : ''}
+      ${m ? `<div class="lp-comparar"><button class="${r.viendo !== 'marcado' ? 'activo' : ''}" onclick="rm_verRutaLimpieza('optimo')">⭐ RECOMENDADA<br><b>${textoKm(o.ruta.km)} · ${textoMin(o.ruta.seg)}</b></button><button class="${r.viendo === 'marcado' ? 'activo' : ''}" onclick="rm_verRutaLimpieza('marcado')">TU ORDEN<br><b>${textoKm(m.ruta.km)} · ${textoMin(m.ruta.seg)}</b></button></div>` : ''}
+      <div class="lp-ruta-total"><b>${textoKm(ver.ruta.km)}</b> · ≈ ${textoMin(ver.ruta.seg)} EN VEHÍCULO · ${ver.paradas.length - 1} TRAMO(S)</div>
+      <ol class="lp-paradas">${ver.paradas.map((x, i) => `<li><b>${i + 1}. ${esc(nombrePunto(x))}</b><small>${esc(detallePunto(x))}</small>${i ? `<em>+ ${textoKm(ver.ruta.tramos[i - 1].km)} · ${textoMin(ver.ruta.tramos[i - 1].seg)}</em>` : '<em>SALIDA</em>'}</li>`).join('')}</ol>
+      <a class="lp-boton-google" href="${enlaceGoogle(ver.paradas)}" target="_blank" rel="noopener">↗ ABRIR ESTA RUTA EN GOOGLE MAPS</a>
+      ${ver.paradas.length > 11 ? '<p class="lp-nota">GOOGLE MAPS ADMITE HASTA 10 PARADAS POR ENLACE; EL RECORRIDO COMPLETO SE VE EN ESTE MAPA.</p>' : ''}
+      ${rm.destinos.length > 3 ? '<button class="lp-enlace" onclick="rm_repartirDesdeRutaLimpieza()">👥 REPARTIR ESTOS PUESTOS EN GRUPOS</button>' : ''}`;
+  }
+  window.rm_verRutaLimpieza = function (cual) {
+    const r = rm.resultadoRuta; if (!r) return;
+    r.viendo = cual; const v = cual === 'marcado' && r.marcado ? r.marcado : r.optimo;
+    dibujarRuta(v.ruta, v.paradas, cual === 'marcado' ? '#64748b' : '#0f766e');
+    renderLateral();
+  };
+  window.rm_repartirDesdeRutaLimpieza = function () {
+    rm.origenGrupos = rm.origen; rm.grupos = null; rm.sinGrupo = [...rm.destinos]; rm.rutasGrupo = {}; rm.soloMarcados = true;
+    pestanaMapaLimpieza('grupos');
+  };
+
+  // ── Pestaña GRUPOS ─────────────────────────────────────────────
   function kMedias(puntos, k) {
     k = Math.max(1, Math.min(k, puntos.length));
-    // Inicio determinista: el primer centro es el punto más al norte y cada siguiente el más lejano a los elegidos
     const centros = [[...puntos].sort((a, b) => b.lat - a.lat)[0]].map((x) => ({ lat: x.lat, lng: x.lng }));
     while (centros.length < k) {
       const lejano = puntos.reduce((m, x) => { const d = Math.min(...centros.map((c) => distanciaKm(c, x))); return d > m.d ? { x, d } : m; }, { x: puntos[0], d: -1 }).x;
@@ -574,75 +668,171 @@
     }
     return centros.map((c, i) => puntos.filter((_, j) => asignacion[j] === i)).filter((g) => g.length);
   }
-  function armarGrupos(k, inicio) {
-    return kMedias(rm.puntos, k).map((g, i) => {
-      // Cada grupo empieza por el puesto más cercano al punto de partida (si se eligió) o por el más al norte
-      const primero = inicio ? g.reduce((m, x) => (distanciaKm(inicio, x) < distanciaKm(inicio, m) ? x : m), g[0]) : [...g].sort((a, b) => b.lat - a.lat)[0];
-      const orden = ordenarRecorrido(primero, g.filter((x) => x !== primero));
-      return { n: i + 1, color: COLORES_GRUPO[i % COLORES_GRUPO.length], puntos: orden, km: kmRecorrido(inicio ? [inicio, ...orden] : orden), aux: orden.reduce((s, x) => s + Number(x.s.staff_count || 0), 0) };
-    });
+  // Equilibrio: mueve puestos de un grupo a otro mientras baje el recorrido más largo
+  function equilibrar(grupos, inicio) {
+    for (let vuelta = 0; vuelta < 60; vuelta++) {
+      const largos = grupos.map((g) => kmGrupo(g, inicio));
+      const peor = largos.indexOf(Math.max(...largos));
+      let mejor = null;
+      grupos[peor].forEach((pt) => grupos.forEach((g, j) => {
+        if (j === peor || grupos[peor].length < 2) return;
+        const a = kmGrupo(grupos[peor].filter((x) => x !== pt), inicio), b = kmGrupo([...g, pt], inicio);
+        const nuevoMax = Math.max(a, b, ...largos.filter((_, k) => k !== peor && k !== j));
+        if (nuevoMax < largos[peor] - 0.05 && (!mejor || nuevoMax < mejor.max)) mejor = { pt, j, max: nuevoMax };
+      }));
+      if (!mejor) break;
+      grupos[peor] = grupos[peor].filter((x) => x !== mejor.pt); grupos[mejor.j].push(mejor.pt);
+    }
+    return grupos;
+  }
+  const puntosParaGrupos = () => (rm.soloMarcados && rm.destinos.length ? rm.destinos.map((i) => rm.puntos[i]) : rm.puntos);
+  function crearGrupos(listas) { rm.grupos = listas.map((pts, i) => ({ n: i + 1, color: COLORES_GRUPO[i % COLORES_GRUPO.length], puntos: pts })); rm.rutasGrupo = {}; }
+  // Comparativa: recorrido más largo (línea recta) según la cantidad de grupos
+  function comparativa(inicio) {
+    const pts = puntosParaGrupos(), filas = [];
+    for (let k = 1; k <= Math.min(6, pts.length); k++) {
+      const gs = equilibrar(kMedias(pts, k), inicio);
+      const largos = gs.map((g) => kmGrupo(g, inicio));
+      filas.push({ k, max: Math.max(...largos), total: largos.reduce((a, b) => a + b, 0) });
+    }
+    // Recomendado: a partir de aquí, sumar un grupo reduce el más largo en menos de 25 %
+    let rec = filas.length ? filas[filas.length - 1].k : 1;
+    for (let i = 0; i < filas.length - 1; i++) { if (filas[i + 1].max > filas[i].max * 0.75) { rec = filas[i].k; break; } }
+    return { filas, rec };
   }
   function lateralGrupos() {
-    const n = rm.puntos.length;
-    const g = rm.grupos;
+    const pts = puntosParaGrupos();
+    const asignados = rm.grupos ? rm.grupos.flatMap((g) => g.puntos) : [];
+    const sinGrupo = pts.filter((x) => !asignados.includes(x));
     return `<div class="lp-asistente">
-      <p class="lp-ayuda-lateral">Reparte los ${n} puestos de este mapa en grupos de trabajo por cercanía (por ejemplo, para entregar suministros) y ordena el recorrido de cada grupo.</p>
-      <label>PUNTO DE PARTIDA (OPCIONAL)<input id="lpg-inicio" list="lpg-lista" placeholder="EJ. BODEGA O UN PUESTO"><datalist id="lpg-lista">${rm.puntos.map((x) => `<option value="${esc(etiquetaPunto(x))}">`).join('')}</datalist></label>
+      <label>PUNTO DE SALIDA DE LOS GRUPOS<select id="lpg-salida" onchange="rm.origenGrupos=this.value; rm.rutasGrupo={}; renderLateralLimpieza()">${opcionesSalida(rm.origenGrupos, true)}</select></label>
+      ${formularioPunto()}
+      ${rm.soloMarcados && rm.destinos.length ? `<p class="lp-nota">REPARTIENDO LOS ${rm.destinos.length} PUESTOS MARCADOS EN RUTA. <button class="lp-enlace" onclick="rm.soloMarcados=false; rm.grupos=null; renderLateralLimpieza()">USAR TODOS LOS PUESTOS</button></p>` : `<p class="lp-nota">REPARTIENDO LOS ${pts.length} PUESTOS DE ESTE MAPA.</p>`}
       <div class="lp-grupos-modo">
-        <label>NÚMERO DE GRUPOS<input id="lpg-k" type="number" min="1" max="${Math.min(10, n)}" value="${Math.min(2, n)}"></label>
-        <button class="lp-primario" onclick="calcularGruposLimpieza('k')">ARMAR GRUPOS</button>
+        <label>¿CUÁNTOS GRUPOS?<input id="lpg-k" type="number" min="1" max="${Math.min(10, pts.length)}" value="${rm.grupos ? rm.grupos.length : Math.min(2, pts.length)}"></label>
+        <button class="lp-primario" onclick="sugerirGruposLimpieza()">⭐ SUGERIR GRUPOS</button>
       </div>
-      <div class="lp-grupos-modo">
-        <label>O MÁXIMO DE KM POR GRUPO<input id="lpg-max" type="number" min="1" max="500" value="15"></label>
-        <button onclick="calcularGruposLimpieza('max')">¿CUÁNTOS GRUPOS?</button>
-      </div>
-      <div id="lpg-resultado">${g ? resultadoGrupos(g) : ''}</div></div>`;
+      <div class="lp-dos"><button onclick="gruposManualesLimpieza()">✋ ARMAR A MANO</button><button onclick="compararGruposLimpieza()">📊 ¿CUÁNTOS CONVIENEN?</button></div>
+      <div id="lpg-comparativa">${rm.comparativa ? comparativaHtml(rm.comparativa) : ''}</div>
+      ${rm.grupos ? gruposHtml(sinGrupo) : ''}</div>`;
   }
-  function resultadoGrupos(g) {
-    return `<div class="lp-ruta-total">${g.length} GRUPO(S) · ${g.reduce((s, x) => s + x.puntos.length, 0)} PUESTO(S) · ${textoKm(g.reduce((s, x) => s + x.km, 0))} EN LÍNEA RECTA</div>
-      ${g.map((x) => `<article class="lp-grupo" style="border-left-color:${x.color}"><header><b style="color:${x.color}">GRUPO ${x.n}</b><small>${x.puntos.length} puesto(s) · ${x.aux} aux. · ≈ ${textoKm(x.km)}</small></header>
-        <ol>${x.puntos.map((pt) => `<li>${esc(pt.s.name)} <small>${esc(pt.p.name)}</small></li>`).join('')}</ol>
-        <div class="lp-cerca-botones"><button onclick="rutaGrupoLimpieza(${x.n - 1})">🚗 VER RECORRIDO</button><a href="${enlaceGoogle(rm.grupoInicio ? [rm.grupoInicio, ...x.puntos] : x.puntos)}" target="_blank" rel="noopener">↗ GOOGLE MAPS</a></div>
-        <span class="lp-ruta-dato" id="lpg-dato-${x.n - 1}"></span></article>`).join('')}
+  window.renderLateralLimpieza = () => { pintarPines(); renderLateral(); };
+  function comparativaHtml(c) {
+    return `<table class="lp-tabla lp-comp"><thead><tr><th>GRUPOS</th><th>RECORRIDO MÁS LARGO</th><th>KM TOTAL</th></tr></thead><tbody>
+      ${c.filas.map((f) => `<tr class="${f.k === c.rec ? 'lp-rec' : ''}" onclick="document.getElementById('lpg-k').value=${f.k}; sugerirGruposLimpieza()"><td><b>${f.k}</b>${f.k === c.rec ? ' ⭐' : ''}</td><td>${textoKm(f.max)}</td><td>${textoKm(f.total)}</td></tr>`).join('')}
+      </tbody></table><p class="lp-nota">⭐ RECOMENDADO: ${c.rec} GRUPO(S). AGREGAR MÁS GRUPOS YA NO REDUCE MUCHO EL RECORRIDO MÁS LARGO. DISTANCIAS EN LÍNEA RECTA; TOCA UNA FILA PARA ARMAR ESOS GRUPOS.</p>`;
+  }
+  function gruposHtml(sinGrupo) {
+    const opcionesMover = (pt) => `<select onchange="moverPuestoGrupoLimpieza(${rm.puntos.indexOf(pt)}, this.value)"><option value="">MOVER…</option>${rm.grupos.map((g, j) => `<option value="${j}">GRUPO ${g.n}</option>`).join('')}<option value="-1">SIN GRUPO</option></select>`;
+    const rutas = rm.rutasGrupo;
+    const calculadas = rm.grupos.filter((g, j) => rutas[j]?.ruta);
+    let recomend = '';
+    if (calculadas.length > 1) {
+      const tiempos = rm.grupos.map((g, j) => ({ g, j, seg: rutas[j]?.ruta?.seg || 0 })).filter((x) => x.seg);
+      const max = tiempos.reduce((a, b) => (b.seg > a.seg ? b : a)), min = tiempos.reduce((a, b) => (b.seg < a.seg ? b : a));
+      if (max.seg > min.seg * 1.5 && max.seg - min.seg > 15 * 60) {
+        // Puesto del grupo más largo que queda más cerca del grupo más corto
+        const cand = max.g.puntos.map((pt) => ({ pt, km: Math.min(...min.g.puntos.map((o) => distanciaKm(pt, o))) })).sort((a, b) => a.km - b.km)[0];
+        recomend = `⚖ El <b>GRUPO ${max.g.n}</b> tarda ${textoMin(max.seg)} y el <b>GRUPO ${min.g.n}</b> ${textoMin(min.seg)}. ${cand ? `Sugerencia: mover <b>${esc(cand.pt.s.name)}</b> al GRUPO ${min.g.n} (está a ${textoKm(cand.km)} de ese grupo). <button class="lp-enlace" onclick="moverPuestoGrupoLimpieza(${rm.puntos.indexOf(cand.pt)}, ${min.j}); calcularRutasGruposLimpieza()">APLICAR</button>` : ''}`;
+      } else recomend = '✅ Los grupos están equilibrados en tiempo de recorrido.';
+    }
+    if (sinGrupo.length) recomend = `⚠ Quedan <b>${sinGrupo.length} puesto(s) sin grupo</b>; no entran en ninguna ruta.${recomend ? '<br>' + recomend : ''}`;
+    return `<div class="lp-dos lp-acciones-grupos"><button onclick="equilibrarGruposLimpieza()">⚖ EQUILIBRAR</button><button onclick="agregarGrupoLimpieza()">＋ GRUPO</button><button class="lp-primario" onclick="calcularRutasGruposLimpieza()">🚗 CALCULAR RUTAS</button></div>
+      ${recomend ? `<div class="lp-recomendacion">${recomend}</div>` : ''}
+      ${calculadas.length ? `<div class="lp-ruta-total">${calculadas.length} RUTA(S) · ${textoKm(calculadas.reduce((s, g) => s + rutas[rm.grupos.indexOf(g)].ruta.km, 0))} EN TOTAL · EL MÁS LARGO ≈ ${textoMin(Math.max(...calculadas.map((g) => rutas[rm.grupos.indexOf(g)].ruta.seg)))}</div>` : ''}
+      ${sinGrupo.length ? `<article class="lp-grupo lp-sin-grupo"><header><b>SIN GRUPO (${sinGrupo.length})</b><small>ASÍGNALOS CON "MOVER…"</small></header><ul>${sinGrupo.map((pt) => `<li id="lpg-p-${rm.puntos.indexOf(pt)}"><span>${esc(pt.s.name)}<small>${esc(pt.p.name)}</small></span>${opcionesMover(pt)}</li>`).join('')}</ul></article>` : ''}
+      ${rm.grupos.map((g, j) => { const r = rutas[j]; const lista = r?.paradas ? r.paradas.filter((x) => x.tipo === 'puesto') : g.puntos; return `<article class="lp-grupo" style="border-left-color:${g.color}"><header><b style="color:${g.color}">GRUPO ${g.n}</b><small>${g.puntos.length} puesto(s) · ${g.puntos.reduce((s, x) => s + Number(x.s.staff_count || 0), 0)} aux.</small></header>
+        <ul>${lista.map((pt, k) => `<li id="lpg-p-${rm.puntos.indexOf(pt)}"><span>${r?.paradas ? `<i>${k + 1}</i>` : ''}${esc(pt.s.name)}<small>${esc(pt.p.name)}</small></span>${opcionesMover(pt)}</li>`).join('') || '<li class="lp-vacio">VACÍO: MUEVE PUESTOS A ESTE GRUPO.</li>'}</ul>
+        ${r?.ruta ? `<span class="lp-ruta-dato">🚗 <b>${textoKm(r.ruta.km)}</b> POR CALLES · ≈ ${textoMin(r.ruta.seg)}</span>` : r?.error ? `<span class="lp-ruta-dato">${esc(r.error)}</span>` : ''}
+        ${g.puntos.length ? `<div class="lp-cerca-botones"><button onclick="verRutaGrupoLimpieza(${j})">🗺 VER EN MAPA</button>${r?.paradas ? `<a href="${enlaceGoogle(r.paradas)}" target="_blank" rel="noopener">↗ GOOGLE MAPS</a>` : ''}</div>` : ''}</article>`; }).join('')}
       <button class="lp-boton-google" onclick="exportarGruposLimpieza()">📊 DESCARGAR GRUPOS EN EXCEL</button>`;
   }
-  window.calcularGruposLimpieza = function (modo) {
-    const txt = valor('lpg-inicio').trim();
-    rm.grupoInicio = txt ? (rm.puntos.find((x) => norm(etiquetaPunto(x)) === norm(txt)) || buscarPuntos(txt)[0] || null) : null;
-    if (txt && !rm.grupoInicio) return alert('NO ENCONTRÉ EL PUNTO DE PARTIDA. ELIGE UN PUESTO DE LA LISTA O DÉJALO VACÍO.');
-    let grupos;
-    if (modo === 'max') {
-      const max = Math.max(1, Number(valor('lpg-max')) || 15);
-      for (let k = 1; k <= Math.min(10, rm.puntos.length); k++) { grupos = armarGrupos(k, rm.grupoInicio); if (grupos.every((x) => x.km <= max)) break; }
-    } else {
-      grupos = armarGrupos(Math.max(1, Math.min(10, Number(valor('lpg-k')) || 1)), rm.grupoInicio);
-    }
-    rm.grupos = grupos;
-    rm.capaRuta.clearLayers();
-    pintarPines((pt) => rm.grupos.find((x) => x.puntos.includes(pt))?.color || '#64748b');
-    const res = document.getElementById('lpg-resultado'); if (res) res.innerHTML = resultadoGrupos(grupos);
+  window.compararGruposLimpieza = async function () {
+    const inicio = await resolverSalida(rm.origenGrupos).catch(() => null);
+    rm.comparativa = comparativa(inicio);
+    renderLateral();
   };
-  window.rutaGrupoLimpieza = async function (i) {
-    const g = rm.grupos?.[i]; if (!g) return;
-    const paradas = rm.grupoInicio && !g.puntos.includes(rm.grupoInicio) ? [rm.grupoInicio, ...g.puntos] : g.puntos;
-    const dato = document.getElementById(`lpg-dato-${i}`);
-    if (paradas.length < 2) { rm.mapa.setView([paradas[0].lat, paradas[0].lng], 15); if (dato) dato.textContent = 'UN SOLO PUESTO EN ESTE GRUPO.'; return; }
-    if (dato) dato.textContent = 'CALCULANDO RECORRIDO…';
-    try {
-      const r = await recorridoOptimo(paradas[0], paradas.slice(1), false);
-      dibujarRuta(r.ruta, r.paradas, g.color);
-      if (dato) dato.innerHTML = `🚗 <b>${textoKm(r.ruta.km)}</b> POR CALLES · ≈ ${textoMin(r.ruta.seg)}<br>ORDEN: ${r.paradas.map((x) => esc(x.s.name)).join(' → ')}`;
+  window.sugerirGruposLimpieza = async function () {
+    const pts = puntosParaGrupos();
+    const k = Math.max(1, Math.min(10, pts.length, Number(valor('lpg-k')) || 1));
+    let inicio = null; try { inicio = await resolverSalida(rm.origenGrupos); } catch (e) { alert(e.message || e); }
+    crearGrupos(equilibrar(kMedias(pts, k), inicio));
+    rm.comparativa = comparativa(inicio);
+    rm.capaRuta.clearLayers(); pintarPines(); renderLateral();
+  };
+  window.gruposManualesLimpieza = function () {
+    const k = Math.max(1, Math.min(10, Number(valor('lpg-k')) || 2));
+    crearGrupos(Array.from({ length: k }, () => []));
+    rm.capaRuta.clearLayers(); pintarPines(); renderLateral();
+  };
+  window.agregarGrupoLimpieza = function () {
+    if (!rm.grupos || rm.grupos.length >= 10) return;
+    const n = rm.grupos.length;
+    rm.grupos.push({ n: n + 1, color: COLORES_GRUPO[n % COLORES_GRUPO.length], puntos: [] });
+    renderLateral();
+  };
+  window.moverPuestoGrupoLimpieza = function (i, destino) {
+    if (destino === '' || !rm.grupos) return;
+    const pt = rm.puntos[i];
+    rm.grupos.forEach((g) => { g.puntos = g.puntos.filter((x) => x !== pt); });
+    if (Number(destino) >= 0) rm.grupos[Number(destino)].puntos.push(pt);
+    rm.rutasGrupo = {};
+    rm.capaRuta.clearLayers(); pintarPines(); renderLateral();
+  };
+  window.equilibrarGruposLimpieza = async function () {
+    if (!rm.grupos) return;
+    const inicio = await resolverSalida(rm.origenGrupos).catch(() => null);
+    const listas = equilibrar(rm.grupos.map((g) => [...g.puntos]), inicio);
+    rm.grupos.forEach((g, j) => { g.puntos = listas[j]; });
+    rm.rutasGrupo = {}; pintarPines(); renderLateral();
+  };
+  window.calcularRutasGruposLimpieza = async function () {
+    if (!rm.grupos) return;
+    let inicio = null;
+    try { inicio = await resolverSalida(rm.origenGrupos); } catch (e) { alert(e.message || e); return; }
+    rm.capaRuta.clearLayers();
+    for (let j = 0; j < rm.grupos.length; j++) {
+      const g = rm.grupos[j];
+      if (!g.puntos.length) { delete rm.rutasGrupo[j]; continue; }
+      try {
+        const salida = inicio || ordenarRecorrido(g.puntos[0], g.puntos.slice(1))[0];
+        const destinos = inicio ? g.puntos : g.puntos.filter((x) => x !== salida);
+        const r = destinos.length ? await recorridoOptimo(salida, destinos, false) : { paradas: [salida], ruta: null };
+        rm.rutasGrupo[j] = r;
+        if (r.ruta) dibujarRuta(r.ruta, r.paradas, g.color, false);
+      } catch (e) { rm.rutasGrupo[j] = { error: e.message || String(e) }; }
     }
-    catch (e) { if (dato) dato.textContent = e.message || String(e); }
+    const todas = Object.values(rm.rutasGrupo).filter((r) => r.ruta).flatMap((r) => r.ruta.linea);
+    if (todas.length) rm.mapa.fitBounds(L.latLngBounds(todas).pad(0.1), { maxZoom: 15 });
+    renderLateral();
+  };
+  window.verRutaGrupoLimpieza = async function (j) {
+    const g = rm.grupos?.[j]; if (!g) return;
+    let r = rm.rutasGrupo[j];
+    if (!r?.ruta) {
+      try {
+        const inicio = await resolverSalida(rm.origenGrupos);
+        const salida = inicio || ordenarRecorrido(g.puntos[0], g.puntos.slice(1))[0];
+        const destinos = inicio ? g.puntos : g.puntos.filter((x) => x !== salida);
+        if (!destinos.length) { rm.mapa.setView([salida.lat, salida.lng], 15); return; }
+        r = rm.rutasGrupo[j] = await recorridoOptimo(salida, destinos, false);
+      } catch (e) { alert(e.message || e); return; }
+    }
+    dibujarRuta(r.ruta, r.paradas, g.color);
+    renderLateral();
   };
   window.exportarGruposLimpieza = function () {
     if (!rm.grupos || typeof XLSX === 'undefined') return;
     const filas = [];
-    rm.grupos.forEach((g) => g.puntos.forEach((pt, i) => filas.push({ 'GRUPO': g.n, 'ORDEN': i + 1, 'PUESTO': pt.s.name, 'PROYECTO': pt.p.name, 'ASOCIACIÓN': pt.p.association, 'AUXILIARES': Number(pt.s.staff_count || 0), 'HORARIO': pt.s.schedule || '', 'DIRECCIÓN': pt.s.address || '', 'LATITUD': pt.lat, 'LONGITUD': pt.lng, 'GOOGLE MAPS': `https://www.google.com/maps?q=${pt.lat},${pt.lng}` })));
-    const resumen = rm.grupos.map((g) => ({ 'GRUPO': g.n, 'PUESTOS': g.puntos.length, 'AUXILIARES': g.aux, 'KM (LÍNEA RECTA)': Number(g.km.toFixed(1)), 'RECORRIDO EN GOOGLE MAPS': enlaceGoogle(rm.grupoInicio ? [rm.grupoInicio, ...g.puntos] : g.puntos) }));
+    rm.grupos.forEach((g, j) => {
+      const r = rm.rutasGrupo[j];
+      const lista = r?.paradas ? r.paradas.filter((x) => x.tipo === 'puesto') : g.puntos;
+      lista.forEach((pt, i) => filas.push({ 'GRUPO': g.n, 'ORDEN': i + 1, 'PUESTO': pt.s.name, 'PROYECTO': pt.p.name, 'ASOCIACIÓN': pt.p.association, 'AUXILIARES': Number(pt.s.staff_count || 0), 'HORARIO': pt.s.schedule || '', 'DIRECCIÓN': pt.s.address || '', 'LATITUD': pt.lat, 'LONGITUD': pt.lng, 'GOOGLE MAPS': `https://www.google.com/maps?q=${pt.lat},${pt.lng}` }));
+    });
+    const resumen = rm.grupos.map((g, j) => { const r = rm.rutasGrupo[j]; return { 'GRUPO': g.n, 'PUESTOS': g.puntos.length, 'AUXILIARES': g.puntos.reduce((s, x) => s + Number(x.s.staff_count || 0), 0), 'KM POR CALLES': r?.ruta ? Number(r.ruta.km.toFixed(1)) : '', 'TIEMPO (MIN)': r?.ruta ? Math.round(r.ruta.seg / 60) : '', 'RECORRIDO EN GOOGLE MAPS': r?.paradas ? enlaceGoogle(r.paradas) : '' }; });
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(resumen), 'RESUMEN');
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(filas), 'RECORRIDOS');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(filas.length ? filas : [{ 'INFORMACIÓN': 'SIN PUESTOS EN LOS GRUPOS' }]), 'RECORRIDOS');
     XLSX.writeFile(wb, `GRUPOS_LIMPIEZA_${String(lp.w.today).slice(0, 10)}.xlsx`);
   };
 
