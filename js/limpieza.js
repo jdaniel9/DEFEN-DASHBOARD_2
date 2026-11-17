@@ -1,17 +1,29 @@
 // ================================================================
-// limpieza.js — Servicio de LIMPIEZA (base)
+// limpieza.js — Servicio de LIMPIEZA (Grupo Coloma Avilés)
 //   · Al iniciar sesión, quien tiene permiso elige entre SEGURIDAD y
 //     LIMPIEZA. Sin permiso de Limpieza se entra directo a Seguridad.
-//   · Limpieza: mapa del Ecuador con los puestos, proyectos por
-//     asociación (ASOLABU, ASOPRES…), puestos con coordenadas, carga
-//     por Excel y tabla de vencimientos. Lo demás: "en mantenimiento".
+//   · Limpieza: mapa del Ecuador con los puestos (logo de la asociación
+//     al filtrar), mapa detallado por provincia con distancias entre
+//     puestos, proyectos por asociación (tipo de contratación, tipo de
+//     limpieza, metraje, ODC), puestos con horario y coordenadas,
+//     asociaciones con RUC, documento del SRI y logo, carga por Excel,
+//     exportación y tabla de vencimientos. Lo demás: "en mantenimiento".
 // ================================================================
 (function () {
   const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const fecha = (iso) => (iso ? String(iso).slice(0, 10).split('-').reverse().join('/') : '—');
   const norm = (v) => String(v ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().trim();
+  const miles = (n) => Number(n || 0).toLocaleString('es-EC', { maximumFractionDigits: 2 });
   const MODULO_KEY = 'defen_modulo_activo';
-  const lp = { w: null, vista: 'mapa', provincia: '', asociaciones: [], busqueda: '', filtroAsoc: '', filtroProv: '', filtroEstado: 'ACTIVE', horizonte: 60, proyectoId: '', mapa: null, cargando: false };
+  const BUCKET = 'cleaning-files';
+  const LOGO_GRUPO = 'img/limpieza/grupo-coloma-aviles.webp';
+  const LOGOS = { ASOLABU: 'img/limpieza/asolabu.png', ASOPRES: 'img/limpieza/asopres.png', ASOINTERPLES: 'img/limpieza/asointerples.png', ASOINTERPRO: 'img/limpieza/asointerpro.png' };
+  const TIPOS_CONTRATO = ['ORDEN DE COMPRA', 'CONTRATO', 'ÍNFIMA CUANTÍA', 'CONVENIO', 'OTRO'];
+  const TIPOS_LIMPIEZA = ['HOSPITALARIA', 'TIPO I', 'TIPO II', 'TIPO III', 'OFICINAS / ADMINISTRATIVA', 'EDUCATIVA', 'INDUSTRIAL', 'OTRO'];
+  const HORARIOS = ['8 HORAS', '12 HORAS', '24 HORAS', 'MEDIO TIEMPO (4 HORAS)', 'OTRO'];
+  const COLORES = ['#2563eb', '#16a34a', '#dc2626', '#d97706', '#7c3aed', '#db2777', '#0891b2', '#65a30d'];
+  const lp = { w: null, vista: 'mapa', provincia: '', asociaciones: [], busqueda: '', filtroAsoc: '', filtroProv: '', filtroEstado: 'ACTIVE', filtroContrato: '', filtroTipo: '', horizonte: 60, proyectoId: '', cargando: false };
+  const urlsLogo = {};
 
   const puedeVer = () => typeof tienePermiso === 'function' && tienePermiso('limpieza.ver', ['operaciones']);
   const puedeGestionar = () => Boolean(lp.w?.permissions?.manage);
@@ -23,12 +35,11 @@
     capa.id = 'modulo-selector';
     capa.className = 'ms-capa';
     capa.innerHTML = `<div class="ms-caja">
-      <img src="img/logo.png" alt="DEFEN">
       <h2>¿A QUÉ SERVICIO DESEAS INGRESAR?</h2>
       <p>${esc(sessionStorage.getItem('defen_auth_nombre') || '')}</p>
       <div class="ms-opciones">
-        <button class="ms-seguridad" onclick="elegirModuloDefen('seguridad')"><span>🛡</span><b>SEGURIDAD</b><small>Mapa operativo, proyectos, armamento, radios y asistencia</small></button>
-        <button class="ms-limpieza" onclick="elegirModuloDefen('limpieza')"><span>🧹</span><b>LIMPIEZA</b><small>Proyectos por asociación, puestos en el mapa y vencimientos</small></button>
+        <button class="ms-seguridad" onclick="elegirModuloDefen('seguridad')"><img src="img/logo.png" alt=""><b>SEGURIDAD</b><small>DEFEN CIA. LTDA. · Mapa operativo, proyectos, armamento, radios y asistencia</small></button>
+        <button class="ms-limpieza" onclick="elegirModuloDefen('limpieza')"><img src="${LOGO_GRUPO}" alt=""><b>LIMPIEZA</b><small>GRUPO COLOMA AVILÉS · Proyectos por asociación, puestos y vencimientos</small></button>
       </div>
       <button class="ms-salir" onclick="cerrarSesion()">🔒 CERRAR SESIÓN</button>
     </div>`;
@@ -44,7 +55,7 @@
   if (typeof cerrarLocalOriginal === 'function') window.cerrarSesionLocal = function () { sessionStorage.removeItem(MODULO_KEY); return cerrarLocalOriginal.apply(this, arguments); };
   window.cambiarModuloDefen = function () { document.getElementById('modulo-selector')?.remove(); mostrarSelector(); };
 
-  // Botón "Cambiar servicio" en la barra superior de Seguridad
+  // Botón "Limpieza" en la barra superior de Seguridad
   function botonCambio() {
     const acciones = document.querySelector('.app-header-actions');
     if (!acciones || document.getElementById('ms-boton-cambio')) return;
@@ -72,6 +83,84 @@
     };
   }
 
+  // ── Archivos privados (RUC, logo, ODC) ─────────────────────────
+  async function subirArchivo(archivo, ruta) {
+    const tipos = { pdf: 'application/pdf', jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp' };
+    const ext = String(archivo?.name || '').split('.').pop().toLowerCase();
+    if (!tipos[ext]) throw new Error('EL ARCHIVO DEBE SER PDF, JPG, PNG O WEBP.');
+    if (!archivo.size || archivo.size > 10 * 1024 * 1024) throw new Error('EL ARCHIVO NO PUEDE SUPERAR 10 MB.');
+    const destino = `${ruta}/${crypto.randomUUID()}.${ext}`;
+    let token = await supabaseTokenVigente();
+    const subir = async () => {
+      const r = await fetch(`${SUPABASE_URL}/storage/v1/object/${BUCKET}/${supabaseRutaStorage(destino)}`, { method: 'POST', headers: { ...supabaseHeaders(token), 'Content-Type': tipos[ext], 'x-upsert': 'false' }, body: archivo });
+      if (r.ok) return destino;
+      const t = await r.text(); let c = null; try { c = t ? JSON.parse(t) : null; } catch (_) { c = t; }
+      const e = new Error(c?.message || c?.error || `NO SE PUDO SUBIR EL ARCHIVO (HTTP ${r.status}).`); e.status = r.status; throw e;
+    };
+    try { return await subir(); } catch (e) { if (e.status !== 401) throw e; token = await supabaseRenovarSesion(); return subir(); }
+  }
+  async function borrarArchivo(ruta) {
+    if (!ruta) return;
+    let token = await supabaseTokenVigente();
+    const borrar = () => supabasePeticion(`/storage/v1/object/${BUCKET}/${supabaseRutaStorage(ruta)}`, { method: 'DELETE', headers: supabaseHeaders(token) });
+    try { await borrar(); } catch (e) { if (e.status !== 401) return; token = await supabaseRenovarSesion(); try { await borrar(); } catch (_) {} }
+  }
+  async function urlFirmada(ruta, segundos = 600) {
+    const r = await supabaseRpcStorageFirmadaEnBucket(BUCKET, ruta, segundos);
+    const f = r?.signedURL || r?.signedUrl || '';
+    if (!f) throw new Error('NO SE PUDO ABRIR EL ARCHIVO.');
+    return f.startsWith('http') ? f : `${SUPABASE_URL}/storage/v1${f}`;
+  }
+  window.verArchivoLimpieza = async function (ruta) {
+    try { window.open(await urlFirmada(decodeURIComponent(ruta), 300), '_blank', 'noopener'); }
+    catch (e) { alert(e.message || e); }
+  };
+  // Elige un archivo, lo sube y lo registra en la asociación o el proyecto
+  window.subirArchivoLimpieza = function (entidad, id, tipo) {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = tipo === 'LOGO' ? 'image/png,image/jpeg,image/webp' : 'application/pdf,image/jpeg,image/png,image/webp';
+    input.onchange = async () => {
+      const archivo = input.files?.[0]; if (!archivo) return;
+      let ruta = '';
+      try {
+        ruta = await subirArchivo(archivo, `${entidad === 'ASOCIACION' ? 'associations' : 'projects'}/${id}/${tipo.toLowerCase()}`);
+        const r = await supabaseRpc('set_cleaning_file', { p_payload: { entity: entidad, kind: tipo, id, path: ruta } });
+        if (r?.old_path && r.old_path !== ruta) await borrarArchivo(r.old_path);
+        await cargarLimpieza();
+        if (entidad === 'ASOCIACION') gestionarAsociacionesLimpieza(); else abrirProyectoLimpieza(id);
+      } catch (e) {
+        if (ruta) await borrarArchivo(ruta);
+        alert(`NO SE PUDO GUARDAR EL ARCHIVO: ${e.message || e}`);
+      }
+    };
+    input.click();
+  };
+  window.quitarArchivoLimpieza = async function (entidad, id, tipo) {
+    if (!confirm('¿QUITAR ESTE ARCHIVO?')) return;
+    try {
+      const r = await supabaseRpc('set_cleaning_file', { p_payload: { entity: entidad, kind: tipo, id, path: null } });
+      if (r?.old_path) await borrarArchivo(r.old_path);
+      await cargarLimpieza();
+      if (entidad === 'ASOCIACION') gestionarAsociacionesLimpieza(); else abrirProyectoLimpieza(id);
+    } catch (e) { alert(`NO SE PUDO QUITAR: ${e.message || e}`); }
+  };
+
+  // ── Asociaciones: logos ────────────────────────────────────────
+  const asociacion = (id) => (lp.w?.associations || []).find((a) => a.id === id);
+  const logoAsoc = (a) => (a ? urlsLogo[a.id] || LOGOS[norm(a.name)] || '' : '');
+  const colorAsoc = (id) => COLORES[Math.max(0, (lp.w?.associations || []).findIndex((a) => a.id === id)) % COLORES.length];
+  const vinetaAsoc = (id, nombre) => {
+    const a = asociacion(id), logo = logoAsoc(a);
+    return logo ? `<span class="lp-vineta"><img src="${esc(logo)}" alt="">${esc(nombre ?? a?.name ?? '')}</span>`
+      : `<span class="lp-vineta"><i style="background:${colorAsoc(id)}">${esc(String(nombre ?? a?.name ?? '?').slice(0, 2))}</i>${esc(nombre ?? a?.name ?? '')}</span>`;
+  };
+  async function firmarLogos() {
+    await Promise.all((lp.w?.associations || []).filter((a) => a.logo_path).map(async (a) => {
+      try { urlsLogo[a.id] = await urlFirmada(a.logo_path, 3600); } catch (_) { delete urlsLogo[a.id]; }
+    }));
+  }
+
   // ── Aplicación de Limpieza ─────────────────────────────────────
   const MANTENIMIENTO = {
     personal: ['👥', 'PERSONAL DE LIMPIEZA', 'Fichas de auxiliares, ingresos y salidas.'],
@@ -90,7 +179,7 @@
     app.className = 'lp-app';
     app.innerHTML = `
       <header class="lp-cabecera">
-        <div class="lp-marca"><img src="img/logo.png" alt=""><div><h1>SERVICIO DE LIMPIEZA</h1><p>PROYECTOS POR ASOCIACIÓN · PUESTOS · VENCIMIENTOS</p></div></div>
+        <div class="lp-marca"><img src="${LOGO_GRUPO}" alt="Grupo Coloma Avilés"><div><h1>GRUPO COLOMA AVILÉS</h1><p>SERVICIO DE LIMPIEZA · PROYECTOS POR ASOCIACIÓN · PUESTOS · VENCIMIENTOS</p></div></div>
         <div class="lp-acciones"><button onclick="elegirModuloDefen('seguridad')">🛡 IR A SEGURIDAD</button><button class="lp-salir" onclick="cerrarSesion()">🔒 CERRAR SESIÓN</button></div>
       </header>
       <nav class="lp-nav" id="lp-nav"></nav>
@@ -116,17 +205,19 @@
     lp.cargando = true;
     try {
       lp.w = await supabaseRpc('get_cleaning_workspace', {});
+      await firmarLogos();
       render();
     } catch (e) {
-      document.getElementById('lp-cuerpo').innerHTML = `<div class="lp-error">NO SE PUDO CARGAR LIMPIEZA: ${esc(e.message || e)}</div>`;
+      const c = document.getElementById('lp-cuerpo');
+      if (c) c.innerHTML = `<div class="lp-error">NO SE PUDO CARGAR LIMPIEZA: ${esc(e.message || e)}</div>`;
     } finally { lp.cargando = false; }
   }
   window.recargarLimpieza = cargarLimpieza;
-
   window.verLimpieza = function (vista) { lp.vista = vista; render(); document.getElementById('lp-cuerpo')?.scrollTo?.(0, 0); };
 
   function render() {
     const nav = document.getElementById('lp-nav');
+    if (!nav) return;
     nav.innerHTML = VISTAS.map(([k, i, t]) => `<button class="${lp.vista === k ? 'activo' : ''} ${MANTENIMIENTO[k] ? 'lp-mant' : ''}" onclick="verLimpieza('${k}')"><span>${i}</span>${t}</button>`).join('');
     const cuerpo = document.getElementById('lp-cuerpo');
     if (MANTENIMIENTO[lp.vista]) { cuerpo.innerHTML = vistaMantenimiento(lp.vista); return; }
@@ -139,12 +230,18 @@
       <button onclick="verLimpieza('mapa')">← VOLVER AL MAPA</button></div>`;
   }
 
-  // ── Datos auxiliares ───────────────────────────────────────────
+  // ── Datos y filtros ────────────────────────────────────────────
   const proyectos = () => lp.w?.projects || [];
   const activos = () => proyectos().filter((p) => p.status === 'ACTIVE');
   const puestosDe = (p) => p.posts || [];
   const auxiliares = (p) => { const s = puestosDe(p).reduce((n, x) => n + Number(x.staff_count || 0), 0); return s || Number(p.staff_count || 0); };
-  const filtrarAsoc = (lista) => (lp.asociaciones.length ? lista.filter((p) => lp.asociaciones.includes(p.association_id)) : lista);
+  const valoresUnicos = (campo, base) => [...new Set([...base, ...proyectos().map((p) => p[campo]).filter(Boolean)])];
+  // Filtros comunes a mapa, proyectos y vencimientos
+  function filtrar(lista, { asociaciones = true } = {}) {
+    return lista.filter((p) => (!asociaciones || !lp.asociaciones.length || lp.asociaciones.includes(p.association_id))
+      && (!lp.filtroContrato || p.contract_type === lp.filtroContrato)
+      && (!lp.filtroTipo || p.cleaning_type === lp.filtroTipo));
+  }
 
   function diasInfo(p) {
     if (p.status === 'FINISHED') return { t: 'FINALIZADO', c: 'gris' };
@@ -155,122 +252,200 @@
     return { t: String(d), c: d <= 15 ? 'urgente' : d <= 30 ? 'pronto' : 'proximo' };
   }
 
+  // Barra de filtros compartida: asociaciones con logo + tipo de contratación + tipo de limpieza
+  function barraFiltros() {
+    const asocs = (lp.w.associations || []).filter((a) => a.active);
+    const contratos = valoresUnicos('contract_type', TIPOS_CONTRATO.filter((t) => t !== 'OTRO'));
+    const tipos = valoresUnicos('cleaning_type', TIPOS_LIMPIEZA.filter((t) => t !== 'OTRO'));
+    const activos = lp.asociaciones.length + (lp.filtroContrato ? 1 : 0) + (lp.filtroTipo ? 1 : 0);
+    return `<div class="lp-filtros">
+      <div class="lp-chips"><span>ASOCIACIÓN:</span><button class="${lp.asociaciones.length ? '' : 'activo'}" onclick="filtrarAsociacionLimpieza('')">TODAS</button>${asocs.map((a) => {
+        const logo = logoAsoc(a);
+        return `<button class="${lp.asociaciones.includes(a.id) ? 'activo' : ''}" onclick="filtrarAsociacionLimpieza('${a.id}')">${logo ? `<img src="${esc(logo)}" alt="">` : ''}${esc(a.name)} <small>${a.projects}</small></button>`;
+      }).join('')}</div>
+      <div class="lp-selects">
+        <label>TIPO DE CONTRATACIÓN<select onchange="filtroLimpieza('filtroContrato', this.value)"><option value="">TODOS</option>${contratos.map((t) => `<option ${lp.filtroContrato === t ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select></label>
+        <label>TIPO DE LIMPIEZA<select onchange="filtroLimpieza('filtroTipo', this.value)"><option value="">TODOS</option>${tipos.map((t) => `<option ${lp.filtroTipo === t ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select></label>
+        ${activos ? '<button onclick="limpiarFiltrosLimpieza()">✕ QUITAR FILTROS</button>' : ''}
+      </div></div>`;
+  }
+  window.filtrarAsociacionLimpieza = function (id) {
+    if (!id) lp.asociaciones = []; else lp.asociaciones = lp.asociaciones.includes(id) ? lp.asociaciones.filter((x) => x !== id) : [...lp.asociaciones, id];
+    render();
+  };
+  window.filtroLimpieza = function (campo, v) { lp[campo] = v; render(); };
+  window.limpiarFiltrosLimpieza = function () { lp.asociaciones = []; lp.filtroContrato = ''; lp.filtroTipo = ''; render(); };
+
   // ── Vista: MAPA ────────────────────────────────────────────────
-  function vistaMapa() {
-    const lista = filtrarAsoc(activos());
+  function resumenPorProvincia(lista) {
     const porProv = new Map();
     lista.forEach((p) => {
       const sitios = puestosDe(p).length ? puestosDe(p) : [{ province_id: p.province_id, staff_count: p.staff_count, _sinPuesto: true }];
       sitios.forEach((s) => {
         const id = s.province_id ?? p.province_id; if (id == null) return;
-        const e = porProv.get(id) || { puestos: 0, auxiliares: 0, proyectos: new Set() };
+        const e = porProv.get(id) || { puestos: 0, auxiliares: 0, proyectos: new Set(), asociaciones: new Set() };
         if (!s._sinPuesto) e.puestos++;
-        e.auxiliares += Number(s.staff_count || 0); e.proyectos.add(p.id);
+        e.auxiliares += Number(s.staff_count || 0); e.proyectos.add(p.id); e.asociaciones.add(p.association_id);
         porProv.set(id, e);
       });
     });
+    return porProv;
+  }
+
+  function vistaMapa() {
+    const lista = filtrar(activos());
+    const porProv = resumenPorProvincia(lista);
     const provs = lp.w.provinces || [];
+    const unaAsoc = lp.asociaciones.length === 1 ? asociacion(lp.asociaciones[0]) : null;
     const marcadores = provs.filter((pv) => porProv.has(pv.id) && pv.map_x != null).map((pv) => {
-      const e = porProv.get(pv.id);
-      return `<button class="lp-marcador ${lp.provincia === pv.id ? 'activo' : ''}" style="left:${pv.map_x}%;top:${pv.map_y}%" onclick="elegirProvinciaLimpieza(${pv.id})" title="${esc(pv.name)}: ${e.proyectos.size} proyecto(s), ${e.puestos} puesto(s)"><b>${e.puestos || e.proyectos.size}</b></button>`;
+      const e = porProv.get(pv.id), n = e.puestos || e.proyectos.size;
+      // Con una sola asociación filtrada (o una sola en la provincia), el marcador lleva su logo
+      const soloAsoc = unaAsoc || (e.asociaciones.size === 1 ? asociacion([...e.asociaciones][0]) : null);
+      const logo = soloAsoc ? logoAsoc(soloAsoc) : '';
+      const titulo = `${pv.name}: ${e.proyectos.size} proyecto(s), ${e.puestos} puesto(s), ${e.auxiliares} auxiliar(es)`;
+      return logo
+        ? `<button class="lp-marcador lp-marcador-logo ${lp.provincia === pv.id ? 'activo' : ''}" style="left:${pv.map_x}%;top:${pv.map_y}%" onclick="elegirProvinciaLimpieza(${pv.id})" title="${esc(titulo)}"><img src="${esc(logo)}" alt=""><b>${n}</b></button>`
+        : `<button class="lp-marcador ${lp.provincia === pv.id ? 'activo' : ''}" style="left:${pv.map_x}%;top:${pv.map_y}%" onclick="elegirProvinciaLimpieza(${pv.id})" title="${esc(titulo)}"><b>${n}</b></button>`;
     }).join('');
-    const total = { proyectos: lista.length, puestos: lista.reduce((n, p) => n + puestosDe(p).length, 0), aux: lista.reduce((n, p) => n + auxiliares(p), 0), conCoord: lista.reduce((n, p) => n + puestosDe(p).filter((s) => s.latitude != null).length, 0) };
-    const asocs = (lp.w.associations || []).filter((a) => a.active);
+    const total = { proyectos: lista.length, puestos: lista.reduce((n, p) => n + puestosDe(p).length, 0), aux: lista.reduce((n, p) => n + auxiliares(p), 0), m2: lista.reduce((n, p) => n + Number(p.area_m2 || 0), 0), conCoord: lista.reduce((n, p) => n + puestosDe(p).filter((s) => s.latitude != null).length, 0) };
     const provSel = provs.find((pv) => pv.id === lp.provincia);
     const listaProv = provSel ? lista.filter((p) => p.province_id === provSel.id || puestosDe(p).some((s) => s.province_id === provSel.id)) : [];
+    const coordProv = provSel ? listaProv.reduce((n, p) => n + puestosDe(p).filter((s) => s.province_id === provSel.id && s.latitude != null).length, 0) : 0;
     return `
       <div class="lp-kpis">
         <div><span>PROYECTOS ACTIVOS</span><b>${total.proyectos}</b></div>
         <div><span>PUESTOS</span><b>${total.puestos}</b></div>
         <div><span>AUXILIARES</span><b>${total.aux}</b></div>
-        <div><span>ASOCIACIONES</span><b>${asocs.length}</b></div>
+        <div><span>METRAJE TOTAL</span><b>${miles(total.m2)} <small>m²</small></b></div>
       </div>
-      <div class="lp-chips"><span>ASOCIACIÓN:</span><button class="${lp.asociaciones.length ? '' : 'activo'}" onclick="filtrarAsociacionLimpieza('')">TODAS</button>${asocs.map((a) => `<button class="${lp.asociaciones.includes(a.id) ? 'activo' : ''}" onclick="filtrarAsociacionLimpieza('${a.id}')">${esc(a.name)} <small>${a.projects}</small></button>`).join('')}</div>
+      ${barraFiltros()}
       <div class="lp-mapa-grid">
         <section class="lp-mapa-caja">
-          <div class="lp-mapa"><img src="img/mapa.png" alt="Mapa del Ecuador">${marcadores}</div>
-          <div class="lp-mapa-pie"><span>EL NÚMERO EN CADA PROVINCIA ES LA CANTIDAD DE PUESTOS (O DE PROYECTOS SI AÚN NO TIENEN PUESTOS).</span>
-            <button onclick="abrirMapaPuestosLimpieza()" ${total.conCoord ? '' : 'disabled'}>📍 VER PUESTOS EN MAPA DETALLADO (${total.conCoord})</button></div>
+          <div class="lp-mapa"><img src="img/mapa.png" alt="Mapa del Ecuador"><div class="lp-mapa-marca"><img src="${LOGO_GRUPO}" alt="Grupo Coloma Avilés"></div>${marcadores}</div>
+          <div class="lp-mapa-pie"><span>TOCA UNA PROVINCIA PARA VER SUS PROYECTOS Y SUS PUESTOS EN EL MAPA. EL NÚMERO ES LA CANTIDAD DE PUESTOS.</span>
+            <button onclick="abrirMapaPuestosLimpieza()" ${total.conCoord ? '' : 'disabled'}>📍 VER TODOS LOS PUESTOS (${total.conCoord})</button></div>
         </section>
         <section class="lp-lateral">
           ${provSel ? `<div class="lp-lat-head"><h3>📍 ${esc(provSel.name)}</h3><button onclick="elegirProvinciaLimpieza('')">✕</button></div>
+            <button class="lp-boton-mapa" onclick="abrirMapaPuestosLimpieza(${provSel.id})" ${coordProv ? '' : 'disabled'}>🗺 VER PUESTOS DE ${esc(provSel.name)} EN EL MAPA (${coordProv})</button>
+            ${coordProv ? '' : '<p class="lp-nota">LOS PUESTOS DE ESTA PROVINCIA AÚN NO TIENEN COORDENADAS.</p>'}
             ${listaProv.map((p) => `<article class="lp-tarjeta" onclick="abrirProyectoLimpieza('${p.id}')"><header><b>${esc(p.name)}</b><span class="lp-dias ${diasInfo(p).c}">${esc(diasInfo(p).t)}</span></header>
-              <small>${esc(p.association)}${p.contract_code ? ' · ' + esc(p.contract_code) : ''} · FIN ${fecha(p.end_date)}</small>
-              <ul>${puestosDe(p).filter((s) => !provSel || s.province_id === provSel.id).map((s) => `<li>📍 ${esc(s.name)} <em>${s.staff_count} aux.</em></li>`).join('') || '<li class="lp-vacio">SIN PUESTOS REGISTRADOS</li>'}</ul></article>`).join('') || '<p class="lp-vacio">SIN PROYECTOS EN ESTA PROVINCIA.</p>'}`
+              <small>${vinetaAsoc(p.association_id, p.association)}${p.contract_type ? ' · ' + esc(p.contract_type) : ''}${p.cleaning_type ? ' · ' + esc(p.cleaning_type) : ''} · FIN ${fecha(p.end_date)}</small>
+              <ul>${puestosDe(p).filter((s) => s.province_id === provSel.id).map((s) => `<li>📍 ${esc(s.name)} <em>${s.staff_count} aux.</em>${s.schedule ? ` <span>${esc(s.schedule)}</span>` : ''}</li>`).join('') || '<li class="lp-vacio">SIN PUESTOS REGISTRADOS</li>'}</ul></article>`).join('') || '<p class="lp-vacio">SIN PROYECTOS EN ESTA PROVINCIA.</p>'}`
           : `<div class="lp-lat-head"><h3>PROVINCIAS CON SERVICIO</h3></div>
-            ${provs.filter((pv) => porProv.has(pv.id)).sort((a, b) => porProv.get(b.id).auxiliares - porProv.get(a.id).auxiliares).map((pv) => { const e = porProv.get(pv.id); return `<button class="lp-prov" onclick="elegirProvinciaLimpieza(${pv.id})"><b>${esc(pv.name)}</b><small>${e.proyectos.size} proyecto(s) · ${e.puestos} puesto(s) · ${e.auxiliares} auxiliar(es)</small></button>`; }).join('')
-              || `<div class="lp-vacio-grande"><b>AÚN NO HAY PROYECTOS DE LIMPIEZA.</b>${puedeGestionar() ? `<p>Empieza agregando un proyecto o cargando tu Excel.</p><button onclick="verLimpieza('proyectos')">📋 IR A PROYECTOS</button>` : ''}</div>`}`}
+            ${provs.filter((pv) => porProv.has(pv.id)).sort((a, b) => porProv.get(b.id).auxiliares - porProv.get(a.id).auxiliares).map((pv) => { const e = porProv.get(pv.id); return `<button class="lp-prov" onclick="elegirProvinciaLimpieza(${pv.id})"><b>${esc(pv.name)}</b><small>${e.proyectos.size} proyecto(s) · ${e.puestos} puesto(s) · ${e.auxiliares} auxiliar(es)</small><span class="lp-prov-logos">${[...e.asociaciones].map((id) => { const l = logoAsoc(asociacion(id)); return l ? `<img src="${esc(l)}" alt="">` : ''; }).join('')}</span></button>`; }).join('')
+              || `<div class="lp-vacio-grande"><img src="${LOGO_GRUPO}" alt=""><b>AÚN NO HAY PROYECTOS DE LIMPIEZA${lp.asociaciones.length || lp.filtroContrato || lp.filtroTipo ? ' CON ESTOS FILTROS' : ''}.</b>${puedeGestionar() ? `<p>Empieza agregando un proyecto o cargando tu Excel.</p><button onclick="verLimpieza('proyectos')">📋 IR A PROYECTOS</button>` : ''}</div>`}`}
         </section>
       </div>`;
   }
   window.elegirProvinciaLimpieza = function (id) { lp.provincia = id === '' ? '' : Number(id); render(); };
-  window.filtrarAsociacionLimpieza = function (id) {
-    if (!id) lp.asociaciones = []; else lp.asociaciones = lp.asociaciones.includes(id) ? lp.asociaciones.filter((x) => x !== id) : [...lp.asociaciones, id];
-    render();
-  };
 
-  // Mapa detallado (calles) con todos los puestos que tienen coordenadas
-  window.abrirMapaPuestosLimpieza = function () {
+  // Distancia en km entre dos coordenadas (fórmula de Haversine)
+  function distanciaKm(a, b) {
+    const R = 6371, rad = (g) => (g * Math.PI) / 180;
+    const dLat = rad(b.lat - a.lat), dLng = rad(b.lng - a.lng);
+    const h = Math.sin(dLat / 2) ** 2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLng / 2) ** 2;
+    return 2 * R * Math.asin(Math.sqrt(h));
+  }
+  const textoKm = (km) => (km < 1 ? `${Math.round(km * 1000)} m` : `${km.toLocaleString('es-EC', { maximumFractionDigits: 1 })} km`);
+
+  // Mapa detallado (calles): todos los puestos o los de una provincia.
+  // Al tocar un puesto se trazan líneas a los 3 más cercanos con la distancia.
+  window.abrirMapaPuestosLimpieza = function (provinciaId) {
     if (typeof L === 'undefined') return alert('NO SE PUDO CARGAR EL MAPA DETALLADO.');
     const puntos = [];
-    filtrarAsoc(activos()).forEach((p) => puestosDe(p).forEach((s) => { if (s.latitude != null && s.longitude != null) puntos.push({ p, s }); }));
+    filtrar(activos()).forEach((p) => puestosDe(p).forEach((s) => {
+      if (s.latitude == null || s.longitude == null) return;
+      if (provinciaId && s.province_id !== provinciaId) return;
+      puntos.push({ p, s, lat: Number(s.latitude), lng: Number(s.longitude) });
+    }));
     if (!puntos.length) return alert('NINGÚN PUESTO TIENE COORDENADAS TODAVÍA.');
+    const prov = provinciaId ? (lp.w.provinces || []).find((x) => x.id === provinciaId) : null;
     document.getElementById('lp-mapa-modal')?.remove();
     const capa = document.createElement('div');
     capa.id = 'lp-mapa-modal'; capa.className = 'lp-modal';
-    capa.innerHTML = `<div class="lp-modal-caja lp-modal-mapa"><header><h3>📍 PUESTOS DE LIMPIEZA (${puntos.length})</h3><button onclick="document.getElementById('lp-mapa-modal').remove()">✕</button></header><div id="lp-leaflet"></div></div>`;
+    capa.innerHTML = `<div class="lp-modal-caja lp-modal-mapa"><header><h3>📍 PUESTOS DE LIMPIEZA${prov ? ' · ' + esc(prov.name) : ''} (${puntos.length})</h3><button onclick="document.getElementById('lp-mapa-modal').remove()">✕</button></header>
+      <div class="lp-mapa-ayuda">📏 TOCA UN PUESTO PARA VER LA DISTANCIA A LOS MÁS CERCANOS.</div><div id="lp-leaflet"></div></div>`;
     document.body.appendChild(capa);
-    const colores = ['#2563eb', '#16a34a', '#dc2626', '#d97706', '#7c3aed', '#db2777', '#0891b2', '#65a30d'];
-    const asocIds = [...new Set(puntos.map((x) => x.p.association_id))];
     const mapa = L.map('lp-leaflet');
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(mapa);
     const grupo = L.featureGroup().addTo(mapa);
-    puntos.forEach(({ p, s }) => {
-      const color = colores[asocIds.indexOf(p.association_id) % colores.length];
-      L.circleMarker([Number(s.latitude), Number(s.longitude)], { radius: 8, color: '#fff', weight: 2, fillColor: color, fillOpacity: 0.95 })
-        .bindPopup(`<b>${esc(s.name)}</b><br>${esc(p.name)}<br><small>${esc(p.association)} · ${s.staff_count} auxiliar(es)${s.address ? '<br>' + esc(s.address) : ''}</small>`)
-        .addTo(grupo);
+    const lineas = L.layerGroup().addTo(mapa);
+    puntos.forEach((pt) => {
+      const a = asociacion(pt.p.association_id), logo = logoAsoc(a), color = colorAsoc(pt.p.association_id);
+      const icono = L.divIcon({ className: 'lp-pin-caja', iconSize: [38, 38], iconAnchor: [19, 19], popupAnchor: [0, -18],
+        html: logo ? `<div class="lp-pin" style="border-color:${color}"><img src="${esc(logo)}" alt=""></div>` : `<div class="lp-pin lp-pin-color" style="background:${color}">${esc(String(pt.p.association).slice(0, 2))}</div>` });
+      const marca = L.marker([pt.lat, pt.lng], { icon: icono }).addTo(grupo);
+      marca.on('click', () => {
+        lineas.clearLayers();
+        const cercanos = puntos.filter((o) => o !== pt).map((o) => ({ o, km: distanciaKm(pt, o) })).sort((x, y) => x.km - y.km);
+        cercanos.slice(0, 3).forEach(({ o, km }) => {
+          L.polyline([[pt.lat, pt.lng], [o.lat, o.lng]], { color: '#0f766e', weight: 3, dashArray: '6 6' }).addTo(lineas)
+            .bindTooltip(textoKm(km), { permanent: true, direction: 'center', className: 'lp-km' });
+        });
+        marca.bindPopup(`<div class="lp-popup"><b>${esc(pt.s.name)}</b><br>${esc(pt.p.name)}<br><small>${esc(pt.p.association)} · ${pt.s.staff_count} auxiliar(es)${pt.s.schedule ? ' · ' + esc(pt.s.schedule) : ''}${pt.s.address ? '<br>' + esc(pt.s.address) : ''}</small>
+          ${cercanos.length ? `<hr><b>MÁS CERCANOS</b><ol>${cercanos.slice(0, 5).map(({ o, km }) => `<li>${esc(o.s.name)} <small>(${esc(o.p.name)})</small> — <b>${textoKm(km)}</b></li>`).join('')}</ol>` : ''}
+          <a href="https://www.google.com/maps?q=${pt.lat},${pt.lng}" target="_blank" rel="noopener">ABRIR EN GOOGLE MAPS</a></div>`, { maxWidth: 320 }).openPopup();
+      });
     });
     mapa.fitBounds(grupo.getBounds().pad(0.2), { maxZoom: 15 });
+    mapa.on('click', () => lineas.clearLayers());
+    const ids = [...new Set(puntos.map((x) => x.p.association_id))];
     const leyenda = L.control({ position: 'bottomleft' });
-    leyenda.onAdd = () => { const d = L.DomUtil.create('div', 'lp-leyenda-mapa'); d.innerHTML = asocIds.map((id, i) => `<span><i style="background:${colores[i % colores.length]}"></i>${esc(puntos.find((x) => x.p.association_id === id).p.association)}</span>`).join(''); return d; };
+    leyenda.onAdd = () => {
+      const d = L.DomUtil.create('div', 'lp-leyenda-mapa');
+      d.innerHTML = ids.map((id) => { const a = asociacion(id), l = logoAsoc(a); return `<span>${l ? `<img src="${esc(l)}" alt="">` : `<i style="background:${colorAsoc(id)}"></i>`}${esc(a?.name || '')} · ${puntos.filter((x) => x.p.association_id === id).length}</span>`; }).join('');
+      return d;
+    };
     leyenda.addTo(mapa);
     setTimeout(() => mapa.invalidateSize(), 150);
   };
 
   // ── Vista: PROYECTOS ───────────────────────────────────────────
-  function vistaProyectos() {
+  function listaProyectos() {
     const q = norm(lp.busqueda);
-    const lista = proyectos().filter((p) => (!lp.filtroAsoc || p.association_id === lp.filtroAsoc)
-      && (!lp.filtroProv || String(p.province_id) === String(lp.filtroProv))
+    return filtrar(proyectos()).filter((p) => (!lp.filtroProv || String(p.province_id) === String(lp.filtroProv))
       && (!lp.filtroEstado || p.status === lp.filtroEstado)
-      && (!q || norm([p.name, p.contract_code, p.association, p.province, p.city, ...puestosDe(p).map((s) => s.name)].join(' ')).includes(q)));
-    const asocs = lp.w.associations || [];
+      && (!q || norm([p.name, p.contract_code, p.association, p.province, p.city, p.contract_type, p.cleaning_type, ...puestosDe(p).map((s) => s.name)].join(' ')).includes(q)));
+  }
+  function vistaProyectos() {
+    const lista = listaProyectos();
     const provs = lp.w.provinces || [];
     return `
+      ${barraFiltros()}
       <div class="lp-barra">
         <input placeholder="Buscar entidad, ODC, puesto…" value="${esc(lp.busqueda)}" oninput="buscarLimpieza(this.value)">
-        <select onchange="filtroLimpieza('filtroAsoc', this.value)"><option value="">TODAS LAS ASOCIACIONES</option>${asocs.map((a) => `<option value="${a.id}" ${lp.filtroAsoc === a.id ? 'selected' : ''}>${esc(a.name)}</option>`).join('')}</select>
         <select onchange="filtroLimpieza('filtroProv', this.value)"><option value="">TODAS LAS PROVINCIAS</option>${provs.map((p) => `<option value="${p.id}" ${String(lp.filtroProv) === String(p.id) ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}</select>
         <select onchange="filtroLimpieza('filtroEstado', this.value)"><option value="ACTIVE" ${lp.filtroEstado === 'ACTIVE' ? 'selected' : ''}>ACTIVOS</option><option value="FINISHED" ${lp.filtroEstado === 'FINISHED' ? 'selected' : ''}>FINALIZADOS</option><option value="" ${!lp.filtroEstado ? 'selected' : ''}>TODOS</option></select>
       </div>
-      ${puedeGestionar() ? `<div class="lp-botones">
-        <button class="lp-primario" onclick="formularioProyectoLimpieza()">＋ NUEVO PROYECTO</button>
+      <div class="lp-botones">
+        ${puedeGestionar() ? `<button class="lp-primario" onclick="formularioProyectoLimpieza()">＋ NUEVO PROYECTO</button>
         <button onclick="abrirImportacionLimpieza()">⇧ CARGAR DESDE EXCEL</button>
-        <button onclick="descargarPlantillaLimpieza()">⇩ PLANTILLA EXCEL</button>
+        <button onclick="descargarPlantillaLimpieza()">⇩ PLANTILLA EXCEL</button>` : ''}
         <button onclick="gestionarAsociacionesLimpieza()">🏷 ASOCIACIONES</button>
-      </div>` : ''}
-      <div class="lp-tabla-wrap"><table class="lp-tabla"><thead><tr><th>ASOCIACIÓN</th><th>ODC</th><th>ENTIDAD</th><th>PROVINCIA</th><th>PUESTOS</th><th>AUXILIARES</th><th>INICIO</th><th>FIN</th><th>DÍAS</th></tr></thead><tbody>
-        ${lista.map((p) => { const d = diasInfo(p); return `<tr onclick="abrirProyectoLimpieza('${p.id}')"><td><b>${esc(p.association)}</b></td><td>${esc(p.contract_code || '—')}</td><td class="lp-izq"><b>${esc(p.name)}</b>${p.city ? `<small>${esc(p.city)}</small>` : ''}</td><td>${esc(p.province || '—')}</td><td>${puestosDe(p).length}</td><td>${auxiliares(p)}</td><td>${fecha(p.start_date)}</td><td>${fecha(p.end_date)}</td><td><span class="lp-dias ${d.c}">${esc(d.t)}</span></td></tr>`; }).join('')
-          || `<tr><td colspan="9" class="lp-vacio">NO HAY PROYECTOS CON ESTOS FILTROS.</td></tr>`}
+        <button onclick="exportarProyectosLimpieza()">📊 EXPORTAR EXCEL</button>
+      </div>
+      <div class="lp-tabla-wrap"><table class="lp-tabla"><thead><tr><th>ASOCIACIÓN</th><th>ODC</th><th>ENTIDAD</th><th>CONTRATACIÓN</th><th>LIMPIEZA</th><th>PROVINCIA</th><th>M²</th><th>PUESTOS</th><th>AUX.</th><th>FIN</th><th>DÍAS</th></tr></thead><tbody>
+        ${lista.map((p) => { const d = diasInfo(p); return `<tr onclick="abrirProyectoLimpieza('${p.id}')"><td class="lp-izq">${vinetaAsoc(p.association_id, p.association)}</td><td>${esc(p.contract_code || '—')}${p.contract_document_path ? ' 📎' : ''}</td><td class="lp-izq"><b>${esc(p.name)}</b>${p.city ? `<small>${esc(p.city)}</small>` : ''}</td><td>${esc(p.contract_type || '—')}</td><td>${esc(p.cleaning_type || '—')}</td><td>${esc(p.province || '—')}</td><td>${p.area_m2 ? miles(p.area_m2) : '—'}</td><td>${puestosDe(p).length}</td><td>${auxiliares(p)}</td><td>${fecha(p.end_date)}</td><td><span class="lp-dias ${d.c}">${esc(d.t)}</span></td></tr>`; }).join('')
+          || `<tr><td colspan="11" class="lp-vacio">NO HAY PROYECTOS CON ESTOS FILTROS.</td></tr>`}
       </tbody></table></div>
-      <p class="lp-nota">${lista.length} PROYECTO(S) · TOCA UNO PARA VER Y EDITAR SUS PUESTOS.</p>`;
+      <p class="lp-nota">${lista.length} PROYECTO(S) · TOCA UNO PARA VER SU FICHA, SUS DOCUMENTOS Y SUS PUESTOS.</p>`;
   }
   let tBusqueda = null;
   window.buscarLimpieza = function (v) { lp.busqueda = v; clearTimeout(tBusqueda); tBusqueda = setTimeout(() => { render(); const i = document.querySelector('.lp-barra input'); if (i) { i.focus(); i.setSelectionRange(i.value.length, i.value.length); } }, 250); };
-  window.filtroLimpieza = function (campo, v) { lp[campo] = v; render(); };
 
-  // ── Modales: proyecto, puesto, asociaciones ────────────────────
+  window.exportarProyectosLimpieza = function () {
+    if (typeof XLSX === 'undefined') return alert('NO SE PUDO CARGAR EL GENERADOR DE EXCEL.');
+    const lista = listaProyectos();
+    const hojaP = XLSX.utils.json_to_sheet(lista.map((p, i) => ({ 'N°': i + 1, 'ASOCIACIÓN': p.association, 'ODC': p.contract_code || '', 'TIPO DE CONTRATACIÓN': p.contract_type || '', 'ENTIDAD': p.name, 'TIPO DE LIMPIEZA': p.cleaning_type || '', 'METRAJE (M²)': p.area_m2 != null ? Number(p.area_m2) : '', 'PROVINCIA': p.province || '', 'CIUDAD': p.city || '', 'PUESTOS': puestosDe(p).length, 'AUXILIARES': auxiliares(p), 'FECHA INICIO': fecha(p.start_date), 'FECHA FIN': fecha(p.end_date), 'DÍAS PARA CULMINAR': diasInfo(p).t, 'ESTADO': p.status === 'ACTIVE' ? 'ACTIVO' : 'FINALIZADO' })));
+    const filasS = []; lista.forEach((p) => puestosDe(p).forEach((s) => filasS.push({ 'ASOCIACIÓN': p.association, 'ENTIDAD': p.name, 'PUESTO': s.name, 'PROVINCIA': s.province || '', 'CIUDAD': s.city || '', 'DIRECCIÓN': s.address || '', 'AUXILIARES': Number(s.staff_count || 0), 'HORARIO': s.schedule || '', 'LATITUD': s.latitude ?? '', 'LONGITUD': s.longitude ?? '' })));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, hojaP, 'PROYECTOS');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(filasS.length ? filasS : [{ 'INFORMACIÓN': 'SIN PUESTOS' }]), 'PUESTOS');
+    XLSX.writeFile(wb, `PROYECTOS_LIMPIEZA_${String(lp.w.today).slice(0, 10)}.xlsx`);
+  };
+
+  // ── Modales ────────────────────────────────────────────────────
   function modal(id, titulo, cuerpo, pie = '', clase = '') {
     document.getElementById(id)?.remove();
     const capa = document.createElement('div');
@@ -281,26 +456,51 @@
   }
   const opcionesProv = (sel) => `<option value="">—</option>${(lp.w.provinces || []).map((p) => `<option value="${p.id}" ${String(sel) === String(p.id) ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}`;
   const valor = (id) => document.getElementById(id)?.value ?? '';
+  // Lista desplegable con opción "OTRO" que habilita un texto libre
+  const selectConOtro = (id, opciones, actual) => {
+    const conocido = !actual || opciones.includes(actual);
+    return `<select id="${id}" onchange="document.getElementById('${id}-otro').style.display=this.value==='OTRO'?'':'none'"><option value="">—</option>${opciones.map((o) => `<option ${(conocido ? actual === o : o === 'OTRO') ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select>
+      <input id="${id}-otro" maxlength="80" placeholder="ESPECIFICA" value="${conocido ? '' : esc(actual)}" style="display:${conocido ? 'none' : ''}">`;
+  };
+  const leerConOtro = (id) => { const v = valor(id); return v === 'OTRO' ? (valor(`${id}-otro`).trim() || 'OTRO') : v; };
 
   window.abrirProyectoLimpieza = function (id) {
     const p = proyectos().find((x) => x.id === id); if (!p) return;
     lp.proyectoId = id;
     const d = diasInfo(p), g = puedeGestionar();
+    const doc = p.contract_document_path;
     modal('lp-proyecto', `${esc(p.name)}`, `
       <div class="lp-ficha">
-        <div><span>ASOCIACIÓN</span><b>${esc(p.association)}</b></div><div><span>ODC / CONTRATO</span><b>${esc(p.contract_code || '—')}</b></div>
-        <div><span>PROVINCIA / CIUDAD</span><b>${esc([p.province, p.city].filter(Boolean).join(' · ') || '—')}</b></div><div><span>DIRECCIÓN</span><b>${esc(p.address || '—')}</b></div>
+        <div><span>ASOCIACIÓN</span><b>${vinetaAsoc(p.association_id, p.association)}</b></div>
+        <div><span>ODC / CONTRATO</span><b>${esc(p.contract_code || '—')}</b></div>
+        <div><span>TIPO DE CONTRATACIÓN</span><b>${esc(p.contract_type || '—')}</b></div>
+        <div><span>TIPO DE LIMPIEZA</span><b>${esc(p.cleaning_type || '—')}</b></div>
+        <div><span>METRAJE</span><b>${p.area_m2 ? miles(p.area_m2) + ' m²' : '—'}</b></div>
+        <div><span>PROVINCIA / CIUDAD</span><b>${esc([p.province, p.city].filter(Boolean).join(' · ') || '—')}</b></div>
         <div><span>INICIO</span><b>${fecha(p.start_date)}</b></div><div><span>FIN</span><b>${fecha(p.end_date)}</b></div>
-        <div><span>AUXILIARES</span><b>${auxiliares(p)}${p.staff_count ? ` <small>(CONTRATADOS: ${p.staff_count})</small>` : ''}</b></div><div><span>DÍAS PARA CULMINAR</span><b><span class="lp-dias ${d.c}">${esc(d.t)}</span></b></div>
+        <div><span>AUXILIARES</span><b>${auxiliares(p)}${p.staff_count ? ` <small>(CONTRATADOS: ${p.staff_count})</small>` : ''}</b></div>
+        <div><span>DÍAS PARA CULMINAR</span><b><span class="lp-dias ${d.c}">${esc(d.t)}</span></b></div>
+        <div class="lp-ancho"><span>DIRECCIÓN</span><b>${esc(p.address || '—')}</b></div>
+        <div class="lp-ancho lp-doc"><span>DOCUMENTO DE LA ODC / CONTRATO</span>
+          <div>${doc ? `<button onclick="verArchivoLimpieza('${encodeURIComponent(doc)}')">📄 VER DOCUMENTO</button>` : '<em>SIN DOCUMENTO</em>'}
+          ${g ? `<button onclick="subirArchivoLimpieza('PROYECTO','${p.id}','ODC')">📎 ${doc ? 'REEMPLAZAR' : 'SUBIR'} (PDF O IMAGEN)</button>${doc ? `<button class="lp-quitar" onclick="quitarArchivoLimpieza('PROYECTO','${p.id}','ODC')">🗑</button>` : ''}` : ''}</div></div>
         ${p.notes ? `<div class="lp-ancho"><span>OBSERVACIONES</span><b>${esc(p.notes)}</b></div>` : ''}
       </div>
-      <div class="lp-sub"><h4>PUESTOS (${puestosDe(p).length})</h4>${g ? `<button onclick="formularioPuestoLimpieza('${p.id}')">＋ AGREGAR PUESTO</button>` : ''}</div>
+      <div class="lp-sub"><h4>PUESTOS (${puestosDe(p).length})</h4><div>${puestosDe(p).some((s) => s.latitude != null) ? `<button class="lp-sec" onclick="abrirMapaProyectoLimpieza('${p.id}')">🗺 VER EN MAPA</button>` : ''}${g ? `<button onclick="formularioPuestoLimpieza('${p.id}')">＋ AGREGAR PUESTO</button>` : ''}</div></div>
       <div class="lp-tabla-wrap"><table class="lp-tabla"><thead><tr><th>PUESTO</th><th>PROVINCIA / CIUDAD</th><th>DIRECCIÓN</th><th>AUX.</th><th>HORARIO</th><th>UBICACIÓN</th>${g ? '<th></th>' : ''}</tr></thead><tbody>
         ${puestosDe(p).map((s) => `<tr><td class="lp-izq"><b>${esc(s.name)}</b></td><td>${esc([s.province, s.city].filter(Boolean).join(' · ') || '—')}</td><td class="lp-izq">${esc(s.address || '—')}</td><td>${s.staff_count}</td><td>${esc(s.schedule || '—')}</td>
           <td>${s.latitude != null ? `<a href="https://www.google.com/maps?q=${s.latitude},${s.longitude}" target="_blank" rel="noopener">📍 VER</a>` : '<span class="lp-gris">SIN COORD.</span>'}</td>
           ${g ? `<td class="lp-acciones-fila"><button onclick="formularioPuestoLimpieza('${p.id}','${s.id}')">✎</button><button onclick="quitarPuestoLimpieza('${s.id}')">🗑</button></td>` : ''}</tr>`).join('') || `<tr><td colspan="7" class="lp-vacio">SIN PUESTOS. ${g ? 'AGRÉGALOS CON EL BOTÓN DE ARRIBA O DESDE EXCEL.' : ''}</td></tr>`}
       </tbody></table></div>`,
     g ? `<button onclick="formularioProyectoLimpieza('${p.id}')">✎ EDITAR PROYECTO</button>${p.status === 'ACTIVE' ? `<button class="lp-peligro" onclick="finalizarProyectoLimpieza('${p.id}')">FINALIZAR PROYECTO</button>` : `<button onclick="finalizarProyectoLimpieza('${p.id}', true)">REACTIVAR</button>`}` : '', 'lp-modal-ancho');
+  };
+  // Mapa con los puestos de un solo proyecto
+  window.abrirMapaProyectoLimpieza = function (id) {
+    const guardado = { a: lp.asociaciones, c: lp.filtroContrato, t: lp.filtroTipo };
+    const p = proyectos().find((x) => x.id === id); if (!p) return;
+    const original = lp.w.projects;
+    lp.w.projects = [p]; lp.asociaciones = []; lp.filtroContrato = ''; lp.filtroTipo = '';
+    try { abrirMapaPuestosLimpieza(); } finally { lp.w.projects = original; lp.asociaciones = guardado.a; lp.filtroContrato = guardado.c; lp.filtroTipo = guardado.t; }
   };
 
   window.formularioProyectoLimpieza = function (id = '') {
@@ -310,19 +510,23 @@
       <div class="lp-form">
         <label>ASOCIACIÓN *<select id="lpf-asoc"><option value="">SELECCIONA…</option>${asocs.map((a) => `<option value="${a.id}" ${p.association_id === a.id ? 'selected' : ''}>${esc(a.name)}</option>`).join('')}</select></label>
         <label>ODC / N° CONTRATO<input id="lpf-odc" maxlength="60" value="${esc(p.contract_code || '')}"></label>
+        <label>TIPO DE CONTRATACIÓN${selectConOtro('lpf-contrato', TIPOS_CONTRATO, p.contract_type || '')}</label>
+        <label>TIPO DE LIMPIEZA${selectConOtro('lpf-tipo', TIPOS_LIMPIEZA, p.cleaning_type || '')}</label>
         <label class="lp-ancho">ENTIDAD / CLIENTE *<input id="lpf-nombre" maxlength="150" value="${esc(p.name || '')}" placeholder="EJ. HOSPITAL GENERAL DE…"></label>
         <label>PROVINCIA<select id="lpf-prov">${opcionesProv(p.province_id)}</select></label>
         <label>CIUDAD<input id="lpf-ciudad" maxlength="80" value="${esc(p.city || '')}"></label>
         <label class="lp-ancho">DIRECCIÓN<input id="lpf-dir" maxlength="200" value="${esc(p.address || '')}"></label>
         <label>FECHA DE INICIO<input id="lpf-ini" type="date" value="${esc(p.start_date || '')}"></label>
         <label>FECHA DE FIN<input id="lpf-fin" type="date" value="${esc(p.end_date || '')}"></label>
+        <label>METRAJE (M²)<input id="lpf-m2" inputmode="decimal" value="${esc(p.area_m2 ?? '')}" placeholder="EJ. 12500"></label>
         <label>AUXILIARES CONTRATADOS<input id="lpf-aux" type="number" min="0" max="5000" value="${esc(p.staff_count ?? '')}"></label>
         <label class="lp-ancho">OBSERVACIONES<textarea id="lpf-notas" rows="2" maxlength="500">${esc(p.notes || '')}</textarea></label>
+        ${id ? '' : '<p class="lp-nota lp-ancho">📎 EL DOCUMENTO DE LA ODC SE SUBE DESDE LA FICHA DEL PROYECTO, DESPUÉS DE GUARDARLO.</p>'}
       </div>`, `<button onclick="document.getElementById('lp-form-proyecto').remove()">CANCELAR</button><button class="lp-primario" onclick="guardarProyectoLimpieza('${id}')">GUARDAR</button>`);
   };
   window.guardarProyectoLimpieza = async function (id) {
     const p = proyectos().find((x) => x.id === id) || {};
-    const payload = { id: id || null, association_id: valor('lpf-asoc'), contract_code: valor('lpf-odc'), name: valor('lpf-nombre'), province_id: valor('lpf-prov'), city: valor('lpf-ciudad'), address: valor('lpf-dir'), start_date: valor('lpf-ini'), end_date: valor('lpf-fin'), staff_count: valor('lpf-aux'), notes: valor('lpf-notas'), status: p.status || 'ACTIVE' };
+    const payload = { id: id || null, association_id: valor('lpf-asoc'), contract_code: valor('lpf-odc'), contract_type: leerConOtro('lpf-contrato'), cleaning_type: leerConOtro('lpf-tipo'), name: valor('lpf-nombre'), province_id: valor('lpf-prov'), city: valor('lpf-ciudad'), address: valor('lpf-dir'), start_date: valor('lpf-ini'), end_date: valor('lpf-fin'), area_m2: valor('lpf-m2'), staff_count: valor('lpf-aux'), notes: valor('lpf-notas'), status: p.status || 'ACTIVE' };
     if (!payload.association_id || !payload.name.trim()) return alert('COMPLETA LA ASOCIACIÓN Y LA ENTIDAD.');
     try {
       const r = await supabaseRpc('save_cleaning_project', { p_payload: payload });
@@ -335,7 +539,7 @@
     const p = proyectos().find((x) => x.id === id); if (!p) return;
     if (!confirm(reactivar ? `¿REACTIVAR EL PROYECTO ${p.name}?` : `¿FINALIZAR EL PROYECTO ${p.name}? DEJARÁ DE APARECER EN EL MAPA Y EN LOS VENCIMIENTOS.`)) return;
     try {
-      await supabaseRpc('save_cleaning_project', { p_payload: { id: p.id, association_id: p.association_id, contract_code: p.contract_code, name: p.name, province_id: p.province_id, city: p.city, address: p.address, start_date: p.start_date, end_date: p.end_date, staff_count: p.staff_count, notes: p.notes, status: reactivar ? 'ACTIVE' : 'FINISHED' } });
+      await supabaseRpc('save_cleaning_project', { p_payload: { id: p.id, association_id: p.association_id, contract_code: p.contract_code, contract_type: p.contract_type, cleaning_type: p.cleaning_type, area_m2: p.area_m2, name: p.name, province_id: p.province_id, city: p.city, address: p.address, start_date: p.start_date, end_date: p.end_date, staff_count: p.staff_count, notes: p.notes, status: reactivar ? 'ACTIVE' : 'FINISHED' } });
       document.getElementById('lp-proyecto')?.remove();
       await cargarLimpieza();
     } catch (e) { alert(`NO SE PUDO ACTUALIZAR: ${e.message || e}`); }
@@ -354,7 +558,7 @@
         <label>LONGITUD<input id="lps-lng" inputmode="decimal" value="${esc(s.longitude ?? '')}" placeholder="EJ. -79.889100"></label>
         <label class="lp-ancho lp-ayuda">💡 TAMBIÉN PUEDES PEGAR AQUÍ UN ENLACE DE GOOGLE MAPS O "LATITUD, LONGITUD":<input id="lps-enlace" placeholder="https://maps.google.com/…/@-2.1894,-79.8891,17z" oninput="leerCoordenadasLimpieza(this.value)"></label>
         <label>AUXILIARES EN EL PUESTO<input id="lps-aux" type="number" min="0" max="1000" value="${esc(s.staff_count ?? 0)}"></label>
-        <label>HORARIO<input id="lps-horario" maxlength="60" value="${esc(s.schedule || '')}" placeholder="EJ. 07:00 A 15:00"></label>
+        <label>TIPO DE HORARIO${selectConOtro('lps-horario', HORARIOS, s.schedule || '')}</label>
       </div>`, `<button onclick="document.getElementById('lp-form-puesto').remove()">CANCELAR</button><button class="lp-primario" onclick="guardarPuestoLimpieza('${projectId}','${postId}')">GUARDAR PUESTO</button>`);
   };
   // Acepta "-2.18, -79.88", enlaces de Google Maps con @lat,lng o ?q=lat,lng
@@ -365,7 +569,7 @@
     document.getElementById('lps-lng').value = m[2];
   };
   window.guardarPuestoLimpieza = async function (projectId, postId) {
-    const payload = { id: postId || null, project_id: projectId, name: valor('lps-nombre'), province_id: valor('lps-prov'), city: valor('lps-ciudad'), address: valor('lps-dir'), latitude: valor('lps-lat').trim(), longitude: valor('lps-lng').trim(), staff_count: valor('lps-aux'), schedule: valor('lps-horario') };
+    const payload = { id: postId || null, project_id: projectId, name: valor('lps-nombre'), province_id: valor('lps-prov'), city: valor('lps-ciudad'), address: valor('lps-dir'), latitude: valor('lps-lat').trim(), longitude: valor('lps-lng').trim(), staff_count: valor('lps-aux'), schedule: leerConOtro('lps-horario') };
     if (!payload.name.trim()) return alert('ESCRIBE EL NOMBRE DEL PUESTO.');
     try {
       await supabaseRpc('save_cleaning_post', { p_payload: payload });
@@ -380,45 +584,77 @@
     catch (e) { alert(`NO SE PUDO QUITAR: ${e.message || e}`); }
   };
 
+  // ── Asociaciones ───────────────────────────────────────────────
   window.gestionarAsociacionesLimpieza = function () {
-    const asocs = lp.w.associations || [];
+    const asocs = lp.w.associations || [], g = puedeGestionar();
     modal('lp-asociaciones', '🏷 ASOCIACIONES', `
-      <div class="lp-form lp-form-linea"><label class="lp-ancho">NUEVA ASOCIACIÓN<input id="lpa-nombre" maxlength="80" placeholder="EJ. ASOLABU"></label><label>RUC (OPCIONAL)<input id="lpa-ruc" maxlength="13"></label><button class="lp-primario" onclick="guardarAsociacionLimpieza()">＋ AGREGAR</button></div>
-      <div class="lp-tabla-wrap"><table class="lp-tabla"><thead><tr><th>ASOCIACIÓN</th><th>RUC</th><th>PROYECTOS ACTIVOS</th><th>ESTADO</th><th></th></tr></thead><tbody>
-        ${asocs.map((a) => `<tr><td><b>${esc(a.name)}</b></td><td>${esc(a.ruc || '—')}</td><td>${a.projects}</td><td>${a.active ? 'ACTIVA' : 'INACTIVA'}</td><td><button onclick="cambiarEstadoAsociacionLimpieza('${a.id}')">${a.active ? 'DESACTIVAR' : 'ACTIVAR'}</button></td></tr>`).join('')}
-      </tbody></table></div>`);
+      ${g ? `<div class="lp-form lp-form-linea"><label class="lp-ancho">NUEVA ASOCIACIÓN<input id="lpa-nombre" maxlength="80" placeholder="EJ. ASOLABU"></label><label>RUC (OPCIONAL)<input id="lpa-ruc" maxlength="13" inputmode="numeric"></label><button class="lp-primario" onclick="guardarAsociacionLimpieza()">＋ AGREGAR</button></div>` : ''}
+      <div class="lp-asocs">${asocs.map((a) => { const logo = logoAsoc(a); return `<article class="lp-asoc ${a.active ? '' : 'inactiva'}">
+        <div class="lp-asoc-logo">${logo ? `<img src="${esc(logo)}" alt="">` : `<i style="background:${colorAsoc(a.id)}">${esc(a.name.slice(0, 2))}</i>`}</div>
+        <div class="lp-asoc-datos"><b>${esc(a.name)}</b><small>RUC: ${esc(a.ruc || 'SIN REGISTRAR')} · ${a.projects} PROYECTO(S) ACTIVO(S)${a.active ? '' : ' · INACTIVA'}</small>
+          <div class="lp-asoc-botones">
+            ${a.ruc_document_path ? `<button onclick="verArchivoLimpieza('${encodeURIComponent(a.ruc_document_path)}')">📄 VER RUC (SRI)</button>` : '<em>SIN DOCUMENTO RUC</em>'}
+            ${g ? `<button onclick="subirArchivoLimpieza('ASOCIACION','${a.id}','RUC')">📎 ${a.ruc_document_path ? 'REEMPLAZAR' : 'SUBIR'} RUC</button>
+            <button onclick="subirArchivoLimpieza('ASOCIACION','${a.id}','LOGO')">🖼 ${a.logo_path ? 'CAMBIAR' : 'SUBIR'} LOGO</button>
+            <button onclick="editarAsociacionLimpieza('${a.id}')">✎ EDITAR</button>
+            <button onclick="cambiarEstadoAsociacionLimpieza('${a.id}')">${a.active ? 'DESACTIVAR' : 'ACTIVAR'}</button>` : ''}
+          </div></div></article>`; }).join('')}</div>
+      <p class="lp-nota">EL DOCUMENTO RUC Y EL LOGO PUEDEN SER PDF O IMAGEN (MÁXIMO 10 MB). ${Object.keys(LOGOS).join(', ')} YA TIENEN SU LOGO; SUBIR UNO NUEVO LO REEMPLAZA.</p>`, '', 'lp-modal-ancho');
+  };
+  window.editarAsociacionLimpieza = function (id) {
+    const a = asociacion(id); if (!a) return;
+    modal('lp-editar-asoc', `✎ EDITAR ${esc(a.name)}`, `<div class="lp-form">
+      <label class="lp-ancho">NOMBRE<input id="lpe-nombre" maxlength="80" value="${esc(a.name)}"></label>
+      <label>RUC<input id="lpe-ruc" maxlength="13" inputmode="numeric" value="${esc(a.ruc || '')}"></label>
+      <label class="lp-ancho">OBSERVACIONES<textarea id="lpe-notas" rows="2" maxlength="300">${esc(a.notes || '')}</textarea></label></div>`,
+    `<button onclick="document.getElementById('lp-editar-asoc').remove()">CANCELAR</button><button class="lp-primario" onclick="guardarEdicionAsociacionLimpieza('${a.id}')">GUARDAR</button>`);
+  };
+  window.guardarEdicionAsociacionLimpieza = async function (id) {
+    const a = asociacion(id); if (!a) return;
+    const ruc = valor('lpe-ruc').trim();
+    if (ruc && !/^\d{10,13}$/.test(ruc)) return alert('EL RUC DEBE TENER ENTRE 10 Y 13 DÍGITOS.');
+    try {
+      await supabaseRpc('save_cleaning_association', { p_payload: { id, name: valor('lpe-nombre'), ruc, notes: valor('lpe-notas'), active: a.active } });
+      document.getElementById('lp-editar-asoc')?.remove();
+      await cargarLimpieza(); gestionarAsociacionesLimpieza();
+    } catch (e) { alert(`NO SE PUDO GUARDAR: ${e.message || e}`); }
   };
   window.guardarAsociacionLimpieza = async function () {
-    const nombre = valor('lpa-nombre').trim(); if (!nombre) return alert('ESCRIBE EL NOMBRE DE LA ASOCIACIÓN.');
-    try { await supabaseRpc('save_cleaning_association', { p_payload: { name: nombre, ruc: valor('lpa-ruc') } }); await cargarLimpieza(); gestionarAsociacionesLimpieza(); }
+    const nombre = valor('lpa-nombre').trim(), ruc = valor('lpa-ruc').trim();
+    if (!nombre) return alert('ESCRIBE EL NOMBRE DE LA ASOCIACIÓN.');
+    if (ruc && !/^\d{10,13}$/.test(ruc)) return alert('EL RUC DEBE TENER ENTRE 10 Y 13 DÍGITOS.');
+    try { await supabaseRpc('save_cleaning_association', { p_payload: { name: nombre, ruc } }); await cargarLimpieza(); gestionarAsociacionesLimpieza(); }
     catch (e) { alert(`NO SE PUDO GUARDAR: ${e.message || e}`); }
   };
   window.cambiarEstadoAsociacionLimpieza = async function (id) {
-    const a = (lp.w.associations || []).find((x) => x.id === id); if (!a) return;
+    const a = asociacion(id); if (!a) return;
     try { await supabaseRpc('save_cleaning_association', { p_payload: { id: a.id, name: a.name, ruc: a.ruc, notes: a.notes, active: !a.active } }); await cargarLimpieza(); gestionarAsociacionesLimpieza(); }
     catch (e) { alert(`NO SE PUDO ACTUALIZAR: ${e.message || e}`); }
   };
 
   // ── Excel: plantilla e importación ─────────────────────────────
   const COLUMNAS = [
-    ['ASOCIACION', 'association'], ['ODC', 'contract_code'], ['ENTIDAD', 'entity'], ['PROVINCIA', 'province'], ['CIUDAD', 'city'], ['DIRECCION', 'address'],
+    ['ASOCIACION', 'association'], ['ODC', 'contract_code'], ['TIPO CONTRATACION', 'contract_type'], ['ENTIDAD', 'entity'], ['TIPO LIMPIEZA', 'cleaning_type'], ['METRAJE M2', 'area_m2'],
+    ['PROVINCIA', 'province'], ['CIUDAD', 'city'], ['DIRECCION', 'address'],
     ['FECHA INICIO', 'start_date'], ['FECHA FIN', 'end_date'], ['AUXILIARES CONTRATADOS', 'project_staff'],
     ['PUESTO', 'post'], ['PROVINCIA PUESTO', 'post_province'], ['CIUDAD PUESTO', 'post_city'], ['DIRECCION PUESTO', 'post_address'],
     ['LATITUD', 'latitude'], ['LONGITUD', 'longitude'], ['AUXILIARES PUESTO', 'staff'], ['HORARIO', 'schedule']
   ];
   window.descargarPlantillaLimpieza = function () {
     if (typeof XLSX === 'undefined') return alert('NO SE PUDO CARGAR EL GENERADOR DE EXCEL.');
-    const ejemplo = ['ASOLABU', 'CE-2026000000001', 'HOSPITAL DE EJEMPLO', 'GUAYAS', 'GUAYAQUIL', 'AV. PRINCIPAL 123', '01/01/2026', '31/12/2026', 10, 'EMERGENCIA', 'GUAYAS', 'GUAYAQUIL', 'BLOQUE A, PLANTA BAJA', -2.1894, -79.8891, 4, '07:00 A 15:00'];
-    const ejemplo2 = ['ASOLABU', 'CE-2026000000001', 'HOSPITAL DE EJEMPLO', 'GUAYAS', 'GUAYAQUIL', '', '01/01/2026', '31/12/2026', 10, 'CONSULTA EXTERNA', '', '', '', '', '', 6, '07:00 A 15:00'];
+    const ejemplo = ['ASOLABU', 'CE-2026000000001', 'ORDEN DE COMPRA', 'HOSPITAL DE EJEMPLO', 'HOSPITALARIA', 12500, 'GUAYAS', 'GUAYAQUIL', 'AV. PRINCIPAL 123', '01/01/2026', '31/12/2026', 10, 'EMERGENCIA', 'GUAYAS', 'GUAYAQUIL', 'BLOQUE A, PLANTA BAJA', -2.1894, -79.8891, 4, '12 HORAS'];
+    const ejemplo2 = ['ASOLABU', 'CE-2026000000001', 'ORDEN DE COMPRA', 'HOSPITAL DE EJEMPLO', 'HOSPITALARIA', 12500, 'GUAYAS', 'GUAYAQUIL', '', '01/01/2026', '31/12/2026', 10, 'CONSULTA EXTERNA', '', '', '', '', '', 6, '8 HORAS'];
     const ws = XLSX.utils.aoa_to_sheet([COLUMNAS.map((c) => c[0]), ejemplo, ejemplo2]);
     const ayuda = XLSX.utils.aoa_to_sheet([
       ['INSTRUCCIONES'],
       ['1. Cada fila es un PUESTO. Las filas con la misma ASOCIACION + ENTIDAD + ODC forman un mismo proyecto.'],
       ['2. Obligatorios: ASOCIACION y ENTIDAD. Si la asociación no existe, se crea automáticamente.'],
-      ['3. PROVINCIA con el nombre oficial (ej. GUAYAS, PICHINCHA, SANTO DOMINGO, LOS RIOS).'],
-      ['4. Fechas en formato DD/MM/AAAA. LATITUD y LONGITUD son opcionales (ej. -2.1894 y -79.8891).'],
-      ['5. Si solo tienes los datos del proyecto, deja vacía la columna PUESTO.'],
-      ['6. Borra las 2 filas de ejemplo antes de cargar. Si vuelves a cargar el mismo archivo, no se duplican proyectos ni puestos.']
+      [`3. TIPO CONTRATACION sugerido: ${TIPOS_CONTRATO.join(', ')}.`],
+      [`4. TIPO LIMPIEZA sugerido: ${TIPOS_LIMPIEZA.join(', ')}.`],
+      [`5. HORARIO sugerido: ${HORARIOS.join(', ')}.`],
+      ['6. METRAJE M2 en metros cuadrados (ej. 12500 o 12.500). PROVINCIA con el nombre oficial (ej. GUAYAS, SANTO DOMINGO, LOS RIOS).'],
+      ['7. Fechas en formato DD/MM/AAAA. LATITUD y LONGITUD son opcionales (ej. -2.1894 y -79.8891).'],
+      ['8. Borra las 2 filas de ejemplo antes de cargar. Si vuelves a cargar el mismo archivo, no se duplican proyectos ni puestos.']
     ]);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'PROYECTOS');
@@ -476,6 +712,8 @@
     const b = document.getElementById('lp-import-ok'); b.disabled = true; b.textContent = 'GUARDANDO…';
     try {
       const r = await supabaseRpc('import_cleaning_projects', { p_payload: { rows: importacion.filas, source_file_name: importacion.archivo }, p_dry_run: false });
+      // Tipo de contratación, tipo de limpieza y metraje
+      try { await supabaseRpc('import_cleaning_projects_extra', { p_payload: { rows: importacion.filas } }); } catch (e) { console.warn('Datos adicionales:', e); }
       document.getElementById('lp-importar')?.remove();
       await cargarLimpieza();
       const c = r.counts || {};
@@ -485,23 +723,22 @@
 
   // ── Vista: VENCIMIENTOS ────────────────────────────────────────
   function listaVencimientos() {
-    return activos().filter((p) => (!lp.filtroAsoc || p.association_id === lp.filtroAsoc) && (lp.horizonte === 0 || (p.days_left != null && p.days_left <= lp.horizonte)))
+    return filtrar(activos()).filter((p) => lp.horizonte === 0 || (p.days_left != null && p.days_left <= lp.horizonte))
       .sort((a, b) => (a.days_left ?? 99999) - (b.days_left ?? 99999) || String(a.name).localeCompare(String(b.name), 'es'));
   }
   function vistaVencimientos() {
     const lista = listaVencimientos();
-    const asocs = lp.w.associations || [];
     const cuenta = (c) => lista.filter((p) => diasInfo(p).c === c).length;
     return `
+      ${barraFiltros()}
       <div class="lp-barra">
-        <select onchange="filtroLimpieza('filtroAsoc', this.value)"><option value="">TODAS LAS ASOCIACIONES</option>${asocs.map((a) => `<option value="${a.id}" ${lp.filtroAsoc === a.id ? 'selected' : ''}>${esc(a.name)}</option>`).join('')}</select>
         <select onchange="filtroLimpieza('horizonte', Number(this.value))">${[[30, 'PRÓXIMOS 30 DÍAS'], [60, 'PRÓXIMOS 60 DÍAS'], [90, 'PRÓXIMOS 90 DÍAS'], [0, 'TODOS LOS PROYECTOS ACTIVOS']].map(([v, t]) => `<option value="${v}" ${lp.horizonte === v ? 'selected' : ''}>${t}</option>`).join('')}</select>
         <button onclick="exportarVencimientosLimpieza('imagen')">🖼 IMAGEN</button><button onclick="exportarVencimientosLimpieza('excel')">📊 EXCEL</button>
       </div>
       <div class="lp-resumen"><span class="vencido"><b>${cuenta('vencido')}</b> VENCIDO(S)</span><span class="urgente"><b>${cuenta('urgente')}</b> ≤ 15 DÍAS</span><span class="pronto"><b>${cuenta('pronto')}</b> 16 A 30 DÍAS</span><span class="proximo"><b>${cuenta('proximo')}</b> 31 DÍAS O MÁS</span></div>
-      <div class="lp-tabla-wrap"><table class="lp-tabla lp-venc"><thead><tr><th>N°</th><th>ASOCIACIÓN</th><th>ODC</th><th>ENTIDAD</th><th>PROVINCIA</th><th>PUESTOS</th><th>AUXILIARES</th><th>FECHA ACTIVACIÓN</th><th>FECHA DESACTIVACIÓN</th><th>DÍAS PARA CULMINAR</th></tr></thead><tbody>
-        ${lista.map((p, i) => { const d = diasInfo(p); return `<tr onclick="abrirProyectoLimpieza('${p.id}')"><td>${i + 1}</td><td><b>${esc(p.association)}</b></td><td>${esc(p.contract_code || '—')}</td><td class="lp-izq">${esc(p.name)}</td><td>${esc(p.province || '—')}</td><td>${puestosDe(p).length}</td><td>${auxiliares(p)}</td><td>${fecha(p.start_date)}</td><td>${fecha(p.end_date)}</td><td class="lp-celda-dias ${d.c}">${esc(d.t)}</td></tr>`; }).join('')
-          || `<tr><td colspan="10" class="lp-vacio">NINGÚN PROYECTO DE LIMPIEZA VENCE EN ESTE PERIODO.</td></tr>`}
+      <div class="lp-tabla-wrap"><table class="lp-tabla lp-venc"><thead><tr><th>N°</th><th>ASOCIACIÓN</th><th>ODC</th><th>CONTRATACIÓN</th><th>ENTIDAD</th><th>PROVINCIA</th><th>PUESTOS</th><th>AUXILIARES</th><th>FECHA ACTIVACIÓN</th><th>FECHA DESACTIVACIÓN</th><th>DÍAS PARA CULMINAR</th></tr></thead><tbody>
+        ${lista.map((p, i) => { const d = diasInfo(p); return `<tr onclick="abrirProyectoLimpieza('${p.id}')"><td>${i + 1}</td><td class="lp-izq">${vinetaAsoc(p.association_id, p.association)}</td><td>${esc(p.contract_code || '—')}</td><td>${esc(p.contract_type || '—')}</td><td class="lp-izq">${esc(p.name)}</td><td>${esc(p.province || '—')}</td><td>${puestosDe(p).length}</td><td>${auxiliares(p)}</td><td>${fecha(p.start_date)}</td><td>${fecha(p.end_date)}</td><td class="lp-celda-dias ${d.c}">${esc(d.t)}</td></tr>`; }).join('')
+          || `<tr><td colspan="11" class="lp-vacio">NINGÚN PROYECTO DE LIMPIEZA VENCE EN ESTE PERIODO.</td></tr>`}
       </tbody></table></div>`;
   }
   const TONOS = { vencido: ['FFFFFF', 'D32F2F'], urgente: ['C62828', 'F4CCCC'], pronto: ['B45309', 'FCE5CD'], proximo: ['7F6000', 'FFF2CC'], gris: ['475569', 'E2E8F0'] };
@@ -509,21 +746,21 @@
     const lista = listaVencimientos();
     const hoy = fecha(lp.w.today);
     const periodo = lp.horizonte ? `VENCIDOS Y PRÓXIMOS ${lp.horizonte} DÍAS` : 'TODOS LOS PROYECTOS ACTIVOS';
-    const asoc = lp.filtroAsoc ? (lp.w.associations || []).find((a) => a.id === lp.filtroAsoc)?.name : 'TODAS LAS ASOCIACIONES';
-    const columnas = ['N°', 'ASOCIACIÓN', 'ODC', 'ENTIDAD', 'PROVINCIA', 'PUESTOS', 'AUXILIARES', 'FECHA ACTIVACIÓN', 'FECHA DESACTIVACIÓN', 'DÍAS PARA CULMINAR'];
-    const filas = lista.map((p, i) => [i + 1, p.association, p.contract_code || '—', p.name, p.province || '—', puestosDe(p).length, auxiliares(p), fecha(p.start_date), fecha(p.end_date), diasInfo(p)]);
+    const asoc = lp.asociaciones.length ? lp.asociaciones.map((id) => asociacion(id)?.name).join(', ') : 'TODAS LAS ASOCIACIONES';
+    const columnas = ['N°', 'ASOCIACIÓN', 'ODC', 'CONTRATACIÓN', 'ENTIDAD', 'PROVINCIA', 'PUESTOS', 'AUXILIARES', 'FECHA ACTIVACIÓN', 'FECHA DESACTIVACIÓN', 'DÍAS PARA CULMINAR'];
+    const filas = lista.map((p, i) => [i + 1, p.association, p.contract_code || '—', p.contract_type || '—', p.name, p.province || '—', puestosDe(p).length, auxiliares(p), fecha(p.start_date), fecha(p.end_date), diasInfo(p)]);
     const archivo = `VENCIMIENTOS_LIMPIEZA_${String(lp.w.today).slice(0, 10)}`;
     try {
       if (formato === 'excel') {
         const X = XLSX, ws = {}, linea = { style: 'thin', color: { rgb: 'B0BEC5' } }, bordes = { top: linea, bottom: linea, left: linea, right: linea };
         const poner = (f, c, v, s) => { ws[X.utils.encode_cell({ r: f, c })] = { t: typeof v === 'number' ? 'n' : 's', v: v ?? '', s }; };
-        poner(0, 0, 'SERVICIO DE LIMPIEZA — PROYECTOS POR CULMINAR', { font: { name: 'Calibri', sz: 15, bold: true, color: { rgb: 'FFFFFF' } }, fill: { patternType: 'solid', fgColor: { rgb: '0F766E' } }, alignment: { horizontal: 'center', vertical: 'center' } });
-        for (let c = 1; c < columnas.length; c++) poner(0, c, '', { fill: { patternType: 'solid', fgColor: { rgb: '0F766E' } } });
+        poner(0, 0, 'GRUPO COLOMA AVILÉS — PROYECTOS DE LIMPIEZA POR CULMINAR', { font: { name: 'Calibri', sz: 15, bold: true, color: { rgb: 'FFFFFF' } }, fill: { patternType: 'solid', fgColor: { rgb: '1E3A8A' } }, alignment: { horizontal: 'center', vertical: 'center' } });
+        for (let c = 1; c < columnas.length; c++) poner(0, c, '', { fill: { patternType: 'solid', fgColor: { rgb: '1E3A8A' } } });
         poner(1, 0, `CORTE AL ${hoy} · ${periodo} · ${asoc}`, { font: { name: 'Calibri', sz: 10, bold: true, color: { rgb: '37474F' } }, alignment: { horizontal: 'center' } });
         columnas.forEach((t, c) => poner(3, c, t, { font: { name: 'Calibri', sz: 10, bold: true, color: { rgb: 'FFFFFF' } }, fill: { patternType: 'solid', fgColor: { rgb: '37474F' } }, alignment: { horizontal: 'center', vertical: 'center', wrapText: true }, border: bordes }));
         filas.forEach((f, i) => f.forEach((v, c) => {
           const dias = c === f.length - 1;
-          const s = { font: { name: 'Calibri', sz: 10, bold: dias, color: { rgb: dias ? TONOS[v.c][0] : '1F2937' } }, alignment: { horizontal: c === 3 ? 'left' : 'center', vertical: 'center' }, border: bordes };
+          const s = { font: { name: 'Calibri', sz: 10, bold: dias, color: { rgb: dias ? TONOS[v.c][0] : '1F2937' } }, alignment: { horizontal: c === 4 ? 'left' : 'center', vertical: 'center' }, border: bordes };
           if (dias) s.fill = { patternType: 'solid', fgColor: { rgb: TONOS[v.c][1] } }; else if (i % 2 === 0) s.fill = { patternType: 'solid', fgColor: { rgb: 'ECEFF1' } };
           poner(4 + i, c, dias ? v.t : v, s);
         }));
@@ -531,7 +768,7 @@
         if (!filas.length) poner(4, 0, 'NINGÚN PROYECTO VENCE EN ESTE PERIODO.', { font: { italic: true }, alignment: { horizontal: 'center' } });
         ws['!ref'] = X.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: fin, c: columnas.length - 1 } });
         ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: columnas.length - 1 } }, { s: { r: 1, c: 0 }, e: { r: 1, c: columnas.length - 1 } }];
-        ws['!cols'] = [5, 16, 20, 36, 16, 10, 12, 15, 16, 16].map((wch) => ({ wch }));
+        ws['!cols'] = [5, 16, 20, 18, 36, 16, 10, 12, 15, 16, 16].map((wch) => ({ wch }));
         ws['!rows'] = [{ hpt: 30 }, { hpt: 18 }, null, { hpt: 30 }];
         const wb = X.utils.book_new(); X.utils.book_append_sheet(wb, ws, 'VENCIMIENTOS'); X.writeFile(wb, archivo + '.xlsx');
         return;
@@ -539,14 +776,15 @@
       if (typeof html2canvas !== 'function') throw new Error('NO SE ENCONTRÓ EL GENERADOR DE IMÁGENES.');
       const hoja = document.createElement('div');
       hoja.className = 'rg-hoja lp-hoja-limpieza';
-      hoja.innerHTML = `<div class="rg-cabecera"><img src="img/logo.png" alt=""><div><b>SERVICIO DE LIMPIEZA</b><h1>PROYECTOS POR CULMINAR</h1><p>${esc(`CORTE AL ${hoy} · ${periodo} · ${asoc}`)}</p></div></div>
+      hoja.innerHTML = `<div class="rg-cabecera"><img src="${LOGO_GRUPO}" alt=""><div><b>GRUPO COLOMA AVILÉS · SERVICIO DE LIMPIEZA</b><h1>PROYECTOS POR CULMINAR</h1><p>${esc(`CORTE AL ${hoy} · ${periodo} · ${asoc}`)}</p></div></div>
         <table class="rg-tabla"><thead><tr>${columnas.map((c) => `<th>${esc(c)}</th>`).join('')}</tr></thead><tbody>
-        ${filas.map((f) => `<tr>${f.map((v, i) => (i === f.length - 1 ? `<td class="rg-dias" style="color:#${TONOS[v.c][0]};background:#${TONOS[v.c][1]}">${esc(v.t)}</td>` : `<td class="${i === 3 ? 'rg-izq' : ''}">${esc(v)}</td>`)).join('')}</tr>`).join('') || `<tr><td colspan="${columnas.length}" class="rg-vacio">NINGÚN PROYECTO VENCE EN ESTE PERIODO.</td></tr>`}
+        ${filas.map((f, n) => `<tr>${f.map((v, i) => (i === f.length - 1 ? `<td class="rg-dias" style="color:#${TONOS[v.c][0]};background:#${TONOS[v.c][1]}">${esc(v.t)}</td>`
+          : i === 1 ? `<td>${(() => { const l = logoAsoc(asociacion(lista[n].association_id)); return l ? `<img class="lp-hoja-logo" src="${esc(l)}" alt=""><br>` : ''; })()}${esc(v)}</td>` : `<td class="${i === 4 ? 'rg-izq' : ''}">${esc(v)}</td>`)).join('')}</tr>`).join('') || `<tr><td colspan="${columnas.length}" class="rg-vacio">NINGÚN PROYECTO VENCE EN ESTE PERIODO.</td></tr>`}
         </tbody></table>`;
       document.body.appendChild(hoja);
       try {
         await Promise.all([...hoja.querySelectorAll('img')].map((img) => (img.complete ? null : new Promise((ok) => { img.onload = img.onerror = ok; }))));
-        const canvas = await html2canvas(hoja, { scale: 2, backgroundColor: '#ffffff', logging: false });
+        const canvas = await html2canvas(hoja, { scale: 2, backgroundColor: '#ffffff', logging: false, useCORS: true });
         const blob = await new Promise((ok) => canvas.toBlob(ok, 'image/png'));
         try { if (navigator.clipboard && window.ClipboardItem) await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]); } catch (_) {}
         const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = archivo + '.png'; document.body.appendChild(a); a.click(); a.remove();

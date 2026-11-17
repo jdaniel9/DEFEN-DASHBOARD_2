@@ -172,3 +172,75 @@ body.lp-activo { overflow: hidden; }
   .lp-modal-caja { max-height: 100dvh; height: 100dvh; border-radius: 0; }
   .lp-marcador { min-width: 22px; height: 22px; font-size: 9px; border-width: 2px; }
 }
+
+/* ── Mejoras: Grupo Coloma Avilés, logos de asociaciones, filtros, distancias, documentos ── */
+.ms-opciones img { width: 92px; height: 92px; object-fit: contain; background: #fff; border-radius: 16px; padding: 6px; }
+.ms-caja h2 { margin-top: 4px; }
+.lp-marca img { width: 62px; height: 62px; object-fit: contain; padding: 2px; }
+.lp-kpis b small { font-size: 12px; color: #64748b; }
+/* Cubre el logo de DEFEN de la imagen del mapa con el del Grupo Coloma Avilés */
+.lp-mapa-marca { position: absolute; left: 65.1%; top: 69.2%; width: 32.2%; height: 26.5%; background: #fff; display: flex; align-items: center; justify-content: center; pointer-events: none; }
+.lp-mapa-marca img { max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 0; }
+.lp-marcador-logo { width: 44px; height: 44px; min-width: 0; padding: 0; background: #fff; border-color: #0f766e; display: flex; align-items: center; justify-content: center; }
+.lp-marcador-logo img { width: 34px; height: 34px; object-fit: contain; border-radius: 50%; }
+.lp-marcador-logo b { position: absolute; right: -8px; top: -8px; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 999px; background: #0f766e; color: #fff; font-size: 9px; line-height: 18px; border: 2px solid #fff; }
+.lp-marcador-logo:hover, .lp-marcador-logo.activo { background: #fff7ed; border-color: #f59e0b; }
+.lp-filtros { background: #fff; border: 1px solid #e2e8f0; border-radius: 14px; padding: 9px 11px; margin-bottom: 10px; }
+.lp-filtros .lp-chips { margin-bottom: 7px; }
+.lp-chips button { display: inline-flex; align-items: center; gap: 5px; }
+.lp-chips button img { height: 18px; max-width: 34px; object-fit: contain; background: #fff; border-radius: 4px; }
+.lp-selects { display: flex; flex-wrap: wrap; gap: 8px; align-items: end; }
+.lp-selects label { font-size: 8.5px; font-weight: 900; color: #64748b; }
+.lp-selects select { display: block; margin-top: 3px; height: 34px; min-width: 180px; border: 1px solid #cbd5e1; border-radius: 8px; padding: 0 8px; font-size: 10.5px; font-weight: 700; background: #fff; }
+.lp-selects button { height: 34px; border: 0; border-radius: 8px; padding: 0 11px; background: #fee2e2; color: #b91c1c; font-size: 9.5px; font-weight: 900; cursor: pointer; }
+.lp-vineta { display: inline-flex; align-items: center; gap: 5px; font-weight: 900; color: #0f172a; }
+.lp-vineta img { height: 20px; max-width: 40px; object-fit: contain; }
+.lp-vineta i { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 50%; color: #fff; font-size: 8px; font-style: normal; }
+.lp-prov-logos { display: flex; gap: 4px; margin-top: 4px; }
+.lp-prov-logos img { height: 18px; max-width: 38px; object-fit: contain; }
+.lp-boton-mapa { border: 0; border-radius: 10px; padding: 10px; background: #0f766e; color: #fff; font-size: 10px; font-weight: 900; cursor: pointer; }
+.lp-boton-mapa:disabled { opacity: .45; cursor: default; }
+.lp-tarjeta li span { color: #64748b; font-size: 8.5px; }
+.lp-vacio-grande img { display: block; width: 120px; margin: 0 auto 8px; }
+.lp-mapa-ayuda { padding: 6px 14px; background: #ecfeff; color: #0e7490; font-size: 9.5px; font-weight: 900; }
+.lp-pin-caja { background: none; border: 0; }
+.lp-pin { width: 38px; height: 38px; border-radius: 50%; background: #fff; border: 3px solid #0f766e; box-shadow: 0 3px 10px rgba(15,23,42,.35); display: flex; align-items: center; justify-content: center; overflow: hidden; }
+.lp-pin img { width: 30px; height: 30px; object-fit: contain; }
+.lp-pin-color { color: #fff; font-size: 11px; font-weight: 900; border-color: #fff; }
+.lp-km { background: #0f766e; color: #fff; border: 0; border-radius: 999px; font-size: 10px; font-weight: 900; padding: 2px 8px; box-shadow: none; }
+.lp-km::before { display: none; }
+.lp-popup { font-size: 11px; }
+.lp-popup ol { margin: 4px 0 6px 16px; padding: 0; }
+.lp-popup a { font-weight: 900; color: #0f766e; }
+.lp-leyenda-mapa span { display: flex; align-items: center; gap: 5px; }
+.lp-leyenda-mapa img { height: 18px; max-width: 36px; object-fit: contain; }
+.lp-doc > div { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 4px; }
+.lp-doc button { border: 0; border-radius: 7px; padding: 6px 10px; background: #0f766e; color: #fff; font-size: 9.5px; font-weight: 900; cursor: pointer; }
+.lp-doc .lp-quitar { background: #fee2e2; color: #b91c1c; }
+.lp-doc em { font-size: 10px; color: #94a3b8; font-style: normal; font-weight: 800; }
+.lp-sub > div { display: flex; gap: 6px; }
+.lp-sub .lp-sec { background: #334155; }
+.lp-asocs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
+.lp-asoc { display: flex; gap: 10px; background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 10px; }
+.lp-asoc.inactiva { opacity: .6; }
+.lp-asoc-logo { flex: none; width: 74px; height: 64px; display: flex; align-items: center; justify-content: center; border: 1px solid #f1f5f9; border-radius: 10px; }
+.lp-asoc-logo img { max-width: 68px; max-height: 58px; object-fit: contain; }
+.lp-asoc-logo i { width: 46px; height: 46px; border-radius: 50%; color: #fff; display: flex; align-items: center; justify-content: center; font-style: normal; font-weight: 900; }
+.lp-asoc-datos { flex: 1; min-width: 0; }
+.lp-asoc-datos b { font-size: 12px; color: #0f172a; }
+.lp-asoc-datos small { display: block; font-size: 9px; font-weight: 800; color: #64748b; margin: 2px 0 6px; }
+.lp-asoc-botones { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
+.lp-asoc-botones button { border: 0; border-radius: 7px; padding: 5px 8px; background: #f1f5f9; color: #334155; font-size: 9px; font-weight: 900; cursor: pointer; }
+.lp-asoc-botones em { font-size: 9px; color: #94a3b8; font-style: normal; font-weight: 800; }
+.lp-form select + input { margin-top: 4px; }
+.lp-hoja-logo { height: 26px; max-width: 70px; object-fit: contain; }
+.lp-hoja-limpieza .rg-cabecera img { width: 96px; }
+@media (max-width: 640px) {
+  .lp-asocs { grid-template-columns: 1fr; }
+  .lp-selects select { min-width: 0; width: 100%; font-size: 16px; }
+  .lp-selects label { flex: 1 1 100%; }
+  .lp-marcador-logo { width: 32px; height: 32px; }
+  .lp-marcador-logo img { width: 24px; height: 24px; }
+  .ms-opciones img { width: 64px; height: 64px; }
+}
+.lp-ficha .lp-vineta { display: inline-flex; font-size: 11px; font-weight: 900; color: #0f172a; margin: 0; }
