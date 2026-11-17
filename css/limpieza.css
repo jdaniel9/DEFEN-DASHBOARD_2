@@ -244,3 +244,62 @@ body.lp-activo { overflow: hidden; }
   .ms-opciones img { width: 64px; height: 64px; }
 }
 .lp-ficha .lp-vineta { display: inline-flex; font-size: 11px; font-weight: 900; color: #0f172a; margin: 0; }
+
+/* ── Mapa con barra lateral: puesto, rutas y grupos ── */
+.lp-modal-mapa { width: min(1400px, 100%); height: 92vh; }
+.lp-rutas { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 380px; }
+.lp-rutas #lp-leaflet { min-height: 0; height: 100%; }
+.lp-rutas-lateral { display: flex; flex-direction: column; min-height: 0; background: #fff; border-left: 1px solid #e2e8f0; }
+.lp-pestanas { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; padding: 8px; background: #f1f5f9; border-bottom: 1px solid #e2e8f0; }
+.lp-pestanas button { border: 0; border-radius: 8px; padding: 8px 4px; background: #fff; color: #334155; font-size: 9px; font-weight: 900; cursor: pointer; }
+.lp-pestanas button.activo { background: #0f766e; color: #fff; }
+.lp-lateral-cuerpo { flex: 1; overflow: auto; padding: 10px 12px 16px; }
+.lp-ayuda-lateral { font-size: 10px; color: #475569; font-weight: 700; line-height: 1.5; margin: 0 0 8px; }
+.lp-ayuda-lateral b { color: #0f172a; }
+.lp-lista-puestos { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 5px; }
+.lp-lista-puestos button { width: 100%; text-align: left; border: 1px solid #e2e8f0; background: #fff; border-radius: 9px; padding: 8px 10px; cursor: pointer; }
+.lp-lista-puestos button:hover { border-color: #0f766e; }
+.lp-lista-puestos b, .lp-cercanos b, .lp-paradas b { display: block; font-size: 10.5px; color: #0f172a; }
+.lp-lista-puestos small, .lp-cercanos small, .lp-paradas small { display: block; font-size: 8.5px; color: #64748b; font-weight: 700; }
+.lp-puesto-ficha { background: #f0fdfa; border: 1px solid #99f6e4; border-radius: 12px; padding: 10px; margin-bottom: 10px; }
+.lp-puesto-ficha h4 { margin: 4px 0 2px; font-size: 14px; color: #0f172a; }
+.lp-puesto-ficha p { margin: 0 0 4px; font-size: 10px; font-weight: 800; color: #334155; }
+.lp-puesto-ficha small { display: block; font-size: 9.5px; color: #475569; line-height: 1.5; }
+.lp-puesto-ficha a { display: inline-block; margin-top: 6px; font-size: 9.5px; font-weight: 900; color: #0f766e; text-decoration: none; }
+.lp-lateral-cuerpo h5 { margin: 4px 0 6px; font-size: 10px; font-weight: 900; color: #0f172a; }
+.lp-lateral-cuerpo h5 small { font-weight: 700; color: #64748b; }
+.lp-cercanos { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.lp-cercanos li { display: grid; grid-template-columns: 1fr auto; gap: 4px 8px; align-items: center; border: 1px solid #e2e8f0; border-radius: 10px; padding: 8px 9px; }
+.lp-cercanos li.activo { border-color: #0f766e; background: #f0fdfa; }
+.lp-cercanos em { font-style: normal; font-size: 11px; font-weight: 900; color: #0f766e; white-space: nowrap; }
+.lp-cerca-botones { grid-column: 1 / -1; display: flex; gap: 5px; }
+.lp-cerca-botones button, .lp-cerca-botones a { border: 0; border-radius: 7px; padding: 6px 10px; background: #0f766e; color: #fff; font-size: 9px; font-weight: 900; cursor: pointer; text-decoration: none; }
+.lp-cerca-botones a { background: #e2e8f0; color: #334155; }
+.lp-ruta-dato { display: block; font-size: 9.5px; font-weight: 800; color: #0e7490; margin-top: 3px; }
+.lp-asistente label { display: block; font-size: 8.5px; font-weight: 900; color: #64748b; margin-bottom: 8px; }
+.lp-asistente input { display: block; width: 100%; box-sizing: border-box; margin-top: 3px; height: 38px; border: 1px solid #cbd5e1; border-radius: 8px; padding: 0 9px; font-size: 11px; font-weight: 700; }
+.lp-asistente .lp-check { display: flex; align-items: center; gap: 6px; }
+.lp-asistente .lp-check input { width: auto; height: auto; margin: 0; }
+.lp-asistente > button, .lp-grupos-modo button { width: 100%; border: 0; border-radius: 9px; padding: 10px; background: #334155; color: #fff; font-size: 10px; font-weight: 900; cursor: pointer; }
+.lp-grupos-modo { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; align-items: end; margin-bottom: 6px; }
+.lp-grupos-modo label { margin: 0; }
+.lp-ruta-total { margin: 10px 0 8px; padding: 9px 10px; border-radius: 10px; background: #0f766e; color: #fff; font-size: 10px; font-weight: 800; }
+.lp-ruta-total b { font-size: 14px; }
+.lp-paradas { list-style: none; margin: 0 0 8px; padding: 0; display: grid; gap: 4px; }
+.lp-paradas li { border-left: 3px solid #0f766e; padding: 4px 8px; background: #f8fafc; border-radius: 0 8px 8px 0; }
+.lp-paradas em { font-style: normal; font-size: 9px; font-weight: 900; color: #0e7490; }
+.lp-boton-google { display: block; width: 100%; box-sizing: border-box; text-align: center; margin-top: 8px; border: 0; border-radius: 9px; padding: 10px; background: #1e3a8a; color: #fff; font-size: 10px; font-weight: 900; text-decoration: none; cursor: pointer; }
+.lp-grupo { border: 1px solid #e2e8f0; border-left: 5px solid; border-radius: 10px; padding: 8px 10px; margin-bottom: 7px; }
+.lp-grupo header { display: flex; justify-content: space-between; gap: 6px; align-items: baseline; }
+.lp-grupo header small { font-size: 9px; font-weight: 800; color: #64748b; }
+.lp-grupo ol { margin: 5px 0 6px 16px; padding: 0; font-size: 10px; font-weight: 800; color: #0f172a; }
+.lp-grupo ol small { color: #64748b; font-weight: 700; }
+.lp-pin-activo { transform: scale(1.25); box-shadow: 0 0 0 4px rgba(245,158,11,.6), 0 4px 12px rgba(15,23,42,.4); }
+.lp-orden-caja { background: none; border: 0; }
+.lp-orden { display: flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 50%; color: #fff; font-size: 11px; font-weight: 900; border: 2px solid #fff; box-shadow: 0 2px 6px rgba(0,0,0,.35); }
+@media (max-width: 900px) {
+  .lp-rutas { grid-template-columns: 1fr; grid-template-rows: 46vh minmax(0, 1fr); }
+  .lp-rutas-lateral { border-left: 0; border-top: 1px solid #e2e8f0; }
+  .lp-modal-mapa { height: 100dvh; }
+  .lp-asistente input { font-size: 16px; }
+}
